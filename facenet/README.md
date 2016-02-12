@@ -1,10 +1,15 @@
-CIFAR-10 is a common benchmark in machine learning for image recognition.
+This is a TensorFlow implementation of the face recognizer described in the paper 
+"FaceNet: A Unified Embedding for Face Recognition and Clustering"
+http://arxiv.org/abs/1503.03832
 
-http://www.cs.toronto.edu/~kriz/cifar.html
+Inspiration
+The code is heavly inspired by the OpenFace implementation at https://github.com/cmusatyalab/openface
 
-Code in this directory demonstrates how to use TensorFlow to train and evaluate a convolutional neural network (CNN) on both CPU and GPU. We also demonstrate how to train a CNN over multiple GPUs.
+Under development
+This project is currently very much under development (i will try to keep the issue tracker up-to-date with what is in the pipe).
 
-Detailed instructions on how to get started available at:
+Training data
+The FaceScrub dataset (http://vintage.winklerbros.net/facescrub.html) has been used for training.
 
-http://tensorflow.org/tutorials/deep_cnn/
-
+Pre-processing
+To come...
