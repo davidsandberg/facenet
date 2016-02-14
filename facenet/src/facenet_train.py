@@ -135,11 +135,16 @@ def train():
             print('Epoch: [%d][%d/%d]\tTime %.3f\ttripErr %2.3f' % (epoch, batch_number, FLAGS.epoch_size, duration, err))
             batch_number+=1
             i+=1
+        # Save the model checkpoint after each epoch
+        print('Saving checkpoint')
+        checkpoint_path = os.path.join(FLAGS.train_dir, 'model.ckpt')
+        saver.save(sess, checkpoint_path, global_step=epoch*FLAGS.epoch_size+batch_number)
+        graphdef_dir = os.path.join(FLAGS.train_dir, 'graphdef')
+        graphdef_filename = 'graph_def.pb'
+        if (not os.path.exists(os.path.join(graphdef_dir, graphdef_filename))):
+          print('Saving graph definition')
+          tf.train.write_graph(sess.graph_def, graphdef_dir, graphdef_filename, False)
         epoch+=1
-
-      # Save the model checkpoint periodically.
-      checkpoint_path = os.path.join(FLAGS.train_dir, 'model.ckpt')
-      saver.save(sess, checkpoint_path, global_step=epoch*FLAGS.epoch_size+batch_number)
 
 def main(argv=None):  # pylint: disable=unused-argument
   if gfile.Exists(FLAGS.train_dir):
