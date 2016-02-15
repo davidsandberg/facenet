@@ -16,9 +16,9 @@ import sys
 import time
 
 tf.app.flags.DEFINE_string('model_dir', '/home/david/logs/openface/20160214-213259',
-                           """Directory the graph definitation and checkpoint is stored.""")
+                           """Directory containing the graph definition and checkpoint files.""")
 tf.app.flags.DEFINE_string('lfw_pairs', '/home/david/repo/facenet/data/lfw/pairs.txt',
-                           """Directory the graph definition and checkpoint is stored.""")
+                           """The file containing the pairs to use for validation.""")
 tf.app.flags.DEFINE_string('lfw_dir', '/home/david/datasets/lfw_aligned/',
                            """Path to the data directory containing aligned face patches.""")
 tf.app.flags.DEFINE_integer('batch_size', 90,
