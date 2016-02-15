@@ -1,34 +1,13 @@
-#!/usr/bin/env python3
-#
-# Copyright 2015-2016 Carnegie Mellon University
-#
-# Licensed under the Apache License, Version 2.0 (the "License");
-# you may not use this file except in compliance with the License.
-# You may obtain a copy of the License at
-#
-#     http://www.apache.org/licenses/LICENSE-2.0
-#
-# Unless required by applicable law or agreed to in writing, software
-# distributed under the License is distributed on an "AS IS" BASIS,
-# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-# See the License for the specific language governing permissions and
-# limitations under the License.
-#
-# This implements the standard LFW verification experiment.
-
+"""Validate a face recognizer on the "Labeled Faces in the Wild" dataset (http://vis-www.cs.umass.edu/lfw/).
+Embeddings are calculated using the pairs from http://vis-www.cs.umass.edu/lfw/pairs.txt and the ROC curve
+is calculated and plotted
+"""
 import math
 import tensorflow as tf
 import numpy as np
 import facenet
-#import pandas as pd
-from scipy.interpolate import interp1d
-
-#from sklearn.cross_validation import KFold
-#from sklearn.metrics import accuracy_score
-
 import matplotlib as mpl
 import matplotlib.pyplot as plt
-#plt.style.use('bmh')
 
 from tensorflow.python.platform import gfile
 
@@ -36,12 +15,10 @@ import os
 import sys
 import time
 
-#from scipy import arange
-
-tf.app.flags.DEFINE_string('model_dir', '/home/david/logs/openface/20160214-134915',
+tf.app.flags.DEFINE_string('model_dir', '/home/david/logs/openface/20160214-213259',
                            """Directory the graph definitation and checkpoint is stored.""")
 tf.app.flags.DEFINE_string('lfw_pairs', '/home/david/repo/facenet/data/lfw/pairs.txt',
-                           """Directory the graph definitation and checkpoint is stored.""")
+                           """Directory the graph definition and checkpoint is stored.""")
 tf.app.flags.DEFINE_string('lfw_dir', '/home/david/datasets/lfw_aligned/',
                            """Path to the data directory containing aligned face patches.""")
 tf.app.flags.DEFINE_integer('batch_size', 90,
@@ -118,7 +95,6 @@ def main():
             plt.plot(fpr, tpr)
             plt.show()
             
-            xxx = 1
 
 def get_paths(lfw_dir, pairs):
     nrof_skipped_pairs = 0
@@ -187,164 +163,6 @@ def calculate_roc(thresholds, embeddings, actual_issame):
         fpr_array.append(fpr)
 
     return tpr_array, fpr_array
-
-
-def evalThresholdAccuracy(embeddings, pairs, threshold):
-    y_true = []
-    y_predict = []
-    for pair in pairs:
-        (x1, x2, actual_same) = getEmbeddings(pair, embeddings)
-        diff = x1 - x2
-        dist = np.dot(diff.T, diff)
-        predict_same = dist < threshold
-        y_predict.append(predict_same)
-        y_true.append(actual_same)
-
-    y_true = np.array(y_true)
-    y_predict = np.array(y_predict)
-    accuracy = accuracy_score(y_true, y_predict)
-    return accuracy
-
-
-def findBestThreshold(thresholds, embeddings, pairsTrain):
-    bestThresh = bestThreshAcc = 0
-    for threshold in thresholds:
-        accuracy = evalThresholdAccuracy(embeddings, pairsTrain, threshold)
-        if accuracy >= bestThreshAcc:
-            bestThreshAcc = accuracy
-            bestThresh = threshold
-        else:
-            # No further improvements.
-            return bestThresh
-    return bestThresh
-
-
-def verifyExp(workDir, pairs, embeddings):
-    print("  + Computing accuracy.")
-    folds = KFold(n=6000, n_folds=10, shuffle=False)
-    thresholds = arange(0, 4, 0.01)
-
-    if os.path.exists("{}/accuracies.txt".format(workDir)):
-        print("{}/accuracies.txt already exists. Skipping processing.".format(workDir))
-    else:
-        accuracies = []
-        with open("{}/accuracies.txt".format(workDir), "w") as f:
-            f.write('fold, threshold, accuracy\n')
-            for idx, (train, test) in enumerate(folds):
-                fname = "{}/l2-roc.fold-{}.csv".format(workDir, idx)
-                writeROC(fname, thresholds, embeddings, pairs[test])
-
-                bestThresh = findBestThreshold(
-                    thresholds, embeddings, pairs[train])
-                accuracy = evalThresholdAccuracy(
-                    embeddings, pairs[test], bestThresh)
-                accuracies.append(accuracy)
-                f.write('{}, {:0.2f}, {:0.2f}\n'.format(
-                    idx, bestThresh, accuracy))
-            avg = np.mean(accuracies)
-            std = np.std(accuracies)
-            f.write('\navg, {:0.4f} +/- {:0.4f}\n'.format(avg, std))
-            print('    + {:0.4f}'.format(avg))
-
-
-def getAUC(fprs, tprs):
-    sortedFprs, sortedTprs = zip(*sorted(zip(*(fprs, tprs))))
-    sortedFprs = list(sortedFprs)
-    sortedTprs = list(sortedTprs)
-    if sortedFprs[-1] != 1.0:
-        sortedFprs.append(1.0)
-        sortedTprs.append(sortedTprs[-1])
-    return np.trapz(sortedTprs, sortedFprs)
-
-
-def plotOpenFaceROC(workDir, plotFolds=True, color=None):
-    fs = []
-    for i in range(10):
-        rocData = pd.read_csv("{}/l2-roc.fold-{}.csv".format(workDir, i))
-        fs.append(interp1d(rocData['fpr'], rocData['tpr']))
-        x = np.linspace(0, 1, 1000)
-        if plotFolds:
-            foldPlot, = plt.plot(x, fs[-1](x), color='grey', alpha=0.5)
-        else:
-            foldPlot = None
-
-    fprs = []
-    tprs = []
-    for fpr in np.linspace(0, 1, 1000):
-        tpr = 0.0
-        for f in fs:
-            v = f(fpr)
-            if math.isnan(v):
-                v = 0.0
-            tpr += v
-        tpr /= 10.0
-        fprs.append(fpr)
-        tprs.append(tpr)
-    if color:
-        meanPlot, = plt.plot(fprs, tprs, color=color)
-    else:
-        meanPlot, = plt.plot(fprs, tprs)
-    AUC = getAUC(fprs, tprs)
-    return foldPlot, meanPlot, AUC
-
-
-def plotVerifyExp(workDir, tag):
-    print("Plotting.")
-
-    fig, ax = plt.subplots(1, 1)
-
-    openbrData = pd.read_csv("comparisons/openbr.v1.1.0.DET.csv")
-    openbrData['Y'] = 1 - openbrData['Y']
-    # brPlot = openbrData.plot(x='X', y='Y', legend=True, ax=ax)
-    brPlot, = plt.plot(openbrData['X'], openbrData['Y'])
-    brAUC = getAUC(openbrData['X'], openbrData['Y'])
-
-    foldPlot, meanPlot, AUC = plotOpenFaceROC(workDir, color='k')
-
-    humanData = pd.read_table(
-        "comparisons/kumar_human_crop.txt", header=None, sep=' ')
-    humanPlot, = plt.plot(humanData[1], humanData[0])
-    humanAUC = getAUC(humanData[1], humanData[0])
-
-    deepfaceData = pd.read_table(
-        "comparisons/deepface_ensemble.txt", header=None, sep=' ')
-    dfPlot, = plt.plot(deepfaceData[1], deepfaceData[0], '--',
-                       alpha=0.75)
-    deepfaceAUC = getAUC(deepfaceData[1], deepfaceData[0])
-
-    # baiduData = pd.read_table(
-    #     "comparisons/BaiduIDLFinal.TPFP", header=None, sep=' ')
-    # bPlot, = plt.plot(baiduData[1], baiduData[0])
-    # baiduAUC = getAUC(baiduData[1], baiduData[0])
-
-    eigData = pd.read_table(
-        "comparisons/eigenfaces-original-roc.txt", header=None, sep=' ')
-    eigPlot, = plt.plot(eigData[1], eigData[0])
-    eigAUC = getAUC(eigData[1], eigData[0])
-
-    ax.legend([humanPlot, dfPlot, brPlot, eigPlot,
-               meanPlot, foldPlot],
-              ['Human, Cropped [AUC={:.3f}]'.format(humanAUC),
-               # 'Baidu [{:.3f}]'.format(baiduAUC),
-               'DeepFace Ensemble [{:.3f}]'.format(deepfaceAUC),
-               'OpenBR v1.1.0 [{:.3f}]'.format(brAUC),
-               'Eigenfaces [{:.3f}]'.format(eigAUC),
-               'OpenFace {} [{:.3f}]'.format(tag, AUC),
-               'OpenFace {} folds'.format(tag)],
-              loc='lower right')
-
-    plt.plot([0, 1], color='k', linestyle=':')
-
-    plt.xlabel("False Positive Rate")
-    plt.ylabel("True Positive Rate")
-    # plt.ylim(ymin=0,ymax=1)
-    plt.xlim(xmin=0, xmax=1)
-
-    plt.grid(b=True, which='major', color='k', linestyle='-')
-    plt.grid(b=True, which='minor', color='k', linestyle='-', alpha=0.2)
-    plt.minorticks_on()
-    # fig.savefig(os.path.join(workDir, "roc.pdf"))
-    fig.savefig(os.path.join(workDir, "roc.png"))
 
 if __name__ == '__main__':
     main()

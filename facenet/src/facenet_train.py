@@ -22,7 +22,7 @@ FLAGS = tf.app.flags.FLAGS
 time_str = datetime.strftime(datetime.now(), '/%Y%m%d-%H%M%S')
 
 tf.app.flags.DEFINE_string('train_dir', '/home/david/logs/openface' + time_str,
-                           """Directory where to write event logs and checkpoint.""")
+                           """Directory where to write event logs and checkpoints.""")
 tf.app.flags.DEFINE_integer('max_nrof_epochs', 200,
                             """Number of epochs to run.""")
 tf.app.flags.DEFINE_boolean('log_device_placement', False,
@@ -77,7 +77,7 @@ def train():
     train_op, grads = facenet.train(loss, global_step)
     
     # Create a saver
-    saver = tf.train.Saver(tf.all_variables())
+    saver = tf.train.Saver(tf.all_variables(),max_to_keep=0)
 
     # Build the summary operation based on the TF collection of Summaries.
     summary_op = tf.merge_all_summaries()
