@@ -90,9 +90,16 @@ def main():
             emb_array = np.vstack(emb_list)  # Stack the embeddings to a nrof_examples_per_epoch x 128 matrix
             
             thresholds = np.arange(0, 4, 0.01)
-            tpr, fpr = calculate_roc(thresholds, emb_array, actual_issame)
+            tpr, fpr, accuracy = calculate_roc(thresholds, emb_array, actual_issame)
+            print('Accuracy: %.2f%%' % (max(accuracy)*100))
             
-            plt.plot(fpr, tpr)
+            nn4 = plt.plot(fpr, tpr, label='NN4')
+            plt.title('Receiver Operating Characteristics')
+            plt.xlabel('False Positive Rate')
+            plt.ylabel('True Positive Rate')
+            plt.legend()
+            plt.plot([0, 1], [0, 1], 'g--')
+            plt.grid(True)
             plt.show()
             
 
@@ -131,6 +138,7 @@ def read_pairs(pairs_filename):
 def calculate_roc(thresholds, embeddings, actual_issame):
     tpr_array = []
     fpr_array = []
+    accuracy_array = []
     predict_issame = [None] * len(actual_issame)
     for threshold in thresholds:
         tp = tn = fp = fn = 0
@@ -150,19 +158,15 @@ def calculate_roc(thresholds, embeddings, actual_issame):
             elif not predict_issame[i] and actual_issame[i]:
                 fn += 1
     
-        if tp + fn == 0:
-            tpr = 0
-        else:
-            tpr = float(tp) / float(tp + fn)
-        if fp + tn == 0:
-            fpr = 0
-        else:
-            fpr = float(fp) / float(fp + tn)
-            
+        tpr = 0 if (tp+fn==0) else float(tp) / float(tp+fn)
+        fpr = 0 if (fp+tn==0) else float(fp) / float(fp+tn)
+        accuracy = float(tp+tn)/dist.size
+
         tpr_array.append(tpr)
         fpr_array.append(fpr)
+        accuracy_array.append(accuracy)
 
-    return tpr_array, fpr_array
+    return tpr_array, fpr_array, accuracy_array
 
 if __name__ == '__main__':
     main()
