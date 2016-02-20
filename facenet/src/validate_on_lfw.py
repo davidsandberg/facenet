@@ -63,6 +63,9 @@ def main():
         
         # Create a saver
         saver = tf.train.Saver(tf.all_variables())
+        # This should restore the moving averages instead of the snapshot
+        #variables_to_restore = ema.variables_to_restore()
+        #saver = tf.train.Saver(variables_to_restore)
     
         # Start running operations on the Graph.
         sess = tf.Session(config=tf.ConfigProto(log_device_placement=False))

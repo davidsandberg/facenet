@@ -49,13 +49,18 @@ tf.app.flags.DEFINE_integer('nrof_classes', 530,
                             """Number of classes in the dataset.""")
 tf.app.flags.DEFINE_float('train_set_fraction', 0.9,
                           """Fraction of the data set that is used for training.""")
+tf.app.flags.DEFINE_integer('seed', 666,
+                            """Random seed.""")
 
 
 def train():
+  
+  np.random.seed(seed=FLAGS.seed)
   dataset = facenet.get_dataset(FLAGS.data_dir)
   train_set, test_set = facenet.split_dataset(dataset, FLAGS.train_set_fraction)
   
   with tf.Graph().as_default():
+    tf.set_random_seed(FLAGS.seed)
     global_step = tf.Variable(0, trainable=False)
 
     # Placeholder for input images
@@ -64,8 +69,9 @@ def train():
     # Placeholder for phase_train
     phase_train_placeholder = tf.placeholder(tf.bool, name='phase_train')
     
-    # Build the inference graph    
+    # Build the inference graph
     embeddings = facenet.inference_nn4_max_pool_96(images_placeholder, phase_train=phase_train_placeholder)
+    #embeddings = facenet.inference_vggface_96(images_placeholder)
     
     # Split example embeddings into anchor, positive and negative
     anchor, positive, negative = tf.split(0, 3, embeddings)
@@ -77,7 +83,7 @@ def train():
     train_op, grads = facenet.train(loss, global_step)
     
     # Create a saver
-    saver = tf.train.Saver(tf.all_variables(),max_to_keep=0)
+    saver = tf.train.Saver(tf.all_variables(), max_to_keep=0)
 
     # Build the summary operation based on the TF collection of Summaries.
     summary_op = tf.merge_all_summaries()

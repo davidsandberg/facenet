@@ -236,6 +236,57 @@ def inference_nn4_max_pool_96(images, phase_train=True):
 
   return norm
 
+def inference_vggface_96(images, phase_train=True):
+    #(1): nn.SpatialConvolutionMM(3 -> 64, 3x3, 1,1, 1,1)
+    conv1 = _conv(images, 3, 64, 3, 3, 1, 1, 'SAME', 'conv1_3x3', phase_train=phase_train, use_batch_norm=False)
+    #(3): nn.SpatialConvolutionMM(64 -> 64, 3x3, 1,1, 1,1)
+    conv2 = _conv(conv1, 64, 64, 3, 3, 1, 1, 'SAME', 'conv2_3x3', phase_train=phase_train, use_batch_norm=False)
+    #(5): nn.SpatialMaxPooling(2,2,2,2)
+    pool1 = _mpool(conv2,  2, 2, 2, 2, 'SAME')
+    #(6): nn.SpatialConvolutionMM(64 -> 128, 3x3, 1,1, 1,1)
+    conv3 = _conv(pool1, 64, 128, 3, 3, 1, 1, 'SAME', 'conv3_3x3', phase_train=phase_train, use_batch_norm=False)
+    #(8): nn.SpatialConvolutionMM(128 -> 128, 3x3, 1,1, 1,1)
+    conv4 = _conv(conv3, 128, 128, 3, 3, 1, 1, 'SAME', 'conv4_3x3', phase_train=phase_train, use_batch_norm=False)
+    #(10): nn.SpatialMaxPooling(2,2,2,2)
+    pool2 = _mpool(conv4,  2, 2, 2, 2, 'SAME')
+    #(11): nn.SpatialConvolutionMM(128 -> 256, 3x3, 1,1, 1,1)
+    conv5 = _conv(pool2, 128, 256, 3, 3, 1, 1, 'SAME', 'conv5_3x3', phase_train=phase_train, use_batch_norm=False)
+    #(13): nn.SpatialConvolutionMM(256 -> 256, 3x3, 1,1, 1,1)
+    conv6 = _conv(conv5, 256, 256, 3, 3, 1, 1, 'SAME', 'conv6_3x3', phase_train=phase_train, use_batch_norm=False)
+    #(15): nn.SpatialConvolutionMM(256 -> 256, 3x3, 1,1, 1,1)
+    conv7 = _conv(conv6, 256, 256, 3, 3, 1, 1, 'SAME', 'conv7_3x3', phase_train=phase_train, use_batch_norm=False)
+    #(17): nn.SpatialMaxPooling(2,2,2,2)
+    pool3 = _mpool(conv7,  2, 2, 2, 2, 'SAME')
+    #(18): nn.SpatialConvolutionMM(256 -> 512, 3x3, 1,1, 1,1)
+    conv8 = _conv(pool3, 256, 512, 3, 3, 1, 1, 'SAME', 'conv8_3x3', phase_train=phase_train, use_batch_norm=False)
+    #(20): nn.SpatialConvolutionMM(512 -> 512, 3x3, 1,1, 1,1)
+    conv9 = _conv(conv8, 512, 512, 3, 3, 1, 1, 'SAME', 'conv9_3x3', phase_train=phase_train, use_batch_norm=False)
+    #(22): nn.SpatialConvolutionMM(512 -> 512, 3x3, 1,1, 1,1)
+    conv10 = _conv(conv9, 512, 512, 3, 3, 1, 1, 'SAME', 'conv10_3x3', phase_train=phase_train, use_batch_norm=False)
+    #(24): nn.SpatialMaxPooling(2,2,2,2)
+    pool4 = _mpool(conv10,  2, 2, 2, 2, 'SAME')
+    #(25): nn.SpatialConvolutionMM(512 -> 512, 3x3, 1,1, 1,1)
+    conv11 = _conv(pool4, 512, 512, 3, 3, 1, 1, 'SAME', 'conv11_3x3', phase_train=phase_train, use_batch_norm=False)
+    #(27): nn.SpatialConvolutionMM(512 -> 512, 3x3, 1,1, 1,1)
+    conv12 = _conv(conv11, 512, 512, 3, 3, 1, 1, 'SAME', 'conv12_3x3', phase_train=phase_train, use_batch_norm=False)
+    #(29): nn.SpatialConvolutionMM(512 -> 512, 3x3, 1,1, 1,1)
+    conv13 = _conv(conv12, 512, 512, 3, 3, 1, 1, 'SAME', 'conv13_3x3', phase_train=phase_train, use_batch_norm=False)
+    #(31): nn.SpatialMaxPooling(2,2,2,2)
+    pool5 = _mpool(conv13,  2, 2, 2, 2, 'SAME')
+    #(32): nn.View
+    resh1 = tf.reshape(pool5, [-1, 4608])
+    #(33): nn.Linear(25088 -> 4096)
+    #affn1 = _affine(resh1, 4608, 4096)
+    #(35): nn.Dropout(0.500000)
+    #(36): nn.Linear(4096 -> 4096)
+    #affn2 = _affine(affn1, 4096, 4096)
+    #(38): nn.Dropout(0.500000)
+    #(39): nn.Linear(4096 -> 2622)
+    affn2 = _affine(resh1, 4608, 128)
+    norm = tf.nn.l2_normalize(affn2, 1, 1e-4)
+    
+    return norm
+
 def triplet_loss(anchor, positive, negative):
   """Calculate the triplet loss according to the FaceNet paper
   
@@ -440,7 +491,6 @@ def get_dataset(path):
     images = os.listdir(facedir)
     image_paths = map(lambda x: os.path.join(facedir,x), images)
     dataset[i] = ImageClass(class_name, image_paths)
-    #print dataset[i]
 
   return dataset
 
@@ -479,22 +529,3 @@ def sample_people(dataset, people_per_batch, images_per_person):
     image_paths += image_paths_for_class
 
   return image_paths, num_per_class
-
-def sample_people_random(dataset, images_per_batch):
-  
-  nrof_classes = len(dataset)
-  image_paths_flattened = []
-  labels_flattened = []
-  for i in range(nrof_classes):
-    nrof_images_in_class = len(dataset[i].image_paths)
-    image_paths_flattened += [dataset[i].image_paths[j] for j in range(nrof_images_in_class)]
-    labels_flattened += [i for j in range(nrof_images_in_class)]
-
-  nrof_images = len(image_paths_flattened)
-  image_indices = np.arange(nrof_images)
-  np.random.shuffle(image_indices)
-
-  image_paths = [image_paths_flattened[i] for i in image_indices[0:images_per_batch]]
-  labels = [labels_flattened[i] for i in image_indices[0:images_per_batch]]
-
-  return image_paths, labels
