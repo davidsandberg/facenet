@@ -1,3 +1,47 @@
+import tensorflow as tf
+import numpy as np
+
+
+
+with tf.Graph().as_default():
+  tf.set_random_seed(666)
+
+
+  # Placeholder for input images
+  input_placeholder = tf.placeholder(tf.float32, shape=(9, 7), name='input')
+  
+  # Split example embeddings into anchor, positive and negative
+  #anchor, positive, negative = tf.split(0, 3, input)
+  resh1 = tf.reshape(input_placeholder, [3,3,7])
+  anchor = resh1[0,:,:]
+  positive = resh1[1,:,:]
+  negative = resh1[2,:,:]
+  
+  # Build an initialization operation to run below.
+  init = tf.initialize_all_variables()
+
+  # Start running operations on the Graph.
+  sess = tf.Session(config=tf.ConfigProto(log_device_placement=False))
+  sess.run(init)
+  
+  with sess.as_default():
+    batch = np.zeros((9,7))
+    batch[0,:] = 1.1
+    batch[1,:] = 2.1
+    batch[2,:] = 3.1
+    batch[3,:] = 1.2
+    batch[4,:] = 2.2
+    batch[5,:] = 3.2
+    batch[6,:] = 1.3
+    batch[7,:] = 2.3
+    batch[8,:] = 3.3
+    feed_dict = {input_placeholder: batch }
+    print(batch)
+    print(sess.run([anchor, positive, negative], feed_dict=feed_dict))
+
+
+
+
 #feed_dict = { images_placeholder: np.zeros((90,96,96,3)), phase_train_placeholder: True }
 #vars_eval  = sess.run(tf.all_variables(), feed_dict=feed_dict)
 #for gt in vars_eval:
@@ -5,125 +49,6 @@
 #for gt, gv in zip(grads_eval, grad_vars):
   #print('%40s: %.20f' % (gv.op.name, np.sum(gt)))
 
-
-
-import tensorflow as tf
-import numpy as np
-import sys
-import time
-sys.path.append('../src')
-import facenet
-
-tf.app.flags.DEFINE_integer('batch_size', 90,
-                            """Number of images to process in a batch.""")
-tf.app.flags.DEFINE_integer('image_size', 96,
-                            """Image size (height, width) in pixels.""")
-tf.app.flags.DEFINE_float('alpha', 0.2,
-                          """Positive to negative triplet distance margin.""")
-tf.app.flags.DEFINE_float('learning_rate', 0.1,
-                          """Initial learning rate.""")
-tf.app.flags.DEFINE_float('moving_average_decay', 0.9999,
-                          """Expontential decay for tracking of training parameters.""")
-
-FLAGS = tf.app.flags.FLAGS
-
-
-def run_train():
-  
-  with tf.Graph().as_default():
-  
-    tf.set_random_seed(666)
-    global_step = tf.Variable(0, trainable=False)
-    
-    # Placeholder for input images
-    images_placeholder = tf.placeholder(tf.float32, shape=(FLAGS.batch_size, FLAGS.image_size, FLAGS.image_size, 3), name='Input')
-    
-    # Placeholder for phase_train
-    phase_train_placeholder = tf.placeholder(tf.bool, name='phase_train')
-    
-    # Build the inference graph
-    embeddings = facenet.inference_nn4_max_pool_96(images_placeholder, phase_train=phase_train_placeholder)
-    
-    # Split example embeddings into anchor, positive and negative
-    anchor, positive, negative = tf.split(0, 3, embeddings)
-    
-    # Calculate triplet loss
-    loss = facenet.triplet_loss(anchor, positive, negative)
-    
-    # Build a Graph that trains the model with one batch of examples and updates the model parameters
-    train_op, grads = facenet.train(loss, global_step)
-    
-    # Before starting, initialize the variables.  We will 'run' this first.
-    init = tf.initialize_all_variables()
-    
-    # Launch the graph.
-    sess = tf.Session()
-    sess.run(init)
-
-    np.random.seed(666)
-    
-    with sess.as_default():
-      grads_eval = []
-      all_vars = []
-      for step in xrange(1):
-        batch = np.random.random((90,96,96,3))
-        feed_dict = { images_placeholder: batch, phase_train_placeholder: True }
-        grad_tensors, grad_vars = zip(*grads)
-        var_names = tf.all_variables()
-        all_vars  += sess.run(var_names, feed_dict=feed_dict)
-        grads_eval  += sess.run(grad_tensors, feed_dict=feed_dict)
-        sess.run(train_op, feed_dict=feed_dict)
-    
-    time.sleep(3)
-    sess.close()
-  return (var_names, all_vars, grad_vars, grads_eval)
-
-var_names1, all_vars1, grad_names1, all_grads1 = run_train()
-var_names2, all_vars2, grad_names2, all_grads2 = run_train()
-
-all_vars_close = [None] * len(all_vars1)
-for i in range(len(all_vars1)):
-  all_vars_close[i] = np.allclose(all_vars1[i], all_vars2[i])
-  print('%d var: %s'%(i, var_names1[i].op.name), all_vars_close[i])
-print('All vars close: ', all(all_vars_close))
-xxx = 1
-  
-all_grads_close = [None] * len(all_grads1)
-for i in range(len(all_grads1)):
-  all_grads_close[i] = np.allclose(all_grads1[i], all_grads2[i])
-  print('%d grad: %s'%(i, grad_names1[i].op.name), all_grads_close[i])
-print('All grads close: ', all(all_grads_close))
-np.flatnonzero(all_grads_close==False)
-
-for i in range(len(all_grads_close)):
-  if all_grads_close[i]==False:
-    print(grad_names1[i].op.name)
-
-xxx = 1
-
-
-#import tensorflow as tf
-
-
-
-#with tf.Graph().as_default():
-  #tf.set_random_seed(666)
-
-
-  #kernel = tf.Variable(tf.truncated_normal([3, 3, 16, 32],
-                                           #dtype=tf.float32,
-                                           #stddev=1e-1), name='weights')
-  
-  ## Build an initialization operation to run below.
-  #init = tf.initialize_all_variables()
-
-  ## Start running operations on the Graph.
-  #sess = tf.Session(config=tf.ConfigProto(log_device_placement=False))
-  #sess.run(init)
-  
-  #with sess.as_default():
-
-    #print(sess.run(kernel))
   
 
 #import h5py
