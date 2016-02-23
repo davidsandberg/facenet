@@ -63,11 +63,9 @@ def main():
         # Build the inference graph
         embeddings = facenet.inference_nn4_max_pool_96(images_placeholder, phase_train=phase_train_placeholder)
         
-        # Create a saver
-        saver = tf.train.Saver(tf.all_variables())
-        # This should restore the moving averages instead of the snapshot
-        #variables_to_restore = ema.variables_to_restore()
-        #saver = tf.train.Saver(variables_to_restore)
+        # Create a saver for restoring variable averages
+        ema = tf.train.ExponentialMovingAverage(1.0)
+        saver = tf.train.Saver(ema.variables_to_restore())
     
         # Start running operations on the Graph.
         sess = tf.Session(config=tf.ConfigProto(log_device_placement=False))
