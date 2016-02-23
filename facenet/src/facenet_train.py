@@ -21,16 +21,18 @@ FLAGS = tf.app.flags.FLAGS
 
 time_str = datetime.strftime(datetime.now(), '/%Y%m%d-%H%M%S')
 
-tf.app.flags.DEFINE_string('train_dir', '/home/david/logs/openface' + time_str,
-                           """Directory where to write event logs and checkpoints.""")
+tf.app.flags.DEFINE_string('logs_dir', '/home/david/logs/facenet' + time_str,
+                           """Directory where to write event logs.""")
+tf.app.flags.DEFINE_string('models_dir', '/home/david/models/facenet' + time_str,
+                           """Directory where to write trained models and checkpoints.""")
+tf.app.flags.DEFINE_string('data_dir', '/home/david/datasets/fs_aligned/',
+                           """Path to the data directory containing aligned face patches.""")
 tf.app.flags.DEFINE_integer('max_nrof_epochs', 200,
                             """Number of epochs to run.""")
 tf.app.flags.DEFINE_boolean('log_device_placement', False,
                             """Whether to log device placement.""")
 tf.app.flags.DEFINE_integer('batch_size', 90,
                             """Number of images to process in a batch.""")
-tf.app.flags.DEFINE_string('data_dir', '/home/david/datasets/fs_aligned/',
-                           """Path to the data directory containing aligned face patches.""")
 tf.app.flags.DEFINE_integer('image_size', 96,
                             """Image size (height, width) in pixels.""")
 tf.app.flags.DEFINE_integer('people_per_batch', 45,
@@ -95,7 +97,7 @@ def train():
     sess = tf.Session(config=tf.ConfigProto(log_device_placement=FLAGS.log_device_placement))
     sess.run(init)
 
-    summary_writer = tf.train.SummaryWriter(FLAGS.train_dir, graph_def=sess.graph_def)
+    summary_writer = tf.train.SummaryWriter(FLAGS.logs_dir, graph_def=sess.graph_def)
     
     epoch = 0
     
@@ -143,9 +145,9 @@ def train():
             i+=1
         # Save the model checkpoint after each epoch
         print('Saving checkpoint')
-        checkpoint_path = os.path.join(FLAGS.train_dir, 'model.ckpt')
+        checkpoint_path = os.path.join(FLAGS.models_dir, 'model.ckpt')
         saver.save(sess, checkpoint_path, global_step=epoch*FLAGS.epoch_size+batch_number)
-        graphdef_dir = os.path.join(FLAGS.train_dir, 'graphdef')
+        graphdef_dir = os.path.join(FLAGS.models_dir, 'graphdef')
         graphdef_filename = 'graph_def.pb'
         if (not os.path.exists(os.path.join(graphdef_dir, graphdef_filename))):
           print('Saving graph definition')
@@ -153,9 +155,12 @@ def train():
         epoch+=1
 
 def main(argv=None):  # pylint: disable=unused-argument
-  if gfile.Exists(FLAGS.train_dir):
-    gfile.DeleteRecursively(FLAGS.train_dir)
-  gfile.MakeDirs(FLAGS.train_dir)
+  if gfile.Exists(FLAGS.logs_dir):
+    gfile.DeleteRecursively(FLAGS.logs_dir)
+  gfile.MakeDirs(FLAGS.logs_dir)
+  if gfile.Exists(FLAGS.models_dir):
+    gfile.DeleteRecursively(FLAGS.models_dir)
+  gfile.MakeDirs(FLAGS.models_dir)
   train()
 
 

@@ -26,7 +26,7 @@ def run_train():
   
     # Set the seed for the graph
     tf.set_random_seed(666)
-    
+
     # Placeholder for input images
     images_placeholder = tf.placeholder(tf.float32, shape=(FLAGS.batch_size, FLAGS.image_size, FLAGS.image_size, 3), name='input')
     
