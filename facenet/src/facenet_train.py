@@ -19,13 +19,13 @@ import facenet
 
 FLAGS = tf.app.flags.FLAGS
 
-time_str = datetime.strftime(datetime.now(), '/%Y%m%d-%H%M%S')
-
-tf.app.flags.DEFINE_string('logs_dir', '/home/david/logs/facenet' + time_str,
+tf.app.flags.DEFINE_string('logs_base_dir', '/home/david/logs/facenet',
                            """Directory where to write event logs.""")
-tf.app.flags.DEFINE_string('models_dir', '/home/david/models/facenet' + time_str,
+tf.app.flags.DEFINE_string('models_base_dir', '/home/david/models/facenet',
                            """Directory where to write trained models and checkpoints.""")
-tf.app.flags.DEFINE_string('data_dir', '/home/david/datasets/fs_aligned/',
+tf.app.flags.DEFINE_string('model_name', '20160228-110932',
+                           """XXXXXXXX.""")
+tf.app.flags.DEFINE_string('data_dir', '/home/david/datasets/facescrub/fs_aligned:/home/david/datasets/casia/casia-webface-aligned',
                            """Path to the data directory containing aligned face patches.""")
 tf.app.flags.DEFINE_integer('max_nrof_epochs', 200,
                             """Number of epochs to run.""")
@@ -47,8 +47,6 @@ tf.app.flags.DEFINE_float('learning_rate', 0.1,
                             """Initial learning rate.""")
 tf.app.flags.DEFINE_float('moving_average_decay', 0.9999,
                             """Expontential decay for tracking of training parameters.""")
-tf.app.flags.DEFINE_integer('nrof_classes', 530,
-                            """Number of classes in the dataset.""")
 tf.app.flags.DEFINE_float('train_set_fraction', 0.9,
                           """Fraction of the data set that is used for training.""")
 tf.app.flags.DEFINE_integer('seed', 666,
@@ -56,10 +54,18 @@ tf.app.flags.DEFINE_integer('seed', 666,
 
 
 def train():
+  if FLAGS.model_name:
+    subdir = FLAGS.model_name
+    preload_model = True
+  else:
+    subdir = datetime.strftime(datetime.now(), '%Y%m%d-%H%M%S')
+    preload_model = False
+  log_dir = os.path.join(FLAGS.logs_base_dir, subdir)
+  model_dir = os.path.join(FLAGS.models_base_dir, subdir)
   
   np.random.seed(seed=FLAGS.seed)
   dataset = facenet.get_dataset(FLAGS.data_dir)
-  train_set, test_set = facenet.split_dataset(dataset, FLAGS.train_set_fraction)
+  #train_set, test_set = facenet.split_dataset(dataset, FLAGS.train_set_fraction)
   
   with tf.Graph().as_default():
     tf.set_random_seed(FLAGS.seed)
@@ -97,11 +103,20 @@ def train():
     sess = tf.Session(config=tf.ConfigProto(log_device_placement=FLAGS.log_device_placement))
     sess.run(init)
 
-    summary_writer = tf.train.SummaryWriter(FLAGS.logs_dir, graph_def=sess.graph_def)
+    summary_writer = tf.train.SummaryWriter(log_dir, graph_def=sess.graph_def)
     
     epoch = 0
     
     with sess.as_default():
+
+      if preload_model:
+        saver.restore(sess, '/home/david/models/facenet/20160228-110932/model.ckpt-200003')
+        #ckpt = tf.train.get_checkpoint_state(model_dir)
+        #if ckpt and ckpt.model_checkpoint_path:
+          #saver.restore(sess, ckpt.model_checkpoint_path)
+        #else:
+          #raise ValueError('Checkpoint not found')
+      
 
       while epoch<FLAGS.max_nrof_epochs:
         batch_number = 0
@@ -130,24 +145,24 @@ def train():
           
           # Perform training on the selected triplets
           i = 0
-          while i*FLAGS.batch_size<nrof_triplets*3:
+          while i*FLAGS.batch_size<nrof_triplets*3 and batch_number<FLAGS.epoch_size:
             start_time = time.time()
             batch = facenet.get_triplet_batch(triplets, i)
             feed_dict = { images_placeholder: batch, phase_train_placeholder: True }
             if (batch_number%20==0):
-              err, summary_str, _  = sess.run([loss, summary_op, train_op], feed_dict=feed_dict)
-              summary_writer.add_summary(summary_str, FLAGS.epoch_size*epoch+batch_number)
+              err, summary_str, _, step  = sess.run([loss, summary_op, train_op, global_step], feed_dict=feed_dict)
+              summary_writer.add_summary(summary_str, global_step=step)
             else:
-              err, _  = sess.run([loss, train_op], feed_dict=feed_dict)
+              err, _, step  = sess.run([loss, train_op, global_step], feed_dict=feed_dict)
             duration = time.time() - start_time
             print('Epoch: [%d][%d/%d]\tTime %.3f\ttripErr %2.3f' % (epoch, batch_number, FLAGS.epoch_size, duration, err))
             batch_number+=1
             i+=1
         # Save the model checkpoint after each epoch
         print('Saving checkpoint')
-        checkpoint_path = os.path.join(FLAGS.models_dir, 'model.ckpt')
-        saver.save(sess, checkpoint_path, global_step=epoch*FLAGS.epoch_size+batch_number)
-        graphdef_dir = os.path.join(FLAGS.models_dir, 'graphdef')
+        checkpoint_path = os.path.join(model_dir, 'model.ckpt')
+        saver.save(sess, checkpoint_path, global_step=step)
+        graphdef_dir = os.path.join(model_dir, 'graphdef')
         graphdef_filename = 'graph_def.pb'
         if (not os.path.exists(os.path.join(graphdef_dir, graphdef_filename))):
           print('Saving graph definition')
@@ -155,12 +170,6 @@ def train():
         epoch+=1
 
 def main(argv=None):  # pylint: disable=unused-argument
-  if gfile.Exists(FLAGS.logs_dir):
-    gfile.DeleteRecursively(FLAGS.logs_dir)
-  gfile.MakeDirs(FLAGS.logs_dir)
-  if gfile.Exists(FLAGS.models_dir):
-    gfile.DeleteRecursively(FLAGS.models_dir)
-  gfile.MakeDirs(FLAGS.models_dir)
   train()
 
 

@@ -15,15 +15,15 @@ import os
 import sys
 import time
 
-tf.app.flags.DEFINE_string('model_dir', '/home/david/models/facenet/20160222-231547',
+tf.app.flags.DEFINE_string('model_dir', '/home/david/models/facenet/20160228-110932',
                            """Directory containing the graph definition and checkpoint files.""")
 tf.app.flags.DEFINE_string('lfw_pairs', '/home/david/repo/facenet/data/lfw/pairs.txt',
                            """The file containing the pairs to use for validation.""")
 tf.app.flags.DEFINE_string('file_ext', '.png',
                            """The file extension for the LFW dataset, typically .png or .jpg.""")
-tf.app.flags.DEFINE_string('lfw_dir', '/home/david/datasets/lfw_aligned/',
+tf.app.flags.DEFINE_string('lfw_dir', '/home/david/datasets/lfw/lfw_realigned/',
                            """Path to the data directory containing aligned face patches.""")
-tf.app.flags.DEFINE_integer('batch_size', 90,
+tf.app.flags.DEFINE_integer('batch_size', 60,
                             """Number of images to process in a batch.""")
 tf.app.flags.DEFINE_integer('image_size', 96,
                             """Image size (height, width) in pixels.""")

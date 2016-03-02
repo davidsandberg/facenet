@@ -480,17 +480,19 @@ class ImageClass():
   def __len__(self):
     return len(self.image_paths)
   
-def get_dataset(path):
-  classes = os.listdir(path)
-  classes.sort()
-  nrof_classes = len(classes)
-  dataset = [None] * nrof_classes
-  for i in range(nrof_classes):
-    class_name = classes[i]
-    facedir = os.path.join(path, class_name)
-    images = os.listdir(facedir)
-    image_paths = map(lambda x: os.path.join(facedir,x), images)
-    dataset[i] = ImageClass(class_name, image_paths)
+def get_dataset(paths):
+  dataset = []
+  for path in paths.split(':'):
+    classes = os.listdir(path)
+    classes.sort()
+    nrof_classes = len(classes)
+    #dataset = [None] * nrof_classes
+    for i in range(nrof_classes):
+      class_name = classes[i]
+      facedir = os.path.join(path, class_name)
+      images = os.listdir(facedir)
+      image_paths = map(lambda x: os.path.join(facedir,x), images)
+      dataset.append(ImageClass(class_name, image_paths))
 
   return dataset
 
@@ -503,29 +505,29 @@ def split_dataset(dataset, split_ratio):
   test_set = [dataset[i] for i in class_indices[split:nrof_classes]]
   return train_set, test_set
 
-
 def sample_people(dataset, people_per_batch, images_per_person):
+  nrof_images = people_per_batch * images_per_person
 
-  # Sample people_per_batch classes from the dataset
+  # Sample classes from the dataset
   nrof_classes = len(dataset)
   class_indices = np.arange(nrof_classes)
   np.random.shuffle(class_indices)
-  classes = class_indices[0:people_per_batch]
-  sampled_dataset = [dataset[i] for i in classes]
-
-  # Find the number of images for each class
-  num_per_class = [min(len(dataset[i]), images_per_person) for i in classes]
-
-  # Sample maximum images_per_person images from each class 
-  #  and create a concatenated list of image paths
+  
+  i = 0
   image_paths = []
-  image_details = []
-  for i in range(0,len(sampled_dataset)):
-    nrof_images_in_class = len(sampled_dataset[i])
+  num_per_class = []
+  # Sample images from these classes until we have enough
+  while len(image_paths)<nrof_images:
+    class_index = class_indices[i]
+    nrof_images_in_class = len(dataset[class_index])
     image_indices = np.arange(nrof_images_in_class)
     np.random.shuffle(image_indices)
-    idx = image_indices[0:num_per_class[i]]
-    image_paths_for_class = [sampled_dataset[i].image_paths[j] for j in idx]
+    nrof_images_from_class = min(nrof_images_in_class, images_per_person, nrof_images-len(image_paths))
+    idx = image_indices[0:nrof_images_from_class]
+    image_paths_for_class = [dataset[class_index].image_paths[j] for j in idx]
     image_paths += image_paths_for_class
+    num_per_class.append(nrof_images_from_class)
+    i+=1
 
   return image_paths, num_per_class
+
