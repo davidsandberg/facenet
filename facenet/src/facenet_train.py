@@ -23,12 +23,10 @@ tf.app.flags.DEFINE_string('logs_base_dir', '/home/david/logs/facenet',
                            """Directory where to write event logs.""")
 tf.app.flags.DEFINE_string('models_base_dir', '/home/david/models/facenet',
                            """Directory where to write trained models and checkpoints.""")
-#tf.app.flags.DEFINE_string('model_name', '20160228-110932-1',
-                           #"""XXXXXXXX.""")
 tf.app.flags.DEFINE_string('model_name', '',
-                           """XXXXXXXX.""")
+                           """Model directory name. Used when continuing training of an existing model. Leave empty to train new model.""")
 tf.app.flags.DEFINE_string('data_dir', '/home/david/datasets/facescrub/fs_aligned:/home/david/datasets/casia/casia-webface-aligned',
-                           """Path to the data directory containing aligned face patches.""")
+                           """Path to the data directory containing aligned face patches. Multiple directories are seperated with colon.""")
 tf.app.flags.DEFINE_integer('max_nrof_epochs', 200,
                             """Number of epochs to run.""")
 tf.app.flags.DEFINE_boolean('log_device_placement', False,
@@ -41,7 +39,7 @@ tf.app.flags.DEFINE_integer('people_per_batch', 45,
                             """Number of people per batch.""")
 tf.app.flags.DEFINE_integer('images_per_person', 40,
                             """Number of images per person.""")
-tf.app.flags.DEFINE_integer('epoch_size', 20,
+tf.app.flags.DEFINE_integer('epoch_size', 1000,
                             """Number of batches per epoch.""")
 tf.app.flags.DEFINE_float('alpha', 0.2,
                             """Positive to negative triplet distance margin.""")
@@ -82,7 +80,6 @@ def main(argv=None):  # pylint: disable=unused-argument
     
     # Build the inference graph
     embeddings = facenet.inference_nn4_max_pool_96(images_placeholder, phase_train=phase_train_placeholder)
-    #embeddings = facenet.inference_vggface_96(images_placeholder)
     
     # Split example embeddings into anchor, positive and negative
     anchor, positive, negative = tf.split(0, 3, embeddings)
@@ -108,8 +105,6 @@ def main(argv=None):  # pylint: disable=unused-argument
 
     summary_writer = tf.train.SummaryWriter(log_dir, graph_def=sess.graph_def)
     
-    epoch = 0
-    
     with sess.as_default():
 
       if preload_model:
@@ -119,7 +114,8 @@ def main(argv=None):  # pylint: disable=unused-argument
         else:
           raise ValueError('Checkpoint not found')
 
-      while epoch<FLAGS.max_nrof_epochs:
+      # Training and validation loop
+      for epoch in range(FLAGS.max_nrof_epochs):
         # Train for one epoch
         step = train_epoch(sess, train_set, epoch, images_placeholder, phase_train_placeholder,
                     global_step, embeddings, loss, train_op, summary_op, summary_writer)
@@ -135,7 +131,6 @@ def main(argv=None):  # pylint: disable=unused-argument
         if (not os.path.exists(os.path.join(graphdef_dir, graphdef_filename))):
           print('Saving graph definition')
           tf.train.write_graph(sess.graph_def, graphdef_dir, graphdef_filename, False)
-        epoch+=1
 
 def train_epoch(sess, dataset, epoch, images_placeholder, phase_train_placeholder, 
                 global_step, embeddings, loss, train_op, summary_op, summary_writer):
