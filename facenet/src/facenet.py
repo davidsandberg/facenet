@@ -23,6 +23,7 @@ from tensorflow.python.ops import control_flow_ops
 from tensorflow.python.platform import gfile
 import numpy as np
 from scipy import misc
+import matplotlib.pyplot as plt
 
 FLAGS = tf.app.flags.FLAGS
 
@@ -581,24 +582,17 @@ def calculate_roc(thresholds, embeddings1, embeddings2, actual_issame):
   tpr_array = []
   fpr_array = []
   accuracy_array = []
-  predict_issame = [None] * len(actual_issame)
   predict_issame_stored = []
   dist_stored = []
   for threshold in thresholds:
-    tp = tn = fp = fn = 0
     diff = np.subtract(embeddings1, embeddings2)
     dist = np.sum(np.square(diff),1)
 
-    for i in range(dist.size):
-      predict_issame[i] = dist[i] < threshold
-      if predict_issame[i] and actual_issame[i]:
-        tp += 1
-      elif predict_issame[i] and not actual_issame[i]:
-        fp += 1
-      elif not predict_issame[i] and not actual_issame[i]:
-        tn += 1
-      elif not predict_issame[i] and actual_issame[i]:
-        fn += 1
+    predict_issame = np.less(dist, threshold)
+    tp = np.sum(np.logical_and(predict_issame, actual_issame))
+    fp = np.sum(np.logical_and(predict_issame, np.logical_not(actual_issame)))
+    tn = np.sum(np.logical_and(np.logical_not(predict_issame), np.logical_not(actual_issame)))
+    fn = np.sum(np.logical_and(np.logical_not(predict_issame), actual_issame))
 
     tpr = 0 if (tp+fn==0) else float(tp) / float(tp+fn)
     fpr = 0 if (fp+tn==0) else float(fp) / float(fp+tn)
@@ -613,3 +607,14 @@ def calculate_roc(thresholds, embeddings1, embeddings2, actual_issame):
     accuracy_array.append(accuracy)
 
   return tpr_array, fpr_array, accuracy_array, predict_issame_stored, dist_stored
+
+def plot_roc(fpr, tpr, label):
+  plt.plot(fpr, tpr, label=label)
+  plt.title('Receiver Operating Characteristics')
+  plt.xlabel('False Positive Rate')
+  plt.ylabel('True Positive Rate')
+  plt.legend()
+  plt.plot([0, 1], [0, 1], 'g--')
+  plt.grid(True)
+  plt.show()
+  

@@ -97,15 +97,7 @@ def main():
             embeddings2 = emb_array[1::2]
             tpr, fpr, accuracy, predict_issame, dist = facenet.calculate_roc(thresholds, embeddings1, embeddings2, actual_issame)
             print('Accuracy: %.2f%%' % (max(accuracy)*100))
-            
-            nn4 = plt.plot(fpr, tpr, label='NN4')
-            plt.title('Receiver Operating Characteristics')
-            plt.xlabel('False Positive Rate')
-            plt.ylabel('True Positive Rate')
-            plt.legend()
-            plt.plot([0, 1], [0, 1], 'g--')
-            plt.grid(True)
-            plt.show()
+            facenet.plot_roc(fpr, tpr, 'NN4')
             
 
 def get_paths(lfw_dir, pairs):

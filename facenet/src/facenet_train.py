@@ -213,7 +213,6 @@ def validate_epoch(sess, dataset, epoch, images_placeholder, phase_train_placeho
     anchor_id_list.append(class_indices_in_batch[(0*nrof_batch_triplets):(1*nrof_batch_triplets)])
     positive_id_list.append(class_indices_in_batch[(1*nrof_batch_triplets):(2*nrof_batch_triplets)])
     negative_id_list.append(class_indices_in_batch[(2*nrof_batch_triplets):(3*nrof_batch_triplets)])
-    #print(np.where(class_indices_in_batch[(1*nrof_batch_triplets):(2*nrof_batch_triplets)]==class_indices_in_batch[(2*nrof_batch_triplets):(3*nrof_batch_triplets)]))
     loss_list.append(loss_x)
   anchor = np.vstack(anchor_list)
   positive = np.vstack(positive_list)
@@ -231,6 +230,7 @@ def validate_epoch(sess, dataset, epoch, images_placeholder, phase_train_placeho
   actual_issame = [True]*anchor.shape[0] + [False]*anchor.shape[0]
   tpr, fpr, accuracy, predict_issame, dist = facenet.calculate_roc(thresholds, embeddings1, embeddings2, actual_issame)
   print('Epoch: [%d]\tTime %.3f\ttripErr %2.3f\taccuracy %1.3f' % (epoch, duration, np.mean(loss_list), np.max(accuracy)))
+  facenet.plot_roc(fpr, tpr, 'NN4')
   xxx = 1
 
 if __name__ == '__main__':
