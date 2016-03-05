@@ -15,6 +15,7 @@ from tensorflow.python.platform import gfile
 
 import tensorflow as tf
 import numpy as np
+import matplotlib.pyplot as plt
 import facenet
 
 FLAGS = tf.app.flags.FLAGS
@@ -23,8 +24,10 @@ tf.app.flags.DEFINE_string('logs_base_dir', '/home/david/logs/facenet',
                            """Directory where to write event logs.""")
 tf.app.flags.DEFINE_string('models_base_dir', '/home/david/models/facenet',
                            """Directory where to write trained models and checkpoints.""")
-tf.app.flags.DEFINE_string('model_name', '',
+tf.app.flags.DEFINE_string('model_name', '20160228-110932-1',
                            """Model directory name. Used when continuing training of an existing model. Leave empty to train new model.""")
+#tf.app.flags.DEFINE_string('model_name', '',
+                           #"""Model directory name. Used when continuing training of an existing model. Leave empty to train new model.""")
 tf.app.flags.DEFINE_string('data_dir', '/home/david/datasets/facescrub/fs_aligned:/home/david/datasets/casia/casia-webface-aligned',
                            """Path to the data directory containing aligned face patches. Multiple directories are seperated with colon.""")
 tf.app.flags.DEFINE_integer('max_nrof_epochs', 200,
@@ -92,7 +95,7 @@ def main(argv=None):  # pylint: disable=unused-argument
     
     # Create a saver
     saver = tf.train.Saver(tf.all_variables(), max_to_keep=0)
-
+    
     # Build the summary operation based on the TF collection of Summaries.
     summary_op = tf.merge_all_summaries()
 
@@ -117,8 +120,8 @@ def main(argv=None):  # pylint: disable=unused-argument
       # Training and validation loop
       for epoch in range(FLAGS.max_nrof_epochs):
         # Train for one epoch
-        step = train_epoch(sess, train_set, epoch, images_placeholder, phase_train_placeholder,
-                    global_step, embeddings, loss, train_op, summary_op, summary_writer)
+        #step = train_epoch(sess, train_set, epoch, images_placeholder, phase_train_placeholder,
+                    #global_step, embeddings, loss, train_op, summary_op, summary_writer)
         # Validate epoch
         validate_epoch(sess, train_set, epoch, images_placeholder, phase_train_placeholder,
                        global_step, embeddings, loss, train_op, summary_op)
@@ -140,14 +143,13 @@ def train_epoch(sess, dataset, epoch, images_placeholder, phase_train_placeholde
     # Sample people and load new data
     image_paths, num_per_class = facenet.sample_people(dataset, FLAGS.people_per_batch, FLAGS.images_per_person)
     image_data = facenet.load_data(image_paths)
-  
-    nrof_examples_per_epoch = FLAGS.people_per_batch*FLAGS.images_per_person
-    nrof_batches_per_epoch = int(np.floor(nrof_examples_per_epoch/FLAGS.batch_size))
     
     print('Selecting suitable triplets for training')
     start_time = time.time()
     emb_list = []
     # Run a forward pass for the sampled images
+    nrof_examples_per_epoch = FLAGS.people_per_batch*FLAGS.images_per_person
+    nrof_batches_per_epoch = int(np.floor(nrof_examples_per_epoch/FLAGS.batch_size))
     for i in xrange(nrof_batches_per_epoch):
       batch = facenet.get_batch(image_data, FLAGS.batch_size, i)
       feed_dict = { images_placeholder: batch, phase_train_placeholder: True }
@@ -179,42 +181,57 @@ def validate_epoch(sess, dataset, epoch, images_placeholder, phase_train_placeho
   people_per_batch = FLAGS.people_per_batch*4
   print('Loading validation data')
   # Sample people and load new data
-  image_paths, num_per_class = facenet.sample_people(dataset, people_per_batch, FLAGS.images_per_person)
+  image_paths, num_per_class, class_indices = facenet.sample_people(dataset, people_per_batch, FLAGS.images_per_person)
   image_data = facenet.load_data(image_paths)
+  for i in range(image_data.shape[0]):
+    image_data[i,0,0,0] = class_indices[i]
 
-  nrof_examples_per_epoch = people_per_batch*FLAGS.images_per_person
-  nrof_batches_per_epoch = int(np.floor(nrof_examples_per_epoch/FLAGS.batch_size))
-  
   print('Selecting random triplets for validation')
-  triplets, nrof_triplets = facenet.select_validation_triplets(num_per_class, people_per_batch, image_data)
-
+  nrof_examples_per_epoch = people_per_batch*FLAGS.images_per_person
+  triplets, nrof_triplets = facenet.select_validation_triplets(num_per_class, people_per_batch, image_data, class_indices)
+  
   start_time = time.time()
   anchor_list = []
   positive_list = []
   negative_list = []
+  anchor_id_list = []
+  positive_id_list = []
+  negative_id_list = []
   loss_list = []
   # Run a forward pass for the sampled images
   print('Running forward pass on images')
+  nrof_batches_per_epoch = nrof_triplets*3//FLAGS.batch_size
   for i in xrange(nrof_batches_per_epoch):
     batch = facenet.get_triplet_batch(triplets, i)
+    class_indices_in_batch = batch[:,0,0,0]
     feed_dict = { images_placeholder: batch, phase_train_placeholder: True }
     emb_x, loss_x = sess.run([embeddings, loss], feed_dict=feed_dict)
     nrof_batch_triplets = emb_x.shape[0]/3
     anchor_list.append(emb_x[(0*nrof_batch_triplets):(1*nrof_batch_triplets),:])
     positive_list.append(emb_x[(1*nrof_batch_triplets):(2*nrof_batch_triplets),:])
     negative_list.append(emb_x[(2*nrof_batch_triplets):(3*nrof_batch_triplets),:])
+    anchor_id_list.append(class_indices_in_batch[(0*nrof_batch_triplets):(1*nrof_batch_triplets)])
+    positive_id_list.append(class_indices_in_batch[(1*nrof_batch_triplets):(2*nrof_batch_triplets)])
+    negative_id_list.append(class_indices_in_batch[(2*nrof_batch_triplets):(3*nrof_batch_triplets)])
+    #print(np.where(class_indices_in_batch[(1*nrof_batch_triplets):(2*nrof_batch_triplets)]==class_indices_in_batch[(2*nrof_batch_triplets):(3*nrof_batch_triplets)]))
     loss_list.append(loss_x)
   anchor = np.vstack(anchor_list)
   positive = np.vstack(positive_list)
   negative = np.vstack(negative_list)
+  anchor_id = np.hstack(anchor_id_list)
+  positive_id = np.hstack(positive_id_list)
+  negative_id = np.hstack(negative_id_list)
   duration = time.time() - start_time
   
   thresholds = np.arange(0, 4, 0.01)
   embeddings1 = np.vstack([anchor, anchor])
   embeddings2 = np.vstack([positive, negative])
+  embeddings1_id = np.hstack([anchor_id, anchor_id])
+  embeddings2_id = np.hstack([positive_id, negative_id])
   actual_issame = [True]*anchor.shape[0] + [False]*anchor.shape[0]
   tpr, fpr, accuracy, predict_issame, dist = facenet.calculate_roc(thresholds, embeddings1, embeddings2, actual_issame)
   print('Epoch: [%d]\tTime %.3f\ttripErr %2.3f\taccuracy %1.3f' % (epoch, duration, np.mean(loss_list), np.max(accuracy)))
+  xxx = 1
 
 if __name__ == '__main__':
   tf.app.run()

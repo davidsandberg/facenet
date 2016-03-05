@@ -469,7 +469,7 @@ def select_training_triplets(embeddings, num_per_class, image_data):
   return triplets, nrof_random_negs, nrof_triplets
 
   
-def select_validation_triplets(num_per_class, people_per_batch, image_data):
+def select_validation_triplets(num_per_class, people_per_batch, image_data, class_indices):
 
   nrof_images = image_data.shape[0]
   nrof_triplets = nrof_images - people_per_batch
@@ -480,10 +480,10 @@ def select_validation_triplets(num_per_class, people_per_batch, image_data):
   
   trip_idx = 0
   shuffle = np.arange(nrof_triplets)
-  np.random.shuffle(shuffle)
+  #np.random.shuffle(shuffle) <------------
   emb_start_idx = 0
   nrof_random_negs = 0
-  for i in xrange(people_per_batch):
+  for i in xrange(len(num_per_class)):
     n = num_per_class[i]
     for j in range(1,n):
       a_idx = emb_start_idx
@@ -497,14 +497,20 @@ def select_validation_triplets(num_per_class, people_per_batch, image_data):
         sel_neg_idx = (np.random.randint(1, 2**32) % nrof_images) -1
 
       ns_arr[shuffle[trip_idx]] = image_data[sel_neg_idx]
-      #print('Triplet %d: (%d, %d, %d), pos_dist=%2.3f, neg_dist=%2.3f, sel_neg_dist=%2.3f' % (trip_idx, a_idx, p_idx, sel_neg_idx, pos_dist, neg_dist, sel_neg_dist))
+      #if (int(image_data[a_idx,0,0,0])==int(image_data[sel_neg_idx,0,0,0])):
+        #print('xxx1')
+      #if (int(as_arr[shuffle[trip_idx],0,0,0])==int(ns_arr[shuffle[trip_idx],0,0,0])):
+        #print('xxx1')
+      #print('Triplet %d: (%d, %d, %d), (%d, %d, %d)' % (trip_idx, a_idx, p_idx, sel_neg_idx, int(image_data[a_idx,0,0,0]), int(image_data[p_idx,0,0,0]), int(image_data[sel_neg_idx,0,0,0])))
       trip_idx += 1
       
     emb_start_idx += n
+    
+  #idx=np.where(as_arr[:,0,0,0]==ns_arr[:,0,0,0])
+  nrof_triplets_x = trip_idx // FLAGS.batch_size * FLAGS.batch_size
+  triplets = (as_arr[0:nrof_triplets_x,:,:,:], ps_arr[0:nrof_triplets_x,:,:,:], ns_arr[0:nrof_triplets_x,:,:,:])
   
-  triplets = (as_arr, ps_arr, ns_arr)
-  
-  return triplets, nrof_triplets
+  return triplets, nrof_triplets_x
   
 
 class ImageClass():
@@ -554,6 +560,7 @@ def sample_people(dataset, people_per_batch, images_per_person):
   i = 0
   image_paths = []
   num_per_class = []
+  sampled_class_indices = []
   # Sample images from these classes until we have enough
   while len(image_paths)<nrof_images:
     class_index = class_indices[i]
@@ -563,11 +570,12 @@ def sample_people(dataset, people_per_batch, images_per_person):
     nrof_images_from_class = min(nrof_images_in_class, images_per_person, nrof_images-len(image_paths))
     idx = image_indices[0:nrof_images_from_class]
     image_paths_for_class = [dataset[class_index].image_paths[j] for j in idx]
+    sampled_class_indices += [class_index]*nrof_images_from_class
     image_paths += image_paths_for_class
     num_per_class.append(nrof_images_from_class)
     i+=1
 
-  return image_paths, num_per_class
+  return image_paths, num_per_class, sampled_class_indices
 
 def calculate_roc(thresholds, embeddings1, embeddings2, actual_issame):
   tpr_array = []

@@ -95,7 +95,7 @@ def main():
             thresholds = np.arange(0, 4, 0.01)
             embeddings1 = emb_array[0::2]
             embeddings2 = emb_array[1::2]
-            tpr, fpr, accuracy = facenet.calculate_roc(thresholds, embeddings1, embeddings2, actual_issame)
+            tpr, fpr, accuracy, predict_issame, dist = facenet.calculate_roc(thresholds, embeddings1, embeddings2, actual_issame)
             print('Accuracy: %.2f%%' % (max(accuracy)*100))
             
             nn4 = plt.plot(fpr, tpr, label='NN4')
