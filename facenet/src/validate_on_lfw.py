@@ -93,7 +93,9 @@ def main():
             emb_array = np.vstack(emb_list)  # Stack the embeddings to a nrof_examples_per_epoch x 128 matrix
             
             thresholds = np.arange(0, 4, 0.01)
-            tpr, fpr, accuracy = calculate_roc(thresholds, emb_array, actual_issame)
+            embeddings1 = emb_array[0::2]
+            embeddings2 = emb_array[1::2]
+            tpr, fpr, accuracy = facenet.calculate_roc(thresholds, embeddings1, embeddings2, actual_issame)
             print('Accuracy: %.2f%%' % (max(accuracy)*100))
             
             nn4 = plt.plot(fpr, tpr, label='NN4')
@@ -137,39 +139,6 @@ def read_pairs(pairs_filename):
             pairs.append(pair)
     assert(len(pairs) == 6000)
     return np.array(pairs)
-
-def calculate_roc(thresholds, embeddings, actual_issame):
-    tpr_array = []
-    fpr_array = []
-    accuracy_array = []
-    predict_issame = [None] * len(actual_issame)
-    for threshold in thresholds:
-        tp = tn = fp = fn = 0
-        x1 = embeddings[0::2]
-        x2 = embeddings[1::2]
-        diff = np.subtract(x1, x2)
-        dist = np.sum(np.square(diff),1)
-        
-        for i in range(dist.size):
-            predict_issame[i] = dist[i] < threshold
-            if predict_issame[i] and actual_issame[i]:
-                tp += 1
-            elif predict_issame[i] and not actual_issame[i]:
-                fp += 1
-            elif not predict_issame[i] and not actual_issame[i]:
-                tn += 1
-            elif not predict_issame[i] and actual_issame[i]:
-                fn += 1
-    
-        tpr = 0 if (tp+fn==0) else float(tp) / float(tp+fn)
-        fpr = 0 if (fp+tn==0) else float(fp) / float(fp+tn)
-        accuracy = float(tp+tn)/dist.size
-
-        tpr_array.append(tpr)
-        fpr_array.append(fpr)
-        accuracy_array.append(accuracy)
-
-    return tpr_array, fpr_array, accuracy_array
 
 if __name__ == '__main__':
     main()

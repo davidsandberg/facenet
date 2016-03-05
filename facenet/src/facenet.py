@@ -411,7 +411,7 @@ def get_triplet_batch(triplets, batch_index):
   batch = np.vstack([a, p, n])
   return batch
 
-def select_triplets(embeddings, num_per_class, image_data):
+def select_training_triplets(embeddings, num_per_class, image_data):
 
   def dist(emb1, emb2):
     x = np.square(np.subtract(emb1, emb2))
@@ -467,6 +467,45 @@ def select_triplets(embeddings, num_per_class, image_data):
   triplets = (as_arr, ps_arr, ns_arr)
   
   return triplets, nrof_random_negs, nrof_triplets
+
+  
+def select_validation_triplets(num_per_class, people_per_batch, image_data):
+
+  nrof_images = image_data.shape[0]
+  nrof_triplets = nrof_images - people_per_batch
+  shp = [nrof_triplets, image_data.shape[1], image_data.shape[2], image_data.shape[3]]
+  as_arr = np.zeros(shp)
+  ps_arr = np.zeros(shp)
+  ns_arr = np.zeros(shp)
+  
+  trip_idx = 0
+  shuffle = np.arange(nrof_triplets)
+  np.random.shuffle(shuffle)
+  emb_start_idx = 0
+  nrof_random_negs = 0
+  for i in xrange(people_per_batch):
+    n = num_per_class[i]
+    for j in range(1,n):
+      a_idx = emb_start_idx
+      p_idx = emb_start_idx + j
+      as_arr[shuffle[trip_idx]] = image_data[a_idx]
+      ps_arr[shuffle[trip_idx]] = image_data[p_idx]
+
+      # Select a random negative example
+      sel_neg_idx = emb_start_idx
+      while sel_neg_idx>=emb_start_idx and sel_neg_idx<=emb_start_idx+n-1:
+        sel_neg_idx = (np.random.randint(1, 2**32) % nrof_images) -1
+
+      ns_arr[shuffle[trip_idx]] = image_data[sel_neg_idx]
+      #print('Triplet %d: (%d, %d, %d), pos_dist=%2.3f, neg_dist=%2.3f, sel_neg_dist=%2.3f' % (trip_idx, a_idx, p_idx, sel_neg_idx, pos_dist, neg_dist, sel_neg_dist))
+      trip_idx += 1
+      
+    emb_start_idx += n
+  
+  triplets = (as_arr, ps_arr, ns_arr)
+  
+  return triplets, nrof_triplets
+  
 
 class ImageClass():
   "Stores the paths to images for a given class"
@@ -531,3 +570,39 @@ def sample_people(dataset, people_per_batch, images_per_person):
 
   return image_paths, num_per_class
 
+def calculate_roc(thresholds, embeddings1, embeddings2, actual_issame):
+  tpr_array = []
+  fpr_array = []
+  accuracy_array = []
+  predict_issame = [None] * len(actual_issame)
+  predict_issame_stored = []
+  dist_stored = []
+  for threshold in thresholds:
+    tp = tn = fp = fn = 0
+    diff = np.subtract(embeddings1, embeddings2)
+    dist = np.sum(np.square(diff),1)
+
+    for i in range(dist.size):
+      predict_issame[i] = dist[i] < threshold
+      if predict_issame[i] and actual_issame[i]:
+        tp += 1
+      elif predict_issame[i] and not actual_issame[i]:
+        fp += 1
+      elif not predict_issame[i] and not actual_issame[i]:
+        tn += 1
+      elif not predict_issame[i] and actual_issame[i]:
+        fn += 1
+
+    tpr = 0 if (tp+fn==0) else float(tp) / float(tp+fn)
+    fpr = 0 if (fp+tn==0) else float(fp) / float(fp+tn)
+    accuracy = float(tp+tn)/dist.size
+    
+    if len(accuracy_array)>0 and accuracy>=np.max(accuracy_array):
+      predict_issame_stored = predict_issame
+      dist_stored = dist
+
+    tpr_array.append(tpr)
+    fpr_array.append(fpr)
+    accuracy_array.append(accuracy)
+
+  return tpr_array, fpr_array, accuracy_array, predict_issame_stored, dist_stored
