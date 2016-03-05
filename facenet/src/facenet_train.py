@@ -30,7 +30,7 @@ tf.app.flags.DEFINE_string('model_name', '20160228-110932-1',
                            #"""Model directory name. Used when continuing training of an existing model. Leave empty to train new model.""")
 tf.app.flags.DEFINE_string('data_dir', '/home/david/datasets/facescrub/fs_aligned:/home/david/datasets/casia/casia-webface-aligned',
                            """Path to the data directory containing aligned face patches. Multiple directories are seperated with colon.""")
-tf.app.flags.DEFINE_integer('max_nrof_epochs', 200,
+tf.app.flags.DEFINE_integer('max_nrof_epochs', 500,
                             """Number of epochs to run.""")
 tf.app.flags.DEFINE_boolean('log_device_placement', False,
                             """Whether to log device placement.""")
@@ -120,10 +120,10 @@ def main(argv=None):  # pylint: disable=unused-argument
       # Training and validation loop
       for epoch in range(FLAGS.max_nrof_epochs):
         # Train for one epoch
-        #step = train_epoch(sess, train_set, epoch, images_placeholder, phase_train_placeholder,
+        #step = train(sess, train_set, epoch, images_placeholder, phase_train_placeholder,
                     #global_step, embeddings, loss, train_op, summary_op, summary_writer)
         # Validate epoch
-        validate_epoch(sess, train_set, epoch, images_placeholder, phase_train_placeholder,
+        validate(sess, train_set, epoch, images_placeholder, phase_train_placeholder,
                        global_step, embeddings, loss, train_op, summary_op)
         # Save the model checkpoint after each epoch
         print('Saving checkpoint')
@@ -135,7 +135,7 @@ def main(argv=None):  # pylint: disable=unused-argument
           print('Saving graph definition')
           tf.train.write_graph(sess.graph_def, graphdef_dir, graphdef_filename, False)
 
-def train_epoch(sess, dataset, epoch, images_placeholder, phase_train_placeholder, 
+def train(sess, dataset, epoch, images_placeholder, phase_train_placeholder, 
                 global_step, embeddings, loss, train_op, summary_op, summary_writer):
   batch_number = 0
   while batch_number<FLAGS.epoch_size:
@@ -177,7 +177,7 @@ def train_epoch(sess, dataset, epoch, images_placeholder, phase_train_placeholde
       i+=1
   return step
   
-def validate_epoch(sess, dataset, epoch, images_placeholder, phase_train_placeholder, global_step, embeddings, loss, train_op, summary_op):
+def validate(sess, dataset, epoch, images_placeholder, phase_train_placeholder, global_step, embeddings, loss, train_op, summary_op):
   people_per_batch = FLAGS.people_per_batch*4
   print('Loading validation data')
   # Sample people and load new data
@@ -194,43 +194,31 @@ def validate_epoch(sess, dataset, epoch, images_placeholder, phase_train_placeho
   anchor_list = []
   positive_list = []
   negative_list = []
-  anchor_id_list = []
-  positive_id_list = []
-  negative_id_list = []
-  loss_list = []
+  triplet_loss_list = []
   # Run a forward pass for the sampled images
   print('Running forward pass on images')
   nrof_batches_per_epoch = nrof_triplets*3//FLAGS.batch_size
   for i in xrange(nrof_batches_per_epoch):
     batch = facenet.get_triplet_batch(triplets, i)
-    class_indices_in_batch = batch[:,0,0,0]
     feed_dict = { images_placeholder: batch, phase_train_placeholder: True }
-    emb_x, loss_x = sess.run([embeddings, loss], feed_dict=feed_dict)
-    nrof_batch_triplets = emb_x.shape[0]/3
-    anchor_list.append(emb_x[(0*nrof_batch_triplets):(1*nrof_batch_triplets),:])
-    positive_list.append(emb_x[(1*nrof_batch_triplets):(2*nrof_batch_triplets),:])
-    negative_list.append(emb_x[(2*nrof_batch_triplets):(3*nrof_batch_triplets),:])
-    anchor_id_list.append(class_indices_in_batch[(0*nrof_batch_triplets):(1*nrof_batch_triplets)])
-    positive_id_list.append(class_indices_in_batch[(1*nrof_batch_triplets):(2*nrof_batch_triplets)])
-    negative_id_list.append(class_indices_in_batch[(2*nrof_batch_triplets):(3*nrof_batch_triplets)])
-    loss_list.append(loss_x)
+    emb, triplet_loss = sess.run([embeddings, loss], feed_dict=feed_dict)
+    nrof_batch_triplets = emb.shape[0]/3
+    anchor_list.append(emb[(0*nrof_batch_triplets):(1*nrof_batch_triplets),:])
+    positive_list.append(emb[(1*nrof_batch_triplets):(2*nrof_batch_triplets),:])
+    negative_list.append(emb[(2*nrof_batch_triplets):(3*nrof_batch_triplets),:])
+    triplet_loss_list.append(triplet_loss)
   anchor = np.vstack(anchor_list)
   positive = np.vstack(positive_list)
   negative = np.vstack(negative_list)
-  anchor_id = np.hstack(anchor_id_list)
-  positive_id = np.hstack(positive_id_list)
-  negative_id = np.hstack(negative_id_list)
   duration = time.time() - start_time
   
   thresholds = np.arange(0, 4, 0.01)
   embeddings1 = np.vstack([anchor, anchor])
   embeddings2 = np.vstack([positive, negative])
-  embeddings1_id = np.hstack([anchor_id, anchor_id])
-  embeddings2_id = np.hstack([positive_id, negative_id])
   actual_issame = [True]*anchor.shape[0] + [False]*anchor.shape[0]
-  tpr, fpr, accuracy, predict_issame, dist = facenet.calculate_roc(thresholds, embeddings1, embeddings2, actual_issame)
-  print('Epoch: [%d]\tTime %.3f\ttripErr %2.3f\taccuracy %1.3f' % (epoch, duration, np.mean(loss_list), np.max(accuracy)))
-  facenet.plot_roc(fpr, tpr, 'NN4')
+  tpr, fpr, accuracy = facenet.calculate_roc(thresholds, embeddings1, embeddings2, actual_issame)
+  print('Epoch: [%d]\tTime %.3f\ttripErr %2.3f\taccuracy %1.3f' % (epoch, duration, np.mean(triplet_loss_list), np.max(accuracy)))
+  #facenet.plot_roc(fpr, tpr, 'NN4')
   xxx = 1
 
 if __name__ == '__main__':

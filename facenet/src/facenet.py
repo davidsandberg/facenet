@@ -473,15 +473,15 @@ def select_training_triplets(embeddings, num_per_class, image_data):
 def select_validation_triplets(num_per_class, people_per_batch, image_data, class_indices):
 
   nrof_images = image_data.shape[0]
-  nrof_triplets = nrof_images - people_per_batch
-  shp = [nrof_triplets, image_data.shape[1], image_data.shape[2], image_data.shape[3]]
+  nrof_trip = nrof_images - people_per_batch
+  shp = [nrof_trip, image_data.shape[1], image_data.shape[2], image_data.shape[3]]
   as_arr = np.zeros(shp)
   ps_arr = np.zeros(shp)
   ns_arr = np.zeros(shp)
   
   trip_idx = 0
-  shuffle = np.arange(nrof_triplets)
-  #np.random.shuffle(shuffle) <------------
+  shuffle = np.arange(nrof_trip)
+  np.random.shuffle(shuffle)
   emb_start_idx = 0
   nrof_random_negs = 0
   for i in xrange(len(num_per_class)):
@@ -498,20 +498,14 @@ def select_validation_triplets(num_per_class, people_per_batch, image_data, clas
         sel_neg_idx = (np.random.randint(1, 2**32) % nrof_images) -1
 
       ns_arr[shuffle[trip_idx]] = image_data[sel_neg_idx]
-      #if (int(image_data[a_idx,0,0,0])==int(image_data[sel_neg_idx,0,0,0])):
-        #print('xxx1')
-      #if (int(as_arr[shuffle[trip_idx],0,0,0])==int(ns_arr[shuffle[trip_idx],0,0,0])):
-        #print('xxx1')
-      #print('Triplet %d: (%d, %d, %d), (%d, %d, %d)' % (trip_idx, a_idx, p_idx, sel_neg_idx, int(image_data[a_idx,0,0,0]), int(image_data[p_idx,0,0,0]), int(image_data[sel_neg_idx,0,0,0])))
       trip_idx += 1
       
     emb_start_idx += n
     
-  #idx=np.where(as_arr[:,0,0,0]==ns_arr[:,0,0,0])
-  nrof_triplets_x = trip_idx // FLAGS.batch_size * FLAGS.batch_size
-  triplets = (as_arr[0:nrof_triplets_x,:,:,:], ps_arr[0:nrof_triplets_x,:,:,:], ns_arr[0:nrof_triplets_x,:,:,:])
+  nrof_triplets = trip_idx // FLAGS.batch_size * FLAGS.batch_size
+  triplets = (as_arr[0:nrof_triplets,:,:,:], ps_arr[0:nrof_triplets,:,:,:], ns_arr[0:nrof_triplets,:,:,:])
   
-  return triplets, nrof_triplets_x
+  return triplets, nrof_triplets
   
 
 class ImageClass():
@@ -581,9 +575,7 @@ def sample_people(dataset, people_per_batch, images_per_person):
 def calculate_roc(thresholds, embeddings1, embeddings2, actual_issame):
   tpr_array = []
   fpr_array = []
-  accuracy_array = []
-  predict_issame_stored = []
-  dist_stored = []
+  accuracy = []
   for threshold in thresholds:
     diff = np.subtract(embeddings1, embeddings2)
     dist = np.sum(np.square(diff),1)
@@ -596,17 +588,13 @@ def calculate_roc(thresholds, embeddings1, embeddings2, actual_issame):
 
     tpr = 0 if (tp+fn==0) else float(tp) / float(tp+fn)
     fpr = 0 if (fp+tn==0) else float(fp) / float(fp+tn)
-    accuracy = float(tp+tn)/dist.size
-    
-    if len(accuracy_array)>0 and accuracy>=np.max(accuracy_array):
-      predict_issame_stored = predict_issame
-      dist_stored = dist
+    acc = float(tp+tn)/dist.size
 
     tpr_array.append(tpr)
     fpr_array.append(fpr)
-    accuracy_array.append(accuracy)
+    accuracy.append(acc)
 
-  return tpr_array, fpr_array, accuracy_array, predict_issame_stored, dist_stored
+  return tpr_array, fpr_array, accuracy
 
 def plot_roc(fpr, tpr, label):
   plt.plot(fpr, tpr, label=label)
