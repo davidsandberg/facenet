@@ -54,8 +54,7 @@ tf.app.flags.DEFINE_float('train_set_fraction', 0.9,
 tf.app.flags.DEFINE_integer('seed', 666,
                             """Random seed.""")
 
-
-def train():
+def main(argv=None):  # pylint: disable=unused-argument
   if FLAGS.model_name:
     subdir = FLAGS.model_name
     preload_model = True
@@ -64,6 +63,8 @@ def train():
     preload_model = False
   log_dir = os.path.join(FLAGS.logs_base_dir, subdir)
   model_dir = os.path.join(FLAGS.models_base_dir, subdir)
+  if not os.path.isdir(model_dir):  # Create the model directory if it doesn't exist
+    os.mkdir(model_dir)
   
   np.random.seed(seed=FLAGS.seed)
   dataset = facenet.get_dataset(FLAGS.data_dir)
@@ -174,8 +175,7 @@ def train_epoch(sess, dataset, epoch, images_placeholder, phase_train_placeholde
       else:
         err, _, step  = sess.run([loss, train_op, global_step], feed_dict=feed_dict)
       duration = time.time() - start_time
-      if (batch_number%20==0):
-        print('Epoch: [%d][%d/%d]\tTime %.3f\ttripErr %2.3f' % (epoch, batch_number, FLAGS.epoch_size, duration, err))
+      print('Epoch: [%d][%d/%d]\tTime %.3f\ttripErr %2.3f' % (epoch, batch_number, FLAGS.epoch_size, duration, err))
       batch_number+=1
       i+=1
   return step
@@ -220,11 +220,6 @@ def validate_epoch(sess, dataset, epoch, images_placeholder, phase_train_placeho
   actual_issame = [True]*anchor.shape[0] + [False]*anchor.shape[0]
   tpr, fpr, accuracy, predict_issame, dist = facenet.calculate_roc(thresholds, embeddings1, embeddings2, actual_issame)
   print('Epoch: [%d]\tTime %.3f\ttripErr %2.3f\taccuracy %1.3f' % (epoch, duration, np.mean(loss_list), np.max(accuracy)))
-  xxx = 1
-
-def main(argv=None):  # pylint: disable=unused-argument
-  train()
-
 
 if __name__ == '__main__':
   tf.app.run()

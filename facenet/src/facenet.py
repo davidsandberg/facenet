@@ -525,7 +525,6 @@ def get_dataset(paths):
     classes = os.listdir(path)
     classes.sort()
     nrof_classes = len(classes)
-    #dataset = [None] * nrof_classes
     for i in range(nrof_classes):
       class_name = classes[i]
       facedir = os.path.join(path, class_name)
