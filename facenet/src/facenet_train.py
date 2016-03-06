@@ -24,10 +24,8 @@ tf.app.flags.DEFINE_string('logs_base_dir', '/home/david/logs/facenet',
                            """Directory where to write event logs.""")
 tf.app.flags.DEFINE_string('models_base_dir', '/home/david/models/facenet',
                            """Directory where to write trained models and checkpoints.""")
-tf.app.flags.DEFINE_string('model_name', '20160228-110932-1',
+tf.app.flags.DEFINE_string('model_name', '',
                            """Model directory name. Used when continuing training of an existing model. Leave empty to train new model.""")
-#tf.app.flags.DEFINE_string('model_name', '',
-                           #"""Model directory name. Used when continuing training of an existing model. Leave empty to train new model.""")
 tf.app.flags.DEFINE_string('data_dir', '/home/david/datasets/facescrub/fs_aligned:/home/david/datasets/casia/casia-webface-aligned',
                            """Path to the data directory containing aligned face patches. Multiple directories are seperated with colon.""")
 tf.app.flags.DEFINE_integer('max_nrof_epochs', 500,
@@ -42,7 +40,7 @@ tf.app.flags.DEFINE_integer('people_per_batch', 45,
                             """Number of people per batch.""")
 tf.app.flags.DEFINE_integer('images_per_person', 40,
                             """Number of images per person.""")
-tf.app.flags.DEFINE_integer('epoch_size', 50,
+tf.app.flags.DEFINE_integer('epoch_size', 1000,
                             """Number of batches per epoch.""")
 tf.app.flags.DEFINE_float('alpha', 0.2,
                             """Positive to negative triplet distance margin.""")
