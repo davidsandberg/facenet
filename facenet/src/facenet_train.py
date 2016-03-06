@@ -215,9 +215,9 @@ def validate(sess, dataset, epoch, images_placeholder, phase_train_placeholder, 
   thresholds = np.arange(0, 4, 0.01)
   embeddings1 = np.vstack([anchor, anchor])
   embeddings2 = np.vstack([positive, negative])
-  actual_issame = [True]*anchor.shape[0] + [False]*anchor.shape[0]
+  actual_issame = np.asarray([True]*anchor.shape[0] + [False]*anchor.shape[0])
   tpr, fpr, accuracy = facenet.calculate_roc(thresholds, embeddings1, embeddings2, actual_issame)
-  print('Epoch: [%d]\tTime %.3f\ttripErr %2.3f\taccuracy %1.3f' % (epoch, duration, np.mean(triplet_loss_list), np.max(accuracy)))
+  print('Epoch: [%d]\tTime %.3f\ttripErr %2.3f\taccuracy %1.3f±%1.3f' % (epoch, duration, np.mean(triplet_loss_list), np.mean(accuracy), np.std(accuracy)))
   #facenet.plot_roc(fpr, tpr, 'NN4')
   xxx = 1
 

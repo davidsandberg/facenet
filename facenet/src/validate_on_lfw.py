@@ -27,6 +27,8 @@ tf.app.flags.DEFINE_integer('batch_size', 60,
                             """Number of images to process in a batch.""")
 tf.app.flags.DEFINE_integer('image_size', 96,
                             """Image size (height, width) in pixels.""")
+tf.app.flags.DEFINE_integer('seed', 666,
+                            """Random seed.""")
 
 FLAGS = tf.app.flags.FLAGS
 
@@ -85,7 +87,6 @@ def main():
                 start_time = time.time()
                 paths_batch = paths[i*FLAGS.batch_size:(i+1)*FLAGS.batch_size]
                 images = facenet.load_data(paths_batch)
-                #padded = np.lib.pad(images, (10,0,0,0), 'constant', constant_values=(0,0,0,0))
                 feed_dict = { images_placeholder: images, phase_train_placeholder: False }
                 emb_list += sess.run([embeddings], feed_dict=feed_dict)
                 duration = time.time() - start_time
@@ -95,8 +96,8 @@ def main():
             thresholds = np.arange(0, 4, 0.01)
             embeddings1 = emb_array[0::2]
             embeddings2 = emb_array[1::2]
-            tpr, fpr, accuracy, predict_issame, dist = facenet.calculate_roc(thresholds, embeddings1, embeddings2, actual_issame)
-            print('Accuracy: %.2f%%' % (max(accuracy)*100))
+            tpr, fpr, accuracy = facenet.calculate_roc(thresholds, embeddings1, embeddings2, np.asarray(actual_issame))
+            print('Accuracy: %1.3f±%1.3f' % (np.mean(accuracy), np.std(accuracy)))
             facenet.plot_roc(fpr, tpr, 'NN4')
             
 

@@ -24,6 +24,8 @@ from tensorflow.python.platform import gfile
 import numpy as np
 from scipy import misc
 import matplotlib.pyplot as plt
+from sklearn.cross_validation import KFold
+
 
 FLAGS = tf.app.flags.FLAGS
 
@@ -573,28 +575,45 @@ def sample_people(dataset, people_per_batch, images_per_person):
   return image_paths, num_per_class, sampled_class_indices
 
 def calculate_roc(thresholds, embeddings1, embeddings2, actual_issame):
-  tpr_array = []
-  fpr_array = []
-  accuracy = []
-  for threshold in thresholds:
-    diff = np.subtract(embeddings1, embeddings2)
-    dist = np.sum(np.square(diff),1)
+  nrof_pairs = len(actual_issame)
+  nrof_thresholds = len(thresholds)
+  nrof_folds = 10
+  folds = KFold(n=nrof_pairs, n_folds=nrof_folds, shuffle=True, random_state=FLAGS.seed)
+  
+  tprs = np.zeros((nrof_folds,nrof_thresholds))
+  fprs = np.zeros((nrof_folds,nrof_thresholds))
+  accuracy = np.zeros((nrof_folds))
+  best_threshold_indices = np.zeros((nrof_folds))
+  
+  diff = np.subtract(embeddings1, embeddings2)
+  dist = np.sum(np.square(diff),1)
+  
+  for fold_idx, (train, test) in enumerate(folds):
+    
+    # Find the best threshold for the fold
+    acc_train = np.zeros((nrof_thresholds))
+    for threshold_idx, threshold in enumerate(thresholds):
+      _, _, acc_train[threshold_idx] = calculate_accuracy(threshold, dist[train], actual_issame[train])
+    best_threshold_index = np.argmax(acc_train)
+    for threshold_idx, threshold in enumerate(thresholds):
+      tprs[fold_idx,threshold_idx], fprs[fold_idx,threshold_idx], _ = calculate_accuracy(threshold, dist[test], actual_issame[test])
+    _, _, accuracy[fold_idx] = calculate_accuracy(thresholds[best_threshold_index], dist[test], actual_issame[test])
+      
+    tpr = np.mean(tprs,0)
+    fpr = np.mean(fprs,0)
+  return tpr, fpr, accuracy
 
-    predict_issame = np.less(dist, threshold)
-    tp = np.sum(np.logical_and(predict_issame, actual_issame))
-    fp = np.sum(np.logical_and(predict_issame, np.logical_not(actual_issame)))
-    tn = np.sum(np.logical_and(np.logical_not(predict_issame), np.logical_not(actual_issame)))
-    fn = np.sum(np.logical_and(np.logical_not(predict_issame), actual_issame))
+def calculate_accuracy(threshold, dist, actual_issame):
+  predict_issame = np.less(dist, threshold)
+  tp = np.sum(np.logical_and(predict_issame, actual_issame))
+  fp = np.sum(np.logical_and(predict_issame, np.logical_not(actual_issame)))
+  tn = np.sum(np.logical_and(np.logical_not(predict_issame), np.logical_not(actual_issame)))
+  fn = np.sum(np.logical_and(np.logical_not(predict_issame), actual_issame))
 
-    tpr = 0 if (tp+fn==0) else float(tp) / float(tp+fn)
-    fpr = 0 if (fp+tn==0) else float(fp) / float(fp+tn)
-    acc = float(tp+tn)/dist.size
-
-    tpr_array.append(tpr)
-    fpr_array.append(fpr)
-    accuracy.append(acc)
-
-  return tpr_array, fpr_array, accuracy
+  tpr = 0 if (tp+fn==0) else float(tp) / float(tp+fn)
+  fpr = 0 if (fp+tn==0) else float(fp) / float(fp+tn)
+  acc = float(tp+tn)/dist.size
+  return tpr, fpr, acc
 
 def plot_roc(fpr, tpr, label):
   plt.plot(fpr, tpr, label=label)
