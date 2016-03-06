@@ -42,7 +42,7 @@ tf.app.flags.DEFINE_integer('people_per_batch', 45,
                             """Number of people per batch.""")
 tf.app.flags.DEFINE_integer('images_per_person', 40,
                             """Number of images per person.""")
-tf.app.flags.DEFINE_integer('epoch_size', 1000,
+tf.app.flags.DEFINE_integer('epoch_size', 50,
                             """Number of batches per epoch.""")
 tf.app.flags.DEFINE_float('alpha', 0.2,
                             """Positive to negative triplet distance margin.""")
@@ -120,11 +120,12 @@ def main(argv=None):  # pylint: disable=unused-argument
       # Training and validation loop
       for epoch in range(FLAGS.max_nrof_epochs):
         # Train for one epoch
-        #step = train(sess, train_set, epoch, images_placeholder, phase_train_placeholder,
-                    #global_step, embeddings, loss, train_op, summary_op, summary_writer)
+        step = train(sess, train_set, epoch, images_placeholder, phase_train_placeholder,
+                    global_step, embeddings, loss, train_op, summary_op, summary_writer)
         # Validate epoch
         validate(sess, train_set, epoch, images_placeholder, phase_train_placeholder,
-                       global_step, embeddings, loss, train_op, summary_op)
+                       global_step, embeddings, loss, train_op, summary_op, summary_writer)
+        
         # Save the model checkpoint after each epoch
         print('Saving checkpoint')
         checkpoint_path = os.path.join(model_dir, 'model.ckpt')
@@ -177,18 +178,16 @@ def train(sess, dataset, epoch, images_placeholder, phase_train_placeholder,
       i+=1
   return step
   
-def validate(sess, dataset, epoch, images_placeholder, phase_train_placeholder, global_step, embeddings, loss, train_op, summary_op):
+def validate(sess, dataset, epoch, images_placeholder, phase_train_placeholder, 
+             global_step, embeddings, loss, train_op, summary_op, summary_writer):
   people_per_batch = FLAGS.people_per_batch*4
   print('Loading validation data')
   # Sample people and load new data
-  image_paths, num_per_class, class_indices = facenet.sample_people(dataset, people_per_batch, FLAGS.images_per_person)
+  image_paths, num_per_class = facenet.sample_people(dataset, people_per_batch, FLAGS.images_per_person)
   image_data = facenet.load_data(image_paths)
-  for i in range(image_data.shape[0]):
-    image_data[i,0,0,0] = class_indices[i]
 
   print('Selecting random triplets for validation')
-  nrof_examples_per_epoch = people_per_batch*FLAGS.images_per_person
-  triplets, nrof_triplets = facenet.select_validation_triplets(num_per_class, people_per_batch, image_data, class_indices)
+  triplets, nrof_triplets = facenet.select_validation_triplets(num_per_class, people_per_batch, image_data)
   
   start_time = time.time()
   anchor_list = []
@@ -196,12 +195,12 @@ def validate(sess, dataset, epoch, images_placeholder, phase_train_placeholder, 
   negative_list = []
   triplet_loss_list = []
   # Run a forward pass for the sampled images
-  print('Running forward pass on images')
+  print('Running forward pass on validation set')
   nrof_batches_per_epoch = nrof_triplets*3//FLAGS.batch_size
   for i in xrange(nrof_batches_per_epoch):
     batch = facenet.get_triplet_batch(triplets, i)
     feed_dict = { images_placeholder: batch, phase_train_placeholder: True }
-    emb, triplet_loss = sess.run([embeddings, loss], feed_dict=feed_dict)
+    emb, triplet_loss, step = sess.run([embeddings, loss, global_step], feed_dict=feed_dict)
     nrof_batch_triplets = emb.shape[0]/3
     anchor_list.append(emb[(0*nrof_batch_triplets):(1*nrof_batch_triplets),:])
     positive_list.append(emb[(1*nrof_batch_triplets):(2*nrof_batch_triplets),:])
@@ -218,6 +217,13 @@ def validate(sess, dataset, epoch, images_placeholder, phase_train_placeholder, 
   actual_issame = np.asarray([True]*anchor.shape[0] + [False]*anchor.shape[0])
   tpr, fpr, accuracy = facenet.calculate_roc(thresholds, embeddings1, embeddings2, actual_issame)
   print('Epoch: [%d]\tTime %.3f\ttripErr %2.3f\taccuracy %1.3f±%1.3f' % (epoch, duration, np.mean(triplet_loss_list), np.mean(accuracy), np.std(accuracy)))
+  
+  # Add validation loss and accuracy to summary
+  summary = tf.Summary()
+  summary.value.add(tag='validation_loss', simple_value=np.mean(triplet_loss_list).astype(float))
+  summary.value.add(tag='accuracy', simple_value=np.mean(accuracy))
+  summary_writer.add_summary(summary, step)
+  
   #facenet.plot_roc(fpr, tpr, 'NN4')
   xxx = 1
 

@@ -472,7 +472,7 @@ def select_training_triplets(embeddings, num_per_class, image_data):
   return triplets, nrof_random_negs, nrof_triplets
 
   
-def select_validation_triplets(num_per_class, people_per_batch, image_data, class_indices):
+def select_validation_triplets(num_per_class, people_per_batch, image_data):
 
   nrof_images = image_data.shape[0]
   nrof_trip = nrof_images - people_per_batch
@@ -572,7 +572,7 @@ def sample_people(dataset, people_per_batch, images_per_person):
     num_per_class.append(nrof_images_from_class)
     i+=1
 
-  return image_paths, num_per_class, sampled_class_indices
+  return image_paths, num_per_class
 
 def calculate_roc(thresholds, embeddings1, embeddings2, actual_issame):
   nrof_pairs = len(actual_issame)
