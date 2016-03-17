@@ -15,13 +15,13 @@ import os
 import sys
 import time
 
-tf.app.flags.DEFINE_string('model_dir', '/home/david/models/facenet/20160228-110932',
+tf.app.flags.DEFINE_string('model_dir', '~/models/facenet/20160306-151157',
                            """Directory containing the graph definition and checkpoint files.""")
-tf.app.flags.DEFINE_string('lfw_pairs', '/home/david/repo/facenet/data/lfw/pairs.txt',
+tf.app.flags.DEFINE_string('lfw_pairs', '~/repo/facenet/data/lfw/pairs.txt',
                            """The file containing the pairs to use for validation.""")
 tf.app.flags.DEFINE_string('file_ext', '.png',
                            """The file extension for the LFW dataset, typically .png or .jpg.""")
-tf.app.flags.DEFINE_string('lfw_dir', '/home/david/datasets/lfw/lfw_realigned/',
+tf.app.flags.DEFINE_string('lfw_dir', '~/datasets/lfw/lfw_realigned/',
                            """Path to the data directory containing aligned face patches.""")
 tf.app.flags.DEFINE_integer('batch_size', 60,
                             """Number of images to process in a batch.""")
@@ -49,8 +49,8 @@ def main():
     #  NOTE: This does not work at the moment. Needs tensorflow to store variables in the graph_def.
     #create_graph(os.path.join(FLAGS.model_dir, 'graphdef', 'graph_def.pb'))
     
-    pairs = read_pairs(FLAGS.lfw_pairs)
-    paths, actual_issame = get_paths(FLAGS.lfw_dir, pairs)
+    pairs = read_pairs(os.path.expanduser(FLAGS.lfw_pairs))
+    paths, actual_issame = get_paths(os.path.expanduser(FLAGS.lfw_dir), pairs)
     
     with tf.Graph().as_default():
 
@@ -74,7 +74,7 @@ def main():
         
         with tf.Session() as sess:
     
-            ckpt = tf.train.get_checkpoint_state(FLAGS.model_dir)
+            ckpt = tf.train.get_checkpoint_state(os.path.expanduser(FLAGS.model_dir))
             if ckpt and ckpt.model_checkpoint_path:
                 saver.restore(sess, ckpt.model_checkpoint_path)
             else:
