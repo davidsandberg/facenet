@@ -52,6 +52,8 @@ def main():
     pairs = read_pairs(os.path.expanduser(FLAGS.lfw_pairs))
     paths, actual_issame = get_paths(os.path.expanduser(FLAGS.lfw_dir), pairs)
     
+    mpl.interactive(True)
+    
     with tf.Graph().as_default():
 
         global_step = tf.Variable(0, trainable=False)
@@ -81,25 +83,19 @@ def main():
                 raise ValueError('Checkpoint not found')
             
             # Run test on LFW to check accuracy for different horizontal/vertical translations of input images
-            if False:
+            if True:
                 offsets = np.arange(-30, 31, 3)
                 horizontal_offset_accuracy = [None] * len(offsets)
                 for idx, offset in enumerate(offsets):
                     accuracy = evaluate_accuracy(sess, images_placeholder, phase_train_placeholder, embeddings, paths, actual_issame, translate_images, (offset,0))
-                    print('Accuracy: %1.3f±%1.3f' % (np.mean(accuracy), np.std(accuracy)))
+                    print('Hoffset: %1.3f  Accuracy: %1.3f%c%1.3f' % (offset, np.mean(accuracy), u"\u00B1", np.std(accuracy)))
                     horizontal_offset_accuracy[idx] = np.mean(accuracy)
-                print('Hoffset:\tAccuracy:')
-                for i in range(offsets.size):
-                    print('%.4f\t%.4f' % (offsets[i], horizontal_offset_accuracy[i]))
                 vertical_offset_accuracy = [None] * len(offsets)
                 for idx, offset in enumerate(offsets):
                     accuracy = evaluate_accuracy(sess, images_placeholder, phase_train_placeholder, embeddings, paths, actual_issame, translate_images, (0,offset))
-                    print('Accuracy: %1.3f±%1.3f' % (np.mean(accuracy), np.std(accuracy)))
+                    print('Voffset: %1.3f  Accuracy: %1.3f%c%1.3f' % (offset, np.mean(accuracy), u"\u00B1", np.std(accuracy)))
                     vertical_offset_accuracy[idx] = np.mean(accuracy)
-                print('Voffset:\tAccuracy:')
-                for i in range(offsets.size):
-                    print('%.4f\t%.4f' % (offsets[i], vertical_offset_accuracy[i]))
-                plt.figure(1)
+                fig = plt.figure(1)
                 plt.plot(offsets, horizontal_offset_accuracy, label='Horizontal')
                 plt.plot(offsets, vertical_offset_accuracy, label='Vertical')
                 plt.legend()
@@ -107,6 +103,12 @@ def main():
                 plt.title('Translation invariance on LFW')
                 plt.xlabel('Offset [pixels]')
                 plt.ylabel('Accuracy')
+                plt.show()
+                result_dir = os.path.expanduser(FLAGS.model_dir)
+                print('Saving results in %s' % result_dir)
+                fig.savefig(os.path.join(result_dir, 'invariance_translation.png'))
+                save_result(offsets, horizontal_offset_accuracy, os.path.join(result_dir, 'invariance_translation_horizontal.txt'))
+                save_result(offsets, vertical_offset_accuracy, os.path.join(result_dir, 'invariance_translation_vertical.txt'))
                 xxx = 1
 
             # Run test on LFW to check accuracy for different rotation of input images
@@ -115,17 +117,19 @@ def main():
                 rotation_accuracy = [None] * len(angles)
                 for idx, angle in enumerate(angles):
                     accuracy = evaluate_accuracy(sess, images_placeholder, phase_train_placeholder, embeddings, paths, actual_issame, rotate_images, angle)
-                    print('Accuracy: %1.3f±%1.3f' % (np.mean(accuracy), np.std(accuracy)))
+                    print('Angle: %1.3f  Accuracy: %1.3f%c%1.3f' % (angle, np.mean(accuracy), u"\u00B1", np.std(accuracy)))
                     rotation_accuracy[idx] = np.mean(accuracy)
-                print('Angle:\tAccuracy:')
-                for i in range(angles.size):
-                    print('%.4f\t%.4f' % (angles[i], rotation_accuracy[i]))
-                plt.figure(2)
+                fig = plt.figure(2)
                 plt.plot(angles, rotation_accuracy)
                 plt.grid(True)
                 plt.title('Rotation invariance on LFW')
                 plt.xlabel('Angle [deg]')
                 plt.ylabel('Accuracy')
+                plt.show()
+                result_dir = os.path.expanduser(FLAGS.model_dir)
+                print('Saving results in %s' % result_dir)
+                fig.savefig(os.path.join(result_dir, 'invariance_rotation.png'))
+                save_result(angles, rotation_accuracy, os.path.join(result_dir, 'invariance_rotation.txt'))
                 xxx = 1
 
             # Run test on LFW to check accuracy for different scaling of input images
@@ -134,18 +138,25 @@ def main():
                 scale_accuracy = [None] * len(scales)
                 for scale_idx, scale in enumerate(scales):
                     accuracy = evaluate_accuracy(sess, images_placeholder, phase_train_placeholder, embeddings, paths, actual_issame, scale_images, scale)
-                    print('Accuracy: %1.3f±%1.3f' % (np.mean(accuracy), np.std(accuracy)))
+                    print('Scale: %1.3f  Accuracy: %1.3f%c%1.3f' % (scale, np.mean(accuracy), u"\u00B1", np.std(accuracy)))
                     scale_accuracy[scale_idx] = np.mean(accuracy)
-                print('Scale:\tAccuracy:')
-                for i in range(scales.size):
-                    print('%.4f\t%.4f' % (scales[i], scale_accuracy[i]))
-                plt.figure(3)
+                fig = plt.figure(3)
                 plt.plot(scales, scale_accuracy)
                 plt.grid(True)
                 plt.title('Scale invariance on LFW')
                 plt.xlabel('Scale')
                 plt.ylabel('Accuracy')
+                plt.show()
+                result_dir = os.path.expanduser(FLAGS.model_dir)
+                print('Saving results in %s' % result_dir)
+                fig.savefig(os.path.join(result_dir, 'invariance_scale.png'))
+                save_result(scales, scale_accuracy, os.path.join(result_dir, 'invariance_scale.txt'))
                 xxx = 1
+                
+def save_result(aug, acc, filename):
+    with open(filename, "w") as f:
+        for i in range(aug.size):
+            f.write('%6.4f %6.4f\n' % (aug[i], acc[i]))
             
 def evaluate_accuracy(sess, images_placeholder, phase_train_placeholder, embeddings, paths, actual_issame, augument_images, aug_value):
         nrof_images = len(paths)
