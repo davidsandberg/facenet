@@ -235,6 +235,8 @@ def inference_nn4_max_pool_96(images, phase_train=True):
 
   resh1 = tf.reshape(pool6, [-1, 896])
   affn1 = _affine(resh1, 896, 128)
+  if FLAGS.keep_probability<1.0:
+    affn1 = tf.nn.dropout(affn1, FLAGS.keep_probability)
   norm = tf.nn.l2_normalize(affn1, 1, 1e-10)
 
   return norm
@@ -354,7 +356,14 @@ def train(total_loss, global_step):
 
   # Compute gradients.
   with tf.control_dependencies([loss_averages_op]):
-    opt = tf.train.AdagradOptimizer(FLAGS.learning_rate)
+    if FLAGS.optimizer=='adagrad':
+      opt = tf.train.AdagradOptimizer(FLAGS.learning_rate)
+    elif FLAGS.optimizer=='adadelta':
+      # Does not seem to be available yet
+      opt = tf.train.AdadeltaOptimizer(FLAGS.learning_rate, rho=0.9, epsilon=1e-6)
+    else:
+      raise ValueError('Invalid optimization algorithm')
+
     grads = opt.compute_gradients(total_loss)
     
   # Apply gradients.
@@ -379,20 +388,40 @@ def train(total_loss, global_step):
 
   return train_op, grads
 
-def load_data(image_paths):
-  nrof_samples = len(image_paths)
-  img_list = [None] * nrof_samples
-  for i in xrange(nrof_samples):
-    img_list[i] = prewhiten(misc.imread(image_paths[i]))
-  images = np.stack(img_list)
-  return images
-
 def prewhiten(x):
   mean = np.mean(x)
   std = np.std(x)
   std_adj = np.max(std, 1.0/np.sqrt(x.size))
   y = np.multiply(np.subtract(x, mean), 1/std_adj)
   return y  
+
+def crop(image, random_crop):
+  if image.shape[1]>FLAGS.image_size:
+    sz1 = images.shape[1]/2
+    sz2 = FLAGS.image_size/2
+    if random_crop:
+      diff = sz1-sz2
+      (h, v) = (np.random.randint(-diff, diff+1), np.random.randint(-diff, diff+1))
+    else:
+      (h, v) = (0,0)
+    image = image[:,(sz1-sz2+v):(sz1+sz2+v),(sz1-sz2+h):(sz1+sz2+h),:]
+  return image
+  
+def flip(image, random_flip):
+  if random_flip and np.random.choice([True, False]):
+    image = np.fliplr(image)
+  return image
+  
+def load_data(image_paths):
+  nrof_samples = len(image_paths)
+  img_list = [None] * nrof_samples
+  for i in xrange(nrof_samples):
+    img = prewhiten(misc.imread(image_paths[i]))
+    img = crop(img, FLAGS.random_crop)
+    img = flip(img, FLAGS.random_flip)
+    img_list[i] = img
+  images = np.stack(img_list)
+  return images
 
 def get_batch(image_data, batch_size, batch_index):
   nrof_examples = np.size(image_data, 0)
