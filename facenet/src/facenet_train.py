@@ -10,12 +10,8 @@ from datetime import datetime
 import os.path
 import time
 
-import tensorflow.python.platform  # @UnusedImport
-from tensorflow.python.platform import gfile
-
 import tensorflow as tf
 import numpy as np
-import matplotlib.pyplot as plt
 import facenet
 
 FLAGS = tf.app.flags.FLAGS
@@ -91,7 +87,7 @@ def main(argv=None):  # pylint: disable=unused-argument
         loss = facenet.triplet_loss(anchor, positive, negative)
 
         # Build a Graph that trains the model with one batch of examples and updates the model parameters
-        train_op, grads = facenet.train(loss, global_step)
+        train_op = facenet.train(loss, global_step)
 
         # Create a saver
         saver = tf.train.Saver(tf.all_variables(), max_to_keep=0)
@@ -230,8 +226,8 @@ def validate(sess, dataset, epoch, images_placeholder, phase_train_placeholder,
     summary.value.add(tag='accuracy', simple_value=np.mean(accuracy))
     summary_writer.add_summary(summary, step)
 
-    # facenet.plot_roc(fpr, tpr, 'NN4')
-    xxx = 1
+    if False:
+      facenet.plot_roc(fpr, tpr, 'NN4')
 
 
 if __name__ == '__main__':

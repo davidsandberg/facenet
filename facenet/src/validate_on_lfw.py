@@ -2,20 +2,15 @@
 Embeddings are calculated using the pairs from http://vis-www.cs.umass.edu/lfw/pairs.txt and the ROC curve
 is calculated and plotted
 """
-import math
 import tensorflow as tf
 import numpy as np
 import facenet
-import matplotlib as mpl
-import matplotlib.pyplot as plt
+import os
+import time
 
 from tensorflow.python.platform import gfile
 
-import os
-import sys
-import time
-
-tf.app.flags.DEFINE_string('model_dir', '~/models/facenet/20160306-151157',
+tf.app.flags.DEFINE_string('model_dir', '~/models/facenet/20160423-222357',
                            """Directory containing the graph definition and checkpoint files.""")
 tf.app.flags.DEFINE_string('lfw_pairs', '~/repo/facenet/data/lfw/pairs.txt',
                            """The file containing the pairs to use for validation.""")
@@ -54,8 +49,6 @@ def main():
     
     with tf.Graph().as_default():
 
-        global_step = tf.Variable(0, trainable=False)
-    
         # Placeholder for input images
         images_placeholder = tf.placeholder(tf.float32, shape=(FLAGS.batch_size, FLAGS.image_size, FLAGS.image_size, 3), name='Input')
         
@@ -69,9 +62,6 @@ def main():
         ema = tf.train.ExponentialMovingAverage(1.0)
         saver = tf.train.Saver(ema.variables_to_restore())
     
-        # Start running operations on the Graph.
-        sess = tf.Session(config=tf.ConfigProto(log_device_placement=False))
-        
         with tf.Session() as sess:
     
             ckpt = tf.train.get_checkpoint_state(os.path.expanduser(FLAGS.model_dir))

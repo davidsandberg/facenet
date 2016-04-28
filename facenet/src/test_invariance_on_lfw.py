@@ -1,7 +1,6 @@
 """Test invariance to translation, scaling and rotation on the "Labeled Faces in the Wild" dataset (http://vis-www.cs.umass.edu/lfw/).
 This requires test images to be cropped a bit wider than the normal to gove some room for the transformations.
 """
-import math
 import tensorflow as tf
 import numpy as np
 import facenet
@@ -12,8 +11,6 @@ from scipy import misc
 from tensorflow.python.platform import gfile
 
 import os
-import sys
-import time
 
 tf.app.flags.DEFINE_string('model_dir', '~/models/facenet/20160306-151157',
                            """Directory containing the graph definition and checkpoint files.""")
@@ -56,8 +53,6 @@ def main():
     
     with tf.Graph().as_default():
 
-        global_step = tf.Variable(0, trainable=False)
-    
         # Placeholder for input images
         images_placeholder = tf.placeholder(tf.float32, shape=(FLAGS.batch_size, FLAGS.image_size, FLAGS.image_size, 3), name='Input')
         
@@ -71,9 +66,6 @@ def main():
         ema = tf.train.ExponentialMovingAverage(1.0)
         saver = tf.train.Saver(ema.variables_to_restore())
     
-        # Start running operations on the Graph.
-        sess = tf.Session(config=tf.ConfigProto(log_device_placement=False))
-        
         with tf.Session() as sess:
     
             ckpt = tf.train.get_checkpoint_state(os.path.expanduser(FLAGS.model_dir))
@@ -109,7 +101,6 @@ def main():
                 fig.savefig(os.path.join(result_dir, 'invariance_translation.png'))
                 save_result(offsets, horizontal_offset_accuracy, os.path.join(result_dir, 'invariance_translation_horizontal.txt'))
                 save_result(offsets, vertical_offset_accuracy, os.path.join(result_dir, 'invariance_translation_vertical.txt'))
-                xxx = 1
 
             # Run test on LFW to check accuracy for different rotation of input images
             if True:
@@ -130,7 +121,6 @@ def main():
                 print('Saving results in %s' % result_dir)
                 fig.savefig(os.path.join(result_dir, 'invariance_rotation.png'))
                 save_result(angles, rotation_accuracy, os.path.join(result_dir, 'invariance_rotation.txt'))
-                xxx = 1
 
             # Run test on LFW to check accuracy for different scaling of input images
             if True:
@@ -151,7 +141,6 @@ def main():
                 print('Saving results in %s' % result_dir)
                 fig.savefig(os.path.join(result_dir, 'invariance_scale.png'))
                 save_result(scales, scale_accuracy, os.path.join(result_dir, 'invariance_scale.txt'))
-                xxx = 1
                 
 def save_result(aug, acc, filename):
     with open(filename, "w") as f:
@@ -163,14 +152,11 @@ def evaluate_accuracy(sess, images_placeholder, phase_train_placeholder, embeddi
         nrof_batches = int(nrof_images / FLAGS.batch_size)  # Run forward pass on the remainder in the last batch
         emb_list = []
         for i in range(nrof_batches):
-            start_time = time.time()
             paths_batch = paths[i*FLAGS.batch_size:(i+1)*FLAGS.batch_size]
             images = facenet.load_data(paths_batch)
             images_aug = augument_images(images, aug_value)
             feed_dict = { images_placeholder: images_aug, phase_train_placeholder: False }
             emb_list += sess.run([embeddings], feed_dict=feed_dict)
-            duration = time.time() - start_time
-            #print('Calculated embeddings for batch %d of %d: time=%.3f seconds' % (i+1,nrof_batches, duration))
         emb_array = np.vstack(emb_list)  # Stack the embeddings to a nrof_examples_per_epoch x 128 matrix
         
         thresholds = np.arange(0, 4, 0.01)

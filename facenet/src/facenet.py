@@ -5,22 +5,14 @@ from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
 
-import gzip
 import os
-import re
-import sys
-import tarfile
-import glob
 from os import path
 
 
-import tensorflow.python.platform
-from six.moves import urllib
-from six.moves import xrange  # pylint: disable=redefined-builtin
+from six.moves import xrange
 import tensorflow as tf
 from tensorflow.python.ops import array_ops
 from tensorflow.python.ops import control_flow_ops
-from tensorflow.python.platform import gfile
 import numpy as np
 from scipy import misc
 import matplotlib.pyplot as plt
@@ -62,7 +54,7 @@ def _affine(inpOp, nIn, nOut):
   global parameters
   name = 'affine' + str(affine_counter)
   affine_counter += 1
-  with tf.name_scope(name) as scope:
+  with tf.name_scope(name):
     kernel = tf.Variable(tf.truncated_normal([nIn, nOut],
                                              dtype=tf.float32,
                                              stddev=1e-1), name='weights')
@@ -78,7 +70,7 @@ def _lppool(inpOp, pnorm, kH, kW, dH, dW, padding):
   name = 'pool' + str(pool_counter)
   pool_counter += 1
   
-  with tf.name_scope('lppool') as scope:
+  with tf.name_scope('lppool'):
     if pnorm == 2:
       pwr = tf.square(inpOp)
     else:
@@ -103,7 +95,7 @@ def _mpool(inpOp, kH, kW, dH, dW, padding):
   global parameters
   name = 'pool' + str(pool_counter)
   pool_counter += 1
-  with tf.name_scope('maxpool') as scope:
+  with tf.name_scope('maxpool'):
     maxpool = tf.nn.max_pool(inpOp,
                    ksize=[1, kH, kW, 1],
                    strides=[1, dH, dW, 1],
@@ -301,7 +293,7 @@ def triplet_loss(anchor, positive, negative):
   Returns:
     the triplet loss according to the FaceNet paper as a float tensor.
   """
-  with tf.name_scope('triplet_loss') as scope:
+  with tf.name_scope('triplet_loss'):
     pos_dist = tf.reduce_sum(tf.square(tf.sub(anchor, positive)), 1)  # Summing over distances in each batch
     neg_dist = tf.reduce_sum(tf.square(tf.sub(anchor, negative)), 1)
     
@@ -485,7 +477,6 @@ def select_validation_triplets(num_per_class, people_per_batch, image_data):
   shuffle = np.arange(nrof_trip)
   np.random.shuffle(shuffle)
   emb_start_idx = 0
-  nrof_random_negs = 0
   for i in xrange(len(num_per_class)):
     n = num_per_class[i]
     for j in range(1,n):
@@ -585,7 +576,6 @@ def calculate_roc(thresholds, embeddings1, embeddings2, actual_issame):
   tprs = np.zeros((nrof_folds,nrof_thresholds))
   fprs = np.zeros((nrof_folds,nrof_thresholds))
   accuracy = np.zeros((nrof_folds))
-  best_threshold_indices = np.zeros((nrof_folds))
   
   diff = np.subtract(embeddings1, embeddings2)
   dist = np.sum(np.square(diff),1)
