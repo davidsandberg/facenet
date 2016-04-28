@@ -40,6 +40,15 @@ tf.app.flags.DEFINE_integer('epoch_size', 1000,
                             """Number of batches per epoch.""")
 tf.app.flags.DEFINE_float('alpha', 0.2,
                           """Positive to negative triplet distance margin.""")
+tf.app.flags.DEFINE_boolean('random_crop', False,
+                          """Performs random cropping of training images. If false, the center image_size pixels from the training images are used.
+                          If the size of the images in the data directory is equal to image_size no cropping is performed""")
+tf.app.flags.DEFINE_boolean('random_flip', False,
+                          """Performs random horizontal flipping of training images.""")
+tf.app.flags.DEFINE_float('keep_probability', 1.0,
+                          """Keep probability of dropout for the fully connected layer(s).""")
+tf.app.flags.DEFINE_string('optimizer', 'adagrad',
+                          """The optimization algorithm to use {'adagrad', 'adadelta'}.""")
 tf.app.flags.DEFINE_float('learning_rate', 0.1,
                           """Initial learning rate.""")
 tf.app.flags.DEFINE_float('moving_average_decay', 0.9999,
