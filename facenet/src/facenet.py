@@ -229,7 +229,7 @@ def inference_nn4_max_pool_96(images, phase_train=True):
   affn1 = _affine(resh1, 896, 128)
   if FLAGS.keep_probability<1.0:
     affn1 = control_flow_ops.cond(phase_train,
-                                          lambda: tf.nn.dropout(affn1, keep_probability), affn1)
+                                  lambda: tf.nn.dropout(affn1, FLAGS.keep_probability), affn1)
   norm = tf.nn.l2_normalize(affn1, 1, 1e-10)
 
   return norm
@@ -352,8 +352,9 @@ def train(total_loss, global_step):
     if FLAGS.optimizer=='adagrad':
       opt = tf.train.AdagradOptimizer(FLAGS.learning_rate)
     elif FLAGS.optimizer=='adadelta':
+      raise ValueError('AdaDelta not available yet')
       # Does not seem to be available yet
-      opt = tf.train.AdadeltaOptimizer(FLAGS.learning_rate, rho=0.9, epsilon=1e-6)
+      #opt = tf.train.AdadeltaOptimizer(FLAGS.learning_rate, rho=0.9, epsilon=1e-6)
     else:
       raise ValueError('Invalid optimization algorithm')
 
@@ -390,7 +391,7 @@ def prewhiten(x):
 
 def crop(image, random_crop):
   if image.shape[1]>FLAGS.image_size:
-    sz1 = images.shape[1]/2
+    sz1 = image.shape[1]/2
     sz2 = FLAGS.image_size/2
     if random_crop:
       diff = sz1-sz2
