@@ -236,7 +236,8 @@ def inference_nn4_max_pool_96(images, phase_train=True):
   resh1 = tf.reshape(pool6, [-1, 896])
   affn1 = _affine(resh1, 896, 128)
   if FLAGS.keep_probability<1.0:
-    affn1 = tf.nn.dropout(affn1, FLAGS.keep_probability)
+    affn1 = control_flow_ops.cond(phase_train,
+                                          lambda: tf.nn.dropout(affn1, keep_probability), affn1)
   norm = tf.nn.l2_normalize(affn1, 1, 1e-10)
 
   return norm
