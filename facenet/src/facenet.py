@@ -210,7 +210,7 @@ def inference_nn4_max_pool_96(images, phase_train=True):
   conv3 = _conv(conv2,  64, 192, 3, 3, 1, 1, 'SAME', 'conv3_3x3', phase_train=phase_train, use_batch_norm=True)
   pool3 = _mpool(conv3,  3, 3, 2, 2, 'SAME')
 
-  incept3a = _inception(pool3,      192, 1, 64, 96, 128, 16, 32, 3, 32, 1, 'max', 'incept3a', phase_train=phase_train, use_batch_norm=True)
+  incept3a = _inception(pool3,    192, 1, 64, 96, 128, 16, 32, 3, 32, 1, 'max', 'incept3a', phase_train=phase_train, use_batch_norm=True)
   incept3b = _inception(incept3a, 256, 1, 64, 96, 128, 32, 64, 3, 64, 1, 'max', 'incept3b', phase_train=phase_train, use_batch_norm=True)
   incept3c = _inception(incept3b, 320, 2, 0, 128, 256, 32, 64, 3, 0, 2, 'max', 'incept3c', phase_train=phase_train, use_batch_norm=True)
   
@@ -228,7 +228,7 @@ def inference_nn4_max_pool_96(images, phase_train=True):
   affn1 = _affine(resh1, 896, 128)
   if FLAGS.keep_probability<1.0:
     affn1 = control_flow_ops.cond(phase_train,
-                                  lambda: tf.nn.dropout(affn1, FLAGS.keep_probability), affn1)
+                                  lambda: tf.nn.dropout(affn1, FLAGS.keep_probability), lambda: affn1)
   norm = tf.nn.l2_normalize(affn1, 1, 1e-10)
 
   return norm
