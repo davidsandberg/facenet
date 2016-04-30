@@ -44,7 +44,7 @@ def _conv(inpOp, nIn, nOut, kH, kW, dH, dW, padType, prefix, phase_train=True, u
       conv_bn = conv
     biases = tf.Variable(tf.constant(0.0, shape=[nOut], dtype=tf.float32),
                          trainable=True, name='biases')
-    bias = tf.reshape(tf.nn.bias_add(conv_bn, biases), conv.get_shape())
+    bias = tf.nn.bias_add(conv_bn, biases)
     conv1 = tf.nn.relu(bias, name=scope)
     parameters += [kernel, biases]
   return conv1
@@ -146,7 +146,7 @@ def _batch_norm(x, n_out, phase_train, name, scope='bn', affine=True):
   normed = tf.nn.batch_norm_with_global_normalization(x, mean, var,
                                                       beta, gamma, 1e-3, affine, name=name)
   parameters += [beta, gamma]
-  return normed, ema.average(batch_mean), ema.average(batch_var)
+  return normed
 
 def _inception(inp, inSize, ks, o1s, o2s1, o2s2, o3s1, o3s2, o4s1, o4s2, o4s3, poolType, name, phase_train=True, use_batch_norm=True):
   
@@ -366,7 +366,7 @@ def train(total_loss, global_step):
 
   # Add histograms for gradients.
   for grad, var in grads:
-    if grad:
+    if grad is not None:
       tf.histogram_summary(var.op.name + '/gradients', grad)
 
   # Track the moving averages of all trainable variables.

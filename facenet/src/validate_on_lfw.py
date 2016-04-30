@@ -10,7 +10,7 @@ import time
 
 from tensorflow.python.platform import gfile
 
-tf.app.flags.DEFINE_string('model_dir', '~/models/facenet/20160423-222357',
+tf.app.flags.DEFINE_string('model_dir', '~/models/facenet/20160430-191736',
                            """Directory containing the graph definition and checkpoint files.""")
 tf.app.flags.DEFINE_string('lfw_pairs', '~/repo/facenet/data/lfw/pairs.txt',
                            """The file containing the pairs to use for validation.""")
@@ -22,6 +22,13 @@ tf.app.flags.DEFINE_integer('batch_size', 60,
                             """Number of images to process in a batch.""")
 tf.app.flags.DEFINE_integer('image_size', 96,
                             """Image size (height, width) in pixels.""")
+tf.app.flags.DEFINE_boolean('random_crop', False,
+                          """Performs random cropping of training images. If false, the center image_size pixels from the training images are used.
+                          If the size of the images in the data directory is equal to image_size no cropping is performed""")
+tf.app.flags.DEFINE_boolean('random_flip', False,
+                          """Performs random horizontal flipping of training images.""")
+tf.app.flags.DEFINE_float('keep_probability', 1.0,
+                          """Keep probability of dropout for the fully connected layer(s).""")
 tf.app.flags.DEFINE_integer('seed', 666,
                             """Random seed.""")
 

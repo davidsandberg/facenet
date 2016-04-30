@@ -70,10 +70,12 @@ def main(argv=None):  # pylint: disable=unused-argument
     model_dir = os.path.join(FLAGS.models_base_dir, subdir)
     if not os.path.isdir(model_dir):  # Create the model directory if it doesn't exist
         os.mkdir(model_dir)
-
+    
     np.random.seed(seed=FLAGS.seed)
     dataset = facenet.get_dataset(FLAGS.data_dir)
     train_set, validation_set = facenet.split_dataset(dataset, FLAGS.train_set_fraction)
+    
+    print('Model directory: %s' % model_dir)
 
     with tf.Graph().as_default():
         tf.set_random_seed(FLAGS.seed)
@@ -96,7 +98,7 @@ def main(argv=None):  # pylint: disable=unused-argument
         loss = facenet.triplet_loss(anchor, positive, negative)
 
         # Build a Graph that trains the model with one batch of examples and updates the model parameters
-        train_op = facenet.train(loss, global_step)
+        train_op, _ = facenet.train(loss, global_step)
 
         # Create a saver
         saver = tf.train.Saver(tf.all_variables(), max_to_keep=0)
@@ -111,7 +113,7 @@ def main(argv=None):  # pylint: disable=unused-argument
         sess = tf.Session(config=tf.ConfigProto(log_device_placement=FLAGS.log_device_placement))
         sess.run(init)
 
-        summary_writer = tf.train.SummaryWriter(log_dir, graph_def=sess.graph_def)
+        summary_writer = tf.train.SummaryWriter(log_dir, sess.graph)
 
         with sess.as_default():
 
@@ -175,11 +177,10 @@ def train(sess, dataset, epoch, images_placeholder, phase_train_placeholder,
             start_time = time.time()
             batch = facenet.get_triplet_batch(triplets, i)
             feed_dict = {images_placeholder: batch, phase_train_placeholder: True}
+            err, _, step = sess.run([loss, train_op, global_step], feed_dict=feed_dict)
             if (batch_number % 20 == 0):
-                err, summary_str, _, step = sess.run([loss, summary_op, train_op, global_step], feed_dict=feed_dict)
+                summary_str, step = sess.run([summary_op, global_step], feed_dict=feed_dict)
                 summary_writer.add_summary(summary_str, global_step=step)
-            else:
-                err, _, step = sess.run([loss, train_op, global_step], feed_dict=feed_dict)
             duration = time.time() - start_time
             print('Epoch: [%d][%d/%d]\tTime %.3f\ttripErr %2.3f' %
                   (epoch, batch_number, FLAGS.epoch_size, duration, err))
@@ -209,7 +210,7 @@ def validate(sess, dataset, epoch, images_placeholder, phase_train_placeholder,
     nrof_batches_per_epoch = nrof_triplets * 3 // FLAGS.batch_size
     for i in xrange(nrof_batches_per_epoch):
         batch = facenet.get_triplet_batch(triplets, i)
-        feed_dict = {images_placeholder: batch, phase_train_placeholder: True}
+        feed_dict = {images_placeholder: batch, phase_train_placeholder: False}
         emb, triplet_loss, step = sess.run([embeddings, loss, global_step], feed_dict=feed_dict)
         nrof_batch_triplets = emb.shape[0] / 3
         anchor_list.append(emb[(0 * nrof_batch_triplets):(1 * nrof_batch_triplets), :])
