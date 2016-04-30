@@ -136,18 +136,17 @@ def _batch_norm(x, n_out, phase_train, name, scope='bn', affine=True):
 
   batch_mean, batch_var = tf.nn.moments(x, [0,1,2], name='moments')
   ema = tf.train.ExponentialMovingAverage(decay=0.9)
-  ema_apply_op = ema.apply([batch_mean, batch_var])
-  ema_mean, ema_var = ema.average(batch_mean), ema.average(batch_var)
   def mean_var_with_update():
+    ema_apply_op = ema.apply([batch_mean, batch_var])
     with tf.control_dependencies([ema_apply_op]):
       return tf.identity(batch_mean), tf.identity(batch_var)
   mean, var = control_flow_ops.cond(phase_train,
                                     mean_var_with_update,
-                                    lambda: (ema_mean, ema_var))
+                                    lambda: (ema.average(batch_mean), ema.average(batch_var)))
   normed = tf.nn.batch_norm_with_global_normalization(x, mean, var,
                                                       beta, gamma, 1e-3, affine, name=name)
   parameters += [beta, gamma]
-  return normed
+  return normed, ema.average(batch_mean), ema.average(batch_var)
 
 def _inception(inp, inSize, ks, o1s, o2s1, o2s2, o3s1, o3s2, o4s1, o4s2, o4s3, poolType, name, phase_train=True, use_batch_norm=True):
   
@@ -352,9 +351,7 @@ def train(total_loss, global_step):
     if FLAGS.optimizer=='adagrad':
       opt = tf.train.AdagradOptimizer(FLAGS.learning_rate)
     elif FLAGS.optimizer=='adadelta':
-      raise ValueError('AdaDelta not available yet')
-      # Does not seem to be available yet
-      #opt = tf.train.AdadeltaOptimizer(FLAGS.learning_rate, rho=0.9, epsilon=1e-6)
+      opt = tf.train.AdadeltaOptimizer(FLAGS.learning_rate, rho=0.9, epsilon=1e-6)
     else:
       raise ValueError('Invalid optimization algorithm')
 
