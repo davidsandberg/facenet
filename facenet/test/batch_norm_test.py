@@ -31,10 +31,10 @@ class BatchNormTest(unittest.TestCase):
         sess.run([bn, ema_mean, ema_var], feed_dict=feed_dict)
         
         feed_dict = {x: y, phase_train: False}
-        first_mean = sess.run([ema_mean], feed_dict=feed_dict)
-        second_mean = sess.run([ema_mean], feed_dict=feed_dict)
+        first = sess.run([bn], feed_dict=feed_dict)
+        second = sess.run([bn], feed_dict=feed_dict)
         
-        testing.assert_almost_equal(first_mean, second_mean, 10, 'Output from two forward passes with phase_train==false should be equal')
+        testing.assert_almost_equal(first, second, 10, 'Output from two forward passes with phase_train==false should be equal')
 
 
 if __name__ == "__main__":
