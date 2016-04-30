@@ -16,13 +16,13 @@ import facenet
 
 FLAGS = tf.app.flags.FLAGS
 
-tf.app.flags.DEFINE_string('logs_base_dir', '/home/david/logs/facenet',
+tf.app.flags.DEFINE_string('logs_base_dir', '~/logs/facenet',
                            """Directory where to write event logs.""")
-tf.app.flags.DEFINE_string('models_base_dir', '/home/david/models/facenet',
+tf.app.flags.DEFINE_string('models_base_dir', '~/models/facenet',
                            """Directory where to write trained models and checkpoints.""")
 tf.app.flags.DEFINE_string('model_name', '',
                            """Model directory name. Used when continuing training of an existing model. Leave empty to train new model.""")
-tf.app.flags.DEFINE_string('data_dir', '/home/david/datasets/facescrub/fs_aligned:/home/david/datasets/casia/casia-webface-aligned',
+tf.app.flags.DEFINE_string('data_dir', '~/datasets/facescrub/fs_aligned:~/datasets/casia/casia-webface-aligned',
                            """Path to the data directory containing aligned face patches. Multiple directories are seperated with colon.""")
 tf.app.flags.DEFINE_integer('max_nrof_epochs', 500,
                             """Number of epochs to run.""")
@@ -68,8 +68,8 @@ def main(argv=None):  # pylint: disable=unused-argument
     else:
         subdir = datetime.strftime(datetime.now(), '%Y%m%d-%H%M%S')
         preload_model = False
-    log_dir = os.path.join(FLAGS.logs_base_dir, subdir)
-    model_dir = os.path.join(FLAGS.models_base_dir, subdir)
+    log_dir = os.path.join(os.path.expanduser(FLAGS.logs_base_dir), subdir)
+    model_dir = os.path.join(os.path.expanduser(FLAGS.models_base_dir), subdir)
     if not os.path.isdir(model_dir):  # Create the model directory if it doesn't exist
         os.mkdir(model_dir)
     

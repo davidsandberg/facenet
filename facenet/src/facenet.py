@@ -544,12 +544,13 @@ class ImageClass():
 def get_dataset(paths):
   dataset = []
   for path in paths.split(':'):
-    classes = os.listdir(path)
+    path_exp = os.path.expanduser(path)
+    classes = os.listdir(path_exp)
     classes.sort()
     nrof_classes = len(classes)
     for i in range(nrof_classes):
       class_name = classes[i]
-      facedir = os.path.join(path, class_name)
+      facedir = os.path.join(path_exp, class_name)
       images = os.listdir(facedir)
       image_paths = map(lambda x: os.path.join(facedir,x), images)
       dataset.append(ImageClass(class_name, image_paths))
