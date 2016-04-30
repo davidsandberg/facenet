@@ -47,8 +47,8 @@ tf.app.flags.DEFINE_boolean('random_flip', False,
                           """Performs random horizontal flipping of training images.""")
 tf.app.flags.DEFINE_float('keep_probability', 1.0,
                           """Keep probability of dropout for the fully connected layer(s).""")
-tf.app.flags.DEFINE_string('optimizer', 'adagrad',
-                          """The optimization algorithm to use {'adagrad', 'adadelta'}.""")
+tf.app.flags.DEFINE_string('optimizer', 'ADAGRAD',
+                          """The optimization algorithm to use {'ADAGRAD', 'ADADELTA'}.""")
 tf.app.flags.DEFINE_float('learning_rate', 0.1,
                           """Initial learning rate.""")
 tf.app.flags.DEFINE_float('moving_average_decay', 0.9999,
@@ -57,6 +57,8 @@ tf.app.flags.DEFINE_float('train_set_fraction', 0.9,
                           """Fraction of the data set that is used for training.""")
 tf.app.flags.DEFINE_integer('seed', 666,
                             """Random seed.""")
+tf.app.flags.DEFINE_string('split_mode', 'SPLIT_CLASSES',
+                           """Defines the method used to split the data set into a train and test set { SPLIT_CLASSES, SPLIT_IMAGES }""")
 
 
 def main(argv=None):  # pylint: disable=unused-argument
@@ -73,7 +75,7 @@ def main(argv=None):  # pylint: disable=unused-argument
     
     np.random.seed(seed=FLAGS.seed)
     dataset = facenet.get_dataset(FLAGS.data_dir)
-    train_set, validation_set = facenet.split_dataset(dataset, FLAGS.train_set_fraction)
+    train_set, validation_set = facenet.split_dataset(dataset, FLAGS.train_set_fraction, FLAGS.split_mode)
     
     print('Model directory: %s' % model_dir)
 

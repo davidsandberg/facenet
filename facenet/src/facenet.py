@@ -348,9 +348,9 @@ def train(total_loss, global_step):
 
   # Compute gradients.
   with tf.control_dependencies([loss_averages_op]):
-    if FLAGS.optimizer=='adagrad':
+    if FLAGS.optimizer=='ADAGRAD':
       opt = tf.train.AdagradOptimizer(FLAGS.learning_rate)
-    elif FLAGS.optimizer=='adadelta':
+    elif FLAGS.optimizer=='ADADELTA':
       opt = tf.train.AdadeltaOptimizer(FLAGS.learning_rate, rho=0.9, epsilon=1e-6)
     else:
       raise ValueError('Invalid optimization algorithm')
@@ -556,13 +556,33 @@ def get_dataset(paths):
 
   return dataset
 
-def split_dataset(dataset, split_ratio):
-  nrof_classes = len(dataset)
-  class_indices = np.arange(nrof_classes)
-  np.random.shuffle(class_indices)
-  split = int(round(nrof_classes*split_ratio))
-  train_set = [dataset[i] for i in class_indices[0:split]]  # Range does not include the last index
-  test_set = [dataset[i] for i in class_indices[split:nrof_classes]]
+def split_dataset(dataset, split_ratio, mode):
+  if mode=='SPLIT_CLASSES':
+    nrof_classes = len(dataset)
+    class_indices = np.arange(nrof_classes)
+    np.random.shuffle(class_indices)
+    split = int(round(nrof_classes*split_ratio))
+    train_set = [dataset[i] for i in class_indices[0:split]]
+    test_set = [dataset[i] for i in class_indices[split:-1]]
+  elif mode=='SPLIT_IMAGES':
+    train_set = []
+    test_set = []
+    min_nrof_images = 2
+    for cls in dataset:
+      paths = cls.image_paths
+      np.random.shuffle(paths)
+      split = int(round(len(paths)*split_ratio))
+      if split<min_nrof_images:
+        # If the number of train set images are too few we throw an exception
+        raise ValueError('Too few images in train set (%d) for class "%s"' % (split, cls.name))
+      if len(paths)-split<min_nrof_images:
+        # If the number of test set images are too few we use all images for training
+        split = len(paths)
+      train_set.append(ImageClass(cls.name, paths[0:split]))
+      if split<len(paths):
+        test_set.append(ImageClass(cls.name, paths[split:-1]))
+  else:
+    raise ValueError('Invalid train/test split mode "%s"' % mode)
   return train_set, test_set
 
 def sample_people(dataset, people_per_batch, images_per_person):
