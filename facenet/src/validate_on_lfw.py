@@ -8,9 +8,9 @@ import facenet
 import os
 import time
 
-from tensorflow.python.platform import gfile
+# from tensorflow.python.platform import gfile
 
-tf.app.flags.DEFINE_string('model_dir', '~/models/facenet/20160430-191736',
+tf.app.flags.DEFINE_string('model_dir', '~/models/facenet/20160501-133835',
                            """Directory containing the graph definition and checkpoint files.""")
 tf.app.flags.DEFINE_string('lfw_pairs', '~/repo/facenet/data/lfw/pairs.txt',
                            """The file containing the pairs to use for validation.""")
@@ -34,49 +34,43 @@ tf.app.flags.DEFINE_integer('seed', 666,
 
 FLAGS = tf.app.flags.FLAGS
 
-
-def create_graph(graphdef_filename):
-    """"Creates a graph from saved GraphDef file."""
-    # Creates graph from saved graph_def.pb.
-    with gfile.FastGFile(graphdef_filename, 'rb') as f:
-        graph_def = tf.GraphDef()
-        graph_def.ParseFromString(f.read())
-        _ = tf.import_graph_def(graph_def, name='')
-
-
-
 def main():
     
-    # Creates graph from saved GraphDef
-    #  NOTE: This does not work at the moment. Needs tensorflow to store variables in the graph_def.
-    #create_graph(os.path.join(FLAGS.model_dir, 'graphdef', 'graph_def.pb'))
     
     pairs = read_pairs(os.path.expanduser(FLAGS.lfw_pairs))
     paths, actual_issame = get_paths(os.path.expanduser(FLAGS.lfw_dir), pairs)
     
     with tf.Graph().as_default():
 
+        # Creates graph from saved GraphDef
+        #  NOTE: This does not work at the moment. Needs tensorflow to store variables in the graph_def.
+#         graphdef_filename = os.path.join(os.path.expanduser(FLAGS.model_dir), 'graphdef', 'graph_def.pb')
+#         with gfile.FastGFile(graphdef_filename, 'rb') as f:
+#             graph_def = tf.GraphDef()
+#             graph_def.ParseFromString(f.read())
+#             images_placeholder, phase_train_placeholder, embeddings = tf.import_graph_def(graph_def, return_elements = ['input', 'phase_train', 'embeddings'], name='')
+
         # Placeholder for input images
-        images_placeholder = tf.placeholder(tf.float32, shape=(FLAGS.batch_size, FLAGS.image_size, FLAGS.image_size, 3), name='Input')
-        
+        images_placeholder = tf.placeholder(tf.float32, shape=(FLAGS.batch_size, FLAGS.image_size, FLAGS.image_size, 3), name='input')
+          
         # Placeholder for phase_train
         phase_train_placeholder = tf.placeholder(tf.bool, name='phase_train')
-        
+          
         # Build the inference graph
         embeddings = facenet.inference_nn4_max_pool_96(images_placeholder, phase_train=phase_train_placeholder)
-        
+          
         # Create a saver for restoring variable averages
         ema = tf.train.ExponentialMovingAverage(1.0)
         saver = tf.train.Saver(ema.variables_to_restore())
-    
+        
         with tf.Session() as sess:
-    
+      
             ckpt = tf.train.get_checkpoint_state(os.path.expanduser(FLAGS.model_dir))
             if ckpt and ckpt.model_checkpoint_path:
                 saver.restore(sess, ckpt.model_checkpoint_path)
             else:
                 raise ValueError('Checkpoint not found')
-
+    
             nrof_images = len(paths)
             nrof_batches = int(nrof_images / FLAGS.batch_size)  # Run forward pass on the remainder in the last batch
             emb_list = []

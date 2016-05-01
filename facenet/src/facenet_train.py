@@ -85,7 +85,7 @@ def main(argv=None):  # pylint: disable=unused-argument
 
         # Placeholder for input images
         images_placeholder = tf.placeholder(tf.float32, shape=(FLAGS.batch_size, FLAGS.image_size, FLAGS.image_size, 3),
-                                            name='Input')
+                                            name='input')
 
         # Placeholder for phase_train
         phase_train_placeholder = tf.placeholder(tf.bool, name='phase_train')

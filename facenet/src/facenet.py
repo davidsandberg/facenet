@@ -39,7 +39,7 @@ def _conv(inpOp, nIn, nOut, kH, kW, dH, dW, padType, prefix, phase_train=True, u
     conv = tf.nn.conv2d(inpOp, kernel, [1, dH, dW, 1], padding=padType)
     
     if use_batch_norm:
-      conv_bn = _batch_norm(conv, nOut, phase_train, name+'_bn')
+      conv_bn = _batch_norm(conv, nOut, phase_train, 'batch_norm')
     else:
       conv_bn = conv
     biases = tf.Variable(tf.constant(0.0, shape=[nOut], dtype=tf.float32),
@@ -114,7 +114,7 @@ def _apool(inpOp, kH, kW, dH, dW, padding):
                         padding=padding,
                         name=name)
 
-def _batch_norm(x, n_out, phase_train, name, scope='bn', affine=True):
+def _batch_norm(x, n_out, phase_train, name, affine=True):
   """
   Batch normalization on convolutional maps.
   Args:
@@ -129,23 +129,25 @@ def _batch_norm(x, n_out, phase_train, name, scope='bn', affine=True):
   """
   global parameters
 
-  beta = tf.Variable(tf.constant(0.0, shape=[n_out]),
-                     name=name+'/beta', trainable=True)
-  gamma = tf.Variable(tf.constant(1.0, shape=[n_out]),
-                      name=name+'/gamma', trainable=affine)
+  with tf.name_scope(name):
 
-  batch_mean, batch_var = tf.nn.moments(x, [0,1,2], name='moments')
-  ema = tf.train.ExponentialMovingAverage(decay=0.9)
-  def mean_var_with_update():
-    ema_apply_op = ema.apply([batch_mean, batch_var])
-    with tf.control_dependencies([ema_apply_op]):
-      return tf.identity(batch_mean), tf.identity(batch_var)
-  mean, var = control_flow_ops.cond(phase_train,
-                                    mean_var_with_update,
-                                    lambda: (ema.average(batch_mean), ema.average(batch_var)))
-  normed = tf.nn.batch_norm_with_global_normalization(x, mean, var,
-                                                      beta, gamma, 1e-3, affine, name=name)
-  parameters += [beta, gamma]
+    beta = tf.Variable(tf.constant(0.0, shape=[n_out]),
+                       name=name+'/beta', trainable=True)
+    gamma = tf.Variable(tf.constant(1.0, shape=[n_out]),
+                        name=name+'/gamma', trainable=affine)
+  
+    batch_mean, batch_var = tf.nn.moments(x, [0,1,2], name='moments')
+    ema = tf.train.ExponentialMovingAverage(decay=0.9)
+    def mean_var_with_update():
+      ema_apply_op = ema.apply([batch_mean, batch_var])
+      with tf.control_dependencies([ema_apply_op]):
+        return tf.identity(batch_mean), tf.identity(batch_var)
+    mean, var = control_flow_ops.cond(phase_train,
+                                      mean_var_with_update,
+                                      lambda: (ema.average(batch_mean), ema.average(batch_var)))
+    normed = tf.nn.batch_norm_with_global_normalization(x, mean, var,
+                                                        beta, gamma, 1e-3, affine, name=name)
+    parameters += [beta, gamma]
   return normed
 
 def _inception(inp, inSize, ks, o1s, o2s1, o2s2, o3s1, o3s2, o4s1, o4s2, o4s3, poolType, name, phase_train=True, use_batch_norm=True):
@@ -166,34 +168,35 @@ def _inception(inp, inSize, ks, o1s, o2s1, o2s2, o3s1, o3s2, o4s1, o4s2, o4s3, p
   
   net = []
   
-  if o1s>0:
-    conv1 = _conv(inp, inSize, o1s, 1, 1, 1, 1, 'SAME', name+'_in1_conv1x1', phase_train=phase_train, use_batch_norm=use_batch_norm)
-    net.append(conv1)
-
-  if o2s1>0:
-    conv3a = _conv(inp, inSize, o2s1, 1, 1, 1, 1, 'SAME', name+'_in2_conv1x1', phase_train=phase_train, use_batch_norm=use_batch_norm)
-    conv3 = _conv(conv3a, o2s1, o2s2, 3, 3, ks, ks, 'SAME', name+'_in2_conv3x3', phase_train=phase_train, use_batch_norm=use_batch_norm)
-    net.append(conv3)
-
-  if o3s1>0:
-    conv5a = _conv(inp, inSize, o3s1, 1, 1, 1, 1, 'SAME', name+'_in3_conv1x1', phase_train=phase_train, use_batch_norm=use_batch_norm)
-    conv5 = _conv(conv5a, o3s1, o3s2, 5, 5, ks, ks, 'SAME', name+'_in3_conv5x5', phase_train=phase_train, use_batch_norm=use_batch_norm)
-    net.append(conv5)
-
-  if poolType=='max':
-    pool = _mpool(inp, o4s1, o4s1, o4s3, o4s3, 'SAME')
-  elif poolType=='l2':
-    pool = _lppool(inp, 2, o4s1, o4s1, o4s3, o4s3, 'SAME')
-  else:
-    raise ValueError('Invalid pooling type "%s"' % poolType)
+  with tf.name_scope(name):
+    if o1s>0:
+      conv1 = _conv(inp, inSize, o1s, 1, 1, 1, 1, 'SAME', 'in1_conv1x1', phase_train=phase_train, use_batch_norm=use_batch_norm)
+      net.append(conv1)
   
-  if o4s2>0:
-    pool_conv = _conv(pool, inSize, o4s2, 1, 1, 1, 1, 'SAME', name+'_in4_conv1x1', phase_train=phase_train, use_batch_norm=use_batch_norm)
-  else:
-    pool_conv = pool
-  net.append(pool_conv)
-
-  incept = array_ops.concat(3, net, name=name)
+    if o2s1>0:
+      conv3a = _conv(inp, inSize, o2s1, 1, 1, 1, 1, 'SAME', 'in2_conv1x1', phase_train=phase_train, use_batch_norm=use_batch_norm)
+      conv3 = _conv(conv3a, o2s1, o2s2, 3, 3, ks, ks, 'SAME', 'in2_conv3x3', phase_train=phase_train, use_batch_norm=use_batch_norm)
+      net.append(conv3)
+  
+    if o3s1>0:
+      conv5a = _conv(inp, inSize, o3s1, 1, 1, 1, 1, 'SAME', 'in3_conv1x1', phase_train=phase_train, use_batch_norm=use_batch_norm)
+      conv5 = _conv(conv5a, o3s1, o3s2, 5, 5, ks, ks, 'SAME', 'in3_conv5x5', phase_train=phase_train, use_batch_norm=use_batch_norm)
+      net.append(conv5)
+  
+    if poolType=='max':
+      pool = _mpool(inp, o4s1, o4s1, o4s3, o4s3, 'SAME')
+    elif poolType=='l2':
+      pool = _lppool(inp, 2, o4s1, o4s1, o4s3, o4s3, 'SAME')
+    else:
+      raise ValueError('Invalid pooling type "%s"' % poolType)
+    
+    if o4s2>0:
+      pool_conv = _conv(pool, inSize, o4s2, 1, 1, 1, 1, 'SAME', 'in4_conv1x1', phase_train=phase_train, use_batch_norm=use_batch_norm)
+    else:
+      pool_conv = pool
+    net.append(pool_conv)
+  
+    incept = array_ops.concat(3, net, name=name)
   return incept
 
 def inference_nn4_max_pool_96(images, phase_train=True):
@@ -229,7 +232,7 @@ def inference_nn4_max_pool_96(images, phase_train=True):
   if FLAGS.keep_probability<1.0:
     affn1 = control_flow_ops.cond(phase_train,
                                   lambda: tf.nn.dropout(affn1, FLAGS.keep_probability), lambda: affn1)
-  norm = tf.nn.l2_normalize(affn1, 1, 1e-10)
+  norm = tf.nn.l2_normalize(affn1, 1, 1e-10, name='embeddings')
 
   return norm
 
@@ -280,7 +283,7 @@ def inference_vggface_96(images, phase_train=True):
     #(38): nn.Dropout(0.500000)
     #(39): nn.Linear(4096 -> 2622)
     affn2 = _affine(resh1, 4608, 128)
-    norm = tf.nn.l2_normalize(affn2, 1, 1e-4)
+    norm = tf.nn.l2_normalize(affn2, 1, 1e-4, name='embeddings')
     
     return norm
 
