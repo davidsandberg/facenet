@@ -52,14 +52,13 @@ tf.app.flags.DEFINE_string('optimizer', 'ADAGRAD',
 tf.app.flags.DEFINE_float('learning_rate', 0.1,
                           """Initial learning rate.""")
 tf.app.flags.DEFINE_float('moving_average_decay', 0.9999,
-                          """Expontential decay for tracking of training parameters.""")
+                          """Exponential decay for tracking of training parameters.""")
 tf.app.flags.DEFINE_float('train_set_fraction', 0.9,
                           """Fraction of the data set that is used for training.""")
-tf.app.flags.DEFINE_integer('seed', 666,
-                            """Random seed.""")
 tf.app.flags.DEFINE_string('split_mode', 'SPLIT_CLASSES',
                            """Defines the method used to split the data set into a train and test set { SPLIT_CLASSES, SPLIT_IMAGES }""")
-
+tf.app.flags.DEFINE_integer('seed', 666,
+                            """Random seed.""")
 
 def main(argv=None):  # pylint: disable=unused-argument
     if FLAGS.model_name:
