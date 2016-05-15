@@ -5,14 +5,15 @@ import numpy as np
 from skimage import io
 
 import os
+import socket
 from urllib2 import HTTPError, URLError
 from httplib import HTTPException
 
 def main():
+  socket.setdefaulttimeout(30)
   datasetDescriptor = '/home/david/datasets/download/vggface/vgg_face_dataset/files'
   textFileNames = os.listdir(datasetDescriptor)
   for textFileName in textFileNames:
-    #textFileName = textFileNames[0]
     with open(os.path.join(datasetDescriptor, textFileName), 'rt') as f:
       lines = f.readlines()
     dirName = textFileName.split('.')[0]
