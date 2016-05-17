@@ -234,8 +234,8 @@ def validate(sess, dataset, epoch, images_placeholder, phase_train_placeholder,
     embeddings2 = np.vstack([positive, negative])
     actual_issame = np.asarray([True] * anchor.shape[0] + [False] * anchor.shape[0])
     tpr, fpr, accuracy = facenet.calculate_roc(thresholds, embeddings1, embeddings2, actual_issame)
-    print('Epoch: [%d]\tTime %.3f\ttripErr %2.3f\t%sAccuracy %1.3f%c%1.3f' % (
-    epoch, duration, np.mean(triplet_loss_list), prefix_str, np.mean(accuracy), u"\u00B1", np.std(accuracy)))
+    print('Epoch: [%d]\tTime %.3f\ttripErr %2.3f\t%sAccuracy %1.3f+-%1.3f' % (
+    epoch, duration, np.mean(triplet_loss_list), prefix_str, np.mean(accuracy), np.std(accuracy)))
 
     # Add validation loss and accuracy to summary
     summary = tf.Summary()
