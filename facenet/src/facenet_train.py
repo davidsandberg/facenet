@@ -49,7 +49,7 @@ tf.app.flags.DEFINE_boolean('random_crop', False,
 tf.app.flags.DEFINE_boolean('random_flip', False,
                           """Performs random horizontal flipping of training images.""")
 tf.app.flags.DEFINE_string('pool_type', 'MAX',
-                          """The type of pooling to use for XXX {'MAX', 'L2'}.""")
+                          """The type of pooling to use for some of the inception layers {'MAX', 'L2'}.""")
 tf.app.flags.DEFINE_float('keep_probability', 1.0,
                           """Keep probability of dropout for the fully connected layer(s).""")
 tf.app.flags.DEFINE_string('optimizer', 'ADAGRAD',
