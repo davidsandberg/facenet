@@ -183,9 +183,9 @@ def _inception(inp, inSize, ks, o1s, o2s1, o2s2, o3s1, o3s2, o4s1, o4s2, o4s3, p
       conv5 = _conv(conv5a, o3s1, o3s2, 5, 5, ks, ks, 'SAME', 'in3_conv5x5', phase_train=phase_train, use_batch_norm=use_batch_norm)
       net.append(conv5)
   
-    if poolType=='max':
+    if poolType=='MAX':
       pool = _mpool(inp, o4s1, o4s1, o4s3, o4s3, 'SAME')
-    elif poolType=='l2':
+    elif poolType=='L2':
       pool = _lppool(inp, 2, o4s1, o4s1, o4s3, o4s3, 'SAME')
     else:
       raise ValueError('Invalid pooling type "%s"' % poolType)
@@ -213,18 +213,18 @@ def inference_nn4_max_pool_96(images, phase_train=True):
   conv3 = _conv(conv2,  64, 192, 3, 3, 1, 1, 'SAME', 'conv3_3x3', phase_train=phase_train, use_batch_norm=True)
   pool3 = _mpool(conv3,  3, 3, 2, 2, 'SAME')
 
-  incept3a = _inception(pool3,    192, 1, 64, 96, 128, 16, 32, 3, 32, 1, 'max', 'incept3a', phase_train=phase_train, use_batch_norm=True)
-  incept3b = _inception(incept3a, 256, 1, 64, 96, 128, 32, 64, 3, 64, 1, 'max', 'incept3b', phase_train=phase_train, use_batch_norm=True)
-  incept3c = _inception(incept3b, 320, 2, 0, 128, 256, 32, 64, 3, 0, 2, 'max', 'incept3c', phase_train=phase_train, use_batch_norm=True)
+  incept3a = _inception(pool3,    192, 1, 64, 96, 128, 16, 32, 3, 32, 1, 'MAX', 'incept3a', phase_train=phase_train, use_batch_norm=True)
+  incept3b = _inception(incept3a, 256, 1, 64, 96, 128, 32, 64, 3, 64, 1, FLAGS.pool_type, 'incept3b', phase_train=phase_train, use_batch_norm=True)
+  incept3c = _inception(incept3b, 320, 2, 0, 128, 256, 32, 64, 3, 0, 2, 'MAX', 'incept3c', phase_train=phase_train, use_batch_norm=True)
   
-  incept4a = _inception(incept3c, 640, 1, 256, 96, 192, 32, 64, 3, 128, 1, 'max', 'incept4a', phase_train=phase_train, use_batch_norm=True)
-  incept4b = _inception(incept4a, 640, 1, 224, 112, 224, 32, 64, 3, 128, 1, 'max', 'incept4b', phase_train=phase_train, use_batch_norm=True)
-  incept4c = _inception(incept4b, 640, 1, 192, 128, 256, 32, 64, 3, 128, 1, 'max', 'incept4c', phase_train=phase_train, use_batch_norm=True)
-  incept4d = _inception(incept4c, 640, 1, 160, 144, 288, 32, 64, 3, 128, 1, 'max', 'incept4d', phase_train=phase_train, use_batch_norm=True)
-  incept4e = _inception(incept4d, 640, 2, 0, 160, 256, 64, 128, 3, 0, 2, 'max', 'incept4e', phase_train=phase_train, use_batch_norm=True)
+  incept4a = _inception(incept3c, 640, 1, 256, 96, 192, 32, 64, 3, 128, 1, FLAGS.pool_type, 'incept4a', phase_train=phase_train, use_batch_norm=True)
+  incept4b = _inception(incept4a, 640, 1, 224, 112, 224, 32, 64, 3, 128, 1, FLAGS.pool_type, 'incept4b', phase_train=phase_train, use_batch_norm=True)
+  incept4c = _inception(incept4b, 640, 1, 192, 128, 256, 32, 64, 3, 128, 1, FLAGS.pool_type, 'incept4c', phase_train=phase_train, use_batch_norm=True)
+  incept4d = _inception(incept4c, 640, 1, 160, 144, 288, 32, 64, 3, 128, 1, FLAGS.pool_type, 'incept4d', phase_train=phase_train, use_batch_norm=True)
+  incept4e = _inception(incept4d, 640, 2, 0, 160, 256, 64, 128, 3, 0, 2, 'MAX', 'incept4e', phase_train=phase_train, use_batch_norm=True)
   
-  incept5a = _inception(incept4e,    1024, 1, 384, 192, 384, 0, 0, 3, 128, 1, 'max', 'incept5a', phase_train=phase_train, use_batch_norm=True)
-  incept5b = _inception(incept5a, 896, 1, 384, 192, 384, 0, 0, 3, 128, 1, 'max', 'incept5b', phase_train=phase_train, use_batch_norm=True)
+  incept5a = _inception(incept4e,    1024, 1, 384, 192, 384, 0, 0, 3, 128, 1, FLAGS.pool_type, 'incept5a', phase_train=phase_train, use_batch_norm=True)
+  incept5b = _inception(incept5a, 896, 1, 384, 192, 384, 0, 0, 3, 128, 1, 'MAX', 'incept5b', phase_train=phase_train, use_batch_norm=True)
   pool6 = _apool(incept5b,  3, 3, 1, 1, 'VALID')
 
   resh1 = tf.reshape(pool6, [-1, 896])

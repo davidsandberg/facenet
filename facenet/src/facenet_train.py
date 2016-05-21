@@ -48,6 +48,8 @@ tf.app.flags.DEFINE_boolean('random_crop', False,
                           If the size of the images in the data directory is equal to image_size no cropping is performed""")
 tf.app.flags.DEFINE_boolean('random_flip', False,
                           """Performs random horizontal flipping of training images.""")
+tf.app.flags.DEFINE_string('pool_type', 'MAX',
+                          """The type of pooling to use for XXX {'MAX', 'L2'}.""")
 tf.app.flags.DEFINE_float('keep_probability', 1.0,
                           """Keep probability of dropout for the fully connected layer(s).""")
 tf.app.flags.DEFINE_string('optimizer', 'ADAGRAD',
