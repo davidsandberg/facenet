@@ -209,9 +209,17 @@ def inference_nn4_max_pool_96(images, phase_train=True):
   """
   conv1 = _conv(images, 3, 64, 7, 7, 2, 2, 'SAME', 'conv1_7x7', phase_train=phase_train, use_batch_norm=True)
   pool1 = _mpool(conv1,  3, 3, 2, 2, 'SAME')
-  conv2 = _conv(pool1,  64, 64, 1, 1, 1, 1, 'SAME', 'conv2_1x1', phase_train=phase_train, use_batch_norm=True)
+  if FLAGS.use_lrn:
+    lrn1 = tf.nn.local_response_normalization(pool1, depth_radius=5, bias=1.0, alpha=1e-4, beta=0.75)
+  else:
+    lrn1 = pool1
+  conv2 = _conv(lrn1,  64, 64, 1, 1, 1, 1, 'SAME', 'conv2_1x1', phase_train=phase_train, use_batch_norm=True)
   conv3 = _conv(conv2,  64, 192, 3, 3, 1, 1, 'SAME', 'conv3_3x3', phase_train=phase_train, use_batch_norm=True)
-  pool3 = _mpool(conv3,  3, 3, 2, 2, 'SAME')
+  if FLAGS.use_lrn:
+    lrn2 = tf.nn.local_response_normalization(conv3, depth_radius=5, bias=1.0, alpha=1e-4, beta=0.75)
+  else:
+    lrn2 = conv3
+  pool3 = _mpool(lrn2,  3, 3, 2, 2, 'SAME')
 
   incept3a = _inception(pool3,    192, 1, 64, 96, 128, 16, 32, 3, 32, 1, 'MAX', 'incept3a', phase_train=phase_train, use_batch_norm=True)
   incept3b = _inception(incept3a, 256, 1, 64, 96, 128, 32, 64, 3, 64, 1, FLAGS.pool_type, 'incept3b', phase_train=phase_train, use_batch_norm=True)
