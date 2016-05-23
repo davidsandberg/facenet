@@ -64,8 +64,7 @@ tf.app.flags.DEFINE_float('train_set_fraction', 0.9,
                           """Fraction of the data set that is used for training.""")
 tf.app.flags.DEFINE_string('split_mode', 'SPLIT_CLASSES',
                            """Defines the method used to split the data set into a train and test set { SPLIT_CLASSES, SPLIT_IMAGES }""")
-tf.app.flags.DEFINE_integer('seed', 666,
-                            """Random seed.""")
+tf.app.flags.DEFINE_integer('seed', 666, """Random seed.""")
 
 def main(argv=None):  # pylint: disable=unused-argument
     if FLAGS.model_name:
@@ -102,16 +101,17 @@ def main(argv=None):  # pylint: disable=unused-argument
         phase_train_placeholder = tf.placeholder(tf.bool, name='phase_train')
 
         # Build the inference graph
-        embeddings = facenet.inference_nn4_max_pool_96(images_placeholder, phase_train=phase_train_placeholder)
+        embeddings = facenet.inference_nn4_max_pool_96(images_placeholder, FLAGS.pool_type, FLAGS.use_lrn, 
+                                                       FLAGS.keep_probability, phase_train=phase_train_placeholder)
 
         # Split example embeddings into anchor, positive and negative
         anchor, positive, negative = tf.split(0, 3, embeddings)
 
         # Calculate triplet loss
-        loss = facenet.triplet_loss(anchor, positive, negative)
+        loss = facenet.triplet_loss(anchor, positive, negative, FLAGS.alpha)
 
         # Build a Graph that trains the model with one batch of examples and updates the model parameters
-        train_op, _ = facenet.train(loss, global_step)
+        train_op, _ = facenet.train(loss, global_step, FLAGS.optimizer, FLAGS.learning_rate, FLAGS.moving_average_decay)
 
         # Create a saver
         saver = tf.train.Saver(tf.all_variables(), max_to_keep=0)
@@ -170,7 +170,7 @@ def train(sess, dataset, epoch, images_placeholder, phase_train_placeholder,
         print('Loading training data')
         # Sample people and load new data
         image_paths, num_per_class = facenet.sample_people(dataset, FLAGS.people_per_batch, FLAGS.images_per_person)
-        image_data = facenet.load_data(image_paths)
+        image_data = facenet.load_data(image_paths, FLAGS.random_crop, FLAGS.random_flip, FLAGS.image_size)
 
         print('Selecting suitable triplets for training')
         start_time = time.time()
@@ -184,7 +184,9 @@ def train(sess, dataset, epoch, images_placeholder, phase_train_placeholder,
             emb_list += sess.run([embeddings], feed_dict=feed_dict)
         emb_array = np.vstack(emb_list)  # Stack the embeddings to a nrof_examples_per_epoch x 128 matrix
         # Select triplets based on the embeddings
-        triplets, nrof_random_negs, nrof_triplets = facenet.select_training_triplets(emb_array, num_per_class, image_data)
+        triplets, nrof_random_negs, nrof_triplets = facenet.select_training_triplets(emb_array, num_per_class, 
+                                                                                     image_data, FLAGS.people_per_batch, 
+                                                                                     FLAGS.alpha)
         duration = time.time() - start_time
         print('(nrof_random_negs, nrof_triplets) = (%d, %d): time=%.3f seconds' % (
         nrof_random_negs, nrof_triplets, duration))
@@ -193,7 +195,7 @@ def train(sess, dataset, epoch, images_placeholder, phase_train_placeholder,
         i = 0
         while i * FLAGS.batch_size < nrof_triplets * 3 and batch_number < FLAGS.epoch_size:
             start_time = time.time()
-            batch = facenet.get_triplet_batch(triplets, i)
+            batch = facenet.get_triplet_batch(triplets, i, FLAGS.batch_size)
             feed_dict = {images_placeholder: batch, phase_train_placeholder: True}
             err, _, step = sess.run([loss, train_op, global_step], feed_dict=feed_dict)
             if (batch_number % 20 == 0):
@@ -213,7 +215,7 @@ def validate(sess, dataset, epoch, images_placeholder, phase_train_placeholder,
     print('Loading %s data' % prefix_str)
     # Sample people and load new data
     image_paths, num_per_class = facenet.sample_people(dataset, nrof_people, FLAGS.images_per_person)
-    image_data = facenet.load_data(image_paths)
+    image_data = facenet.load_data(image_paths, False, False)
 
     print('Selecting random triplets from %s set' % prefix_str)
     triplets, nrof_triplets = facenet.select_validation_triplets(num_per_class, nrof_people, image_data)
@@ -227,7 +229,7 @@ def validate(sess, dataset, epoch, images_placeholder, phase_train_placeholder,
     print('Running forward pass on %s set' % prefix_str)
     nrof_batches_per_epoch = nrof_triplets * 3 // FLAGS.batch_size
     for i in xrange(nrof_batches_per_epoch):
-        batch = facenet.get_triplet_batch(triplets, i)
+        batch = facenet.get_triplet_batch(triplets, i, FLAGS.batch_size)
         feed_dict = {images_placeholder: batch, phase_train_placeholder: False}
         emb, triplet_loss, step = sess.run([embeddings, loss, global_step], feed_dict=feed_dict)
         nrof_batch_triplets = emb.shape[0] / 3
@@ -244,7 +246,7 @@ def validate(sess, dataset, epoch, images_placeholder, phase_train_placeholder,
     embeddings1 = np.vstack([anchor, anchor])
     embeddings2 = np.vstack([positive, negative])
     actual_issame = np.asarray([True] * anchor.shape[0] + [False] * anchor.shape[0])
-    tpr, fpr, accuracy = facenet.calculate_roc(thresholds, embeddings1, embeddings2, actual_issame)
+    tpr, fpr, accuracy = facenet.calculate_roc(thresholds, embeddings1, embeddings2, actual_issame, FLAGS.seed)
     print('Epoch: [%d]\tTime %.3f\ttripErr %2.3f\t%sAccuracy %1.3f+-%1.3f' % (
     epoch, duration, np.mean(triplet_loss_list), prefix_str, np.mean(accuracy), np.std(accuracy)))
 

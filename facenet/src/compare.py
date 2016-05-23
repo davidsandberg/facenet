@@ -15,18 +15,10 @@ tf.app.flags.DEFINE_string('image1', '', """First image to compare.""")
 tf.app.flags.DEFINE_string('image2', '', """Second image to compare.""")
 tf.app.flags.DEFINE_integer('image_size', 96,
                             """Image size (height, width) in pixels.""")
-tf.app.flags.DEFINE_boolean('random_crop', False,
-                          """Performs random cropping of training images. If false, the center image_size pixels from the training images are used.
-                          If the size of the images in the data directory is equal to image_size no cropping is performed""")
-tf.app.flags.DEFINE_boolean('random_flip', False,
-                          """Performs random horizontal flipping of training images.""")
 tf.app.flags.DEFINE_string('pool_type', 'MAX',
                           """The type of pooling to use for some of the inception layers {'MAX', 'L2'}.""")
 tf.app.flags.DEFINE_boolean('use_lrn', False,
                           """Enables Local Response Normalization after the first layers of the inception network.""")
-tf.app.flags.DEFINE_float('keep_probability', 1.0,
-                          """Keep probability of dropout for the fully connected layer(s).""")
-tf.app.flags.DEFINE_integer('seed', 666, """Random seed.""")
 
 FLAGS = tf.app.flags.FLAGS
 
@@ -45,7 +37,8 @@ def main():
         phase_train_placeholder = tf.placeholder(tf.bool, name='phase_train')
           
         # Build the inference graph
-        embeddings = facenet.inference_nn4_max_pool_96(images_placeholder, phase_train=phase_train_placeholder)
+        embeddings = facenet.inference_nn4_max_pool_96(images_placeholder, FLAGS.pool_type, FLAGS.use_lrn, 
+                                                       1.0, phase_train=phase_train_placeholder)
           
         # Create a saver for restoring variable averages
         ema = tf.train.ExponentialMovingAverage(1.0)

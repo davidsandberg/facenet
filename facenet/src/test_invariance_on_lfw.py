@@ -1,5 +1,5 @@
 """Test invariance to translation, scaling and rotation on the "Labeled Faces in the Wild" dataset (http://vis-www.cs.umass.edu/lfw/).
-This requires test images to be cropped a bit wider than the normal to gove some room for the transformations.
+This requires test images to be cropped a bit wider than the normal to give some room for the transformations.
 """
 import tensorflow as tf
 import numpy as np
@@ -12,7 +12,7 @@ from tensorflow.python.platform import gfile
 
 import os
 
-tf.app.flags.DEFINE_string('model_dir', '~/models/facenet/20160306-151157',
+tf.app.flags.DEFINE_string('model_dir', '~/models/facenet/20160514-234418',
                            """Directory containing the graph definition and checkpoint files.""")
 tf.app.flags.DEFINE_string('lfw_pairs', '~/repo/facenet/data/lfw/pairs.txt',
                            """The file containing the pairs to use for validation.""")
@@ -24,8 +24,13 @@ tf.app.flags.DEFINE_integer('batch_size', 60,
                             """Number of images to process in a batch.""")
 tf.app.flags.DEFINE_integer('image_size', 96,
                             """Image size (height, width) in pixels.""")
-tf.app.flags.DEFINE_integer('seed', 666,
-                            """Random seed.""")
+tf.app.flags.DEFINE_integer('orig_image_size', 224,
+                            """Image size (height, width) in pixels of the original (uncropped/unscaled) images.""")
+tf.app.flags.DEFINE_string('pool_type', 'MAX',
+                          """The type of pooling to use for some of the inception layers {'MAX', 'L2'}.""")
+tf.app.flags.DEFINE_boolean('use_lrn', False,
+                          """Enables Local Response Normalization after the first layers of the inception network.""")
+tf.app.flags.DEFINE_integer('seed', 666, """Random seed.""")
 
 FLAGS = tf.app.flags.FLAGS
 
@@ -60,7 +65,8 @@ def main():
         phase_train_placeholder = tf.placeholder(tf.bool, name='phase_train')
         
         # Build the inference graph
-        embeddings = facenet.inference_nn4_max_pool_96(images_placeholder, phase_train=phase_train_placeholder)
+        embeddings = facenet.inference_nn4_max_pool_96(images_placeholder, FLAGS.pool_type, FLAGS.use_lrn, 
+                                                       1.0, phase_train=phase_train_placeholder)
         
         # Create a saver for restoring variable averages
         ema = tf.train.ExponentialMovingAverage(1.0)
@@ -80,12 +86,12 @@ def main():
                 horizontal_offset_accuracy = [None] * len(offsets)
                 for idx, offset in enumerate(offsets):
                     accuracy = evaluate_accuracy(sess, images_placeholder, phase_train_placeholder, embeddings, paths, actual_issame, translate_images, (offset,0))
-                    print('Hoffset: %1.3f  Accuracy: %1.3f%c%1.3f' % (offset, np.mean(accuracy), u"\u00B1", np.std(accuracy)))
+                    print('Hoffset: %1.3f  Accuracy: %1.3f+-%1.3f' % (offset, np.mean(accuracy), np.std(accuracy)))
                     horizontal_offset_accuracy[idx] = np.mean(accuracy)
                 vertical_offset_accuracy = [None] * len(offsets)
                 for idx, offset in enumerate(offsets):
                     accuracy = evaluate_accuracy(sess, images_placeholder, phase_train_placeholder, embeddings, paths, actual_issame, translate_images, (0,offset))
-                    print('Voffset: %1.3f  Accuracy: %1.3f%c%1.3f' % (offset, np.mean(accuracy), u"\u00B1", np.std(accuracy)))
+                    print('Voffset: %1.3f  Accuracy: %1.3f+-%1.3f' % (offset, np.mean(accuracy), np.std(accuracy)))
                     vertical_offset_accuracy[idx] = np.mean(accuracy)
                 fig = plt.figure(1)
                 plt.plot(offsets, horizontal_offset_accuracy, label='Horizontal')
@@ -108,7 +114,7 @@ def main():
                 rotation_accuracy = [None] * len(angles)
                 for idx, angle in enumerate(angles):
                     accuracy = evaluate_accuracy(sess, images_placeholder, phase_train_placeholder, embeddings, paths, actual_issame, rotate_images, angle)
-                    print('Angle: %1.3f  Accuracy: %1.3f%c%1.3f' % (angle, np.mean(accuracy), u"\u00B1", np.std(accuracy)))
+                    print('Angle: %1.3f  Accuracy: %1.3f+-%1.3f' % (angle, np.mean(accuracy), np.std(accuracy)))
                     rotation_accuracy[idx] = np.mean(accuracy)
                 fig = plt.figure(2)
                 plt.plot(angles, rotation_accuracy)
@@ -128,7 +134,7 @@ def main():
                 scale_accuracy = [None] * len(scales)
                 for scale_idx, scale in enumerate(scales):
                     accuracy = evaluate_accuracy(sess, images_placeholder, phase_train_placeholder, embeddings, paths, actual_issame, scale_images, scale)
-                    print('Scale: %1.3f  Accuracy: %1.3f%c%1.3f' % (scale, np.mean(accuracy), u"\u00B1", np.std(accuracy)))
+                    print('Scale: %1.3f  Accuracy: %1.3f+-%1.3f' % (scale, np.mean(accuracy), np.std(accuracy)))
                     scale_accuracy[scale_idx] = np.mean(accuracy)
                 fig = plt.figure(3)
                 plt.plot(scales, scale_accuracy)
@@ -153,7 +159,7 @@ def evaluate_accuracy(sess, images_placeholder, phase_train_placeholder, embeddi
         emb_list = []
         for i in range(nrof_batches):
             paths_batch = paths[i*FLAGS.batch_size:(i+1)*FLAGS.batch_size]
-            images = facenet.load_data(paths_batch)
+            images = facenet.load_data(paths_batch, False, False, FLAGS.orig_image_size)
             images_aug = augument_images(images, aug_value)
             feed_dict = { images_placeholder: images_aug, phase_train_placeholder: False }
             emb_list += sess.run([embeddings], feed_dict=feed_dict)
@@ -162,7 +168,7 @@ def evaluate_accuracy(sess, images_placeholder, phase_train_placeholder, embeddi
         thresholds = np.arange(0, 4, 0.01)
         embeddings1 = emb_array[0::2]
         embeddings2 = emb_array[1::2]
-        _, _, accuracy = facenet.calculate_roc(thresholds, embeddings1, embeddings2, np.asarray(actual_issame))
+        _, _, accuracy = facenet.calculate_roc(thresholds, embeddings1, embeddings2, np.asarray(actual_issame), FLAGS.seed)
         return accuracy
 
 def scale_images(images, scale):

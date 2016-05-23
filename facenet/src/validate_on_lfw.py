@@ -10,7 +10,7 @@ import time
 
 # from tensorflow.python.platform import gfile
 
-tf.app.flags.DEFINE_string('model_dir', '~/models/facenet/20160501-133835',
+tf.app.flags.DEFINE_string('model_dir', '~/models/facenet/20160514-234418',
                            """Directory containing the graph definition and checkpoint files.""")
 tf.app.flags.DEFINE_string('lfw_pairs', '~/repo/facenet/data/lfw/pairs.txt',
                            """The file containing the pairs to use for validation.""")
@@ -22,13 +22,10 @@ tf.app.flags.DEFINE_integer('batch_size', 60,
                             """Number of images to process in a batch.""")
 tf.app.flags.DEFINE_integer('image_size', 96,
                             """Image size (height, width) in pixels.""")
-tf.app.flags.DEFINE_boolean('random_crop', False,
-                          """Performs random cropping of training images. If false, the center image_size pixels from the training images are used.
-                          If the size of the images in the data directory is equal to image_size no cropping is performed""")
-tf.app.flags.DEFINE_boolean('random_flip', False,
-                          """Performs random horizontal flipping of training images.""")
-tf.app.flags.DEFINE_float('keep_probability', 1.0,
-                          """Keep probability of dropout for the fully connected layer(s).""")
+tf.app.flags.DEFINE_string('pool_type', 'MAX',
+                          """The type of pooling to use for some of the inception layers {'MAX', 'L2'}.""")
+tf.app.flags.DEFINE_boolean('use_lrn', False,
+                          """Enables Local Response Normalization after the first layers of the inception network.""")
 tf.app.flags.DEFINE_integer('seed', 666,
                             """Random seed.""")
 
@@ -57,7 +54,8 @@ def main():
         phase_train_placeholder = tf.placeholder(tf.bool, name='phase_train')
           
         # Build the inference graph
-        embeddings = facenet.inference_nn4_max_pool_96(images_placeholder, phase_train=phase_train_placeholder)
+        embeddings = facenet.inference_nn4_max_pool_96(images_placeholder, FLAGS.pool_type, FLAGS.use_lrn, 
+                                                       1.0, phase_train=phase_train_placeholder)
           
         # Create a saver for restoring variable averages
         ema = tf.train.ExponentialMovingAverage(1.0)
@@ -77,7 +75,7 @@ def main():
             for i in range(nrof_batches):
                 start_time = time.time()
                 paths_batch = paths[i*FLAGS.batch_size:(i+1)*FLAGS.batch_size]
-                images = facenet.load_data(paths_batch)
+                images = facenet.load_data(paths_batch, False, False, FLAGS.image_size)
                 feed_dict = { images_placeholder: images, phase_train_placeholder: False }
                 emb_list += sess.run([embeddings], feed_dict=feed_dict)
                 duration = time.time() - start_time
@@ -87,8 +85,8 @@ def main():
             thresholds = np.arange(0, 4, 0.01)
             embeddings1 = emb_array[0::2]
             embeddings2 = emb_array[1::2]
-            tpr, fpr, accuracy = facenet.calculate_roc(thresholds, embeddings1, embeddings2, np.asarray(actual_issame))
-            print('Accuracy: %1.3f%c%1.3f' % (np.mean(accuracy), u"\u00B1", np.std(accuracy)))
+            tpr, fpr, accuracy = facenet.calculate_roc(thresholds, embeddings1, embeddings2, np.asarray(actual_issame), FLAGS.seed)
+            print('Accuracy: %1.3f+-%1.3f' % (np.mean(accuracy), np.std(accuracy)))
             facenet.plot_roc(fpr, tpr, 'NN4')
             
 
