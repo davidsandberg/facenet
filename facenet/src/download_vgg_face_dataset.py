@@ -31,7 +31,7 @@ def main():
         if not os.path.exists(imagePath) and not os.path.exists(errorPath):
           try:
             img = io.imread(url, mode='RGB')
-          except (HTTPException, HTTPError, URLError, IOError, ValueError) as e:
+          except (HTTPException, HTTPError, URLError, IOError, ValueError, IndexError) as e:
             errorMessage = '{}: {}'.format(url, e)
             saveErrorMessageFile(errorPath, errorMessage)
           else:
