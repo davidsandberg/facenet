@@ -408,7 +408,7 @@ def flip(image, random_flip):
     image = np.fliplr(image)
   return image
 
-def toRgb(img):
+def to_rgb(img):
   w, h = img.shape
   ret = np.empty((w, h, 3), dtype=np.uint8)
   ret[:, :, 0] = ret[:, :, 1] = ret[:, :, 2] = img
@@ -420,7 +420,7 @@ def load_data(image_paths, random_crop, random_flip, image_size):
   for i in xrange(nrof_samples):
     img = prewhiten(misc.imread(image_paths[i]))
     if img.ndim == 2:
-      img = toRgb(img)
+      img = to_rgb(img)
     img = crop(img, random_crop, image_size)
     img = flip(img, random_flip)
     img_list[i] = img
