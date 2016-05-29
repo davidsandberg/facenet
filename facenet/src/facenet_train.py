@@ -82,7 +82,7 @@ def main(argv=None):  # pylint: disable=unused-argument
 
     # Store some git revision info in a text file in the log directory        
     src_path,_ = os.path.split(os.path.realpath(__file__))
-    store_git_revision_info(src_path, log_dir, ' '.join(argv))
+    store_training_info(src_path, log_dir, ' '.join(argv))
     
     np.random.seed(seed=FLAGS.seed)
     dataset = facenet.get_dataset(FLAGS.data_dir)
@@ -259,7 +259,7 @@ def validate(sess, dataset, epoch, images_placeholder, phase_train_placeholder,
     if False:
       facenet.plot_roc(fpr, tpr, 'NN4')
 
-def store_git_revision_info(src_path, log_dir, arg_string):
+def store_training_info(src_path, log_dir, arg_string):
     # Get git hash 
     gitproc = Popen(['git', 'rev-parse', 'HEAD'], stdout = PIPE, cwd=src_path)
     (stdout, _) = gitproc.communicate()
