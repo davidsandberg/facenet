@@ -407,12 +407,20 @@ def flip(image, random_flip):
   if random_flip and np.random.choice([True, False]):
     image = np.fliplr(image)
   return image
+
+def toRgb(img):
+  w, h = img.shape
+  ret = np.empty((w, h, 3), dtype=np.uint8)
+  ret[:, :, 0] = ret[:, :, 1] = ret[:, :, 2] = img
+  return ret
   
 def load_data(image_paths, random_crop, random_flip, image_size):
   nrof_samples = len(image_paths)
   img_list = [None] * nrof_samples
   for i in xrange(nrof_samples):
     img = prewhiten(misc.imread(image_paths[i]))
+    if img.ndim == 2:
+      img = toRgb(img)
     img = crop(img, random_crop, image_size)
     img = flip(img, random_flip)
     img_list[i] = img

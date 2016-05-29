@@ -36,6 +36,8 @@ def main():
                     errorMessage = '{}: {}'.format(image_path, e)
                     print(errorMessage)
                 else:
+                    if img.ndim == 2:
+                        img = facenet.toRgb(img)
                     aligned = align.align(FLAGS.image_size, img, landmarkIndices=landmarkIndices, 
                                           skipMulti=True, scale=scale)
                     if aligned is not None:
