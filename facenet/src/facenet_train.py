@@ -215,10 +215,10 @@ def validate(sess, dataset, epoch, images_placeholder, phase_train_placeholder,
     print('Loading %s data' % prefix_str)
     # Sample people and load new data
     image_paths, num_per_class = facenet.sample_people(dataset, nrof_people, FLAGS.images_per_person)
-    image_data = facenet.load_data(image_paths, False, False)
+    image_data = facenet.load_data(image_paths, False, False, FLAGS.image_size)
 
     print('Selecting random triplets from %s set' % prefix_str)
-    triplets, nrof_triplets = facenet.select_validation_triplets(num_per_class, nrof_people, image_data)
+    triplets, nrof_triplets = facenet.select_validation_triplets(num_per_class, nrof_people, image_data, FLAGS.batch_size)
 
     start_time = time.time()
     anchor_list = []
