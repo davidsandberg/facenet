@@ -40,8 +40,12 @@ def main():
                 else:
                     if img.ndim == 2:
                         img = facenet.to_rgb(img)
-                    aligned = align.align(FLAGS.image_size, img, landmarkIndices=landmarkIndices, 
-                                          skipMulti=True, scale=scale)
+                    if FLAGS.use_new_alignment:
+                        aligned = align.align_new(FLAGS.image_size, img, landmarkIndices=landmarkIndices, 
+                                              skipMulti=True, scale=scale)
+                    else:
+                        aligned = align.align(FLAGS.image_size, img, landmarkIndices=landmarkIndices, 
+                                              skipMulti=True, scale=scale)
                     if aligned is not None:
                         misc.imsave(output_filename, aligned)
 
