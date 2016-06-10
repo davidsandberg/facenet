@@ -202,7 +202,8 @@ class AlignDlib:
         return thumbnail
 
     def align_new(self, imgDim, rgbImg, bb=None,
-              landmarks=None, landmarkIndices=INNER_EYES_AND_BOTTOM_LIP):
+                 landmarks=None, landmarkIndices=INNER_EYES_AND_BOTTOM_LIP,
+                 skipMulti=False, scale=1.0):
         r"""align(imgDim, rgbImg, bb=None, landmarks=None, landmarkIndices=INNER_EYES_AND_BOTTOM_LIP)
 
         Transform and align a face in an image.
@@ -227,7 +228,7 @@ class AlignDlib:
         assert landmarkIndices is not None
 
         if bb is None:
-            bb = self.getLargestFaceBoundingBox(rgbImg)
+            bb = self.getLargestFaceBoundingBox(rgbImg, skipMulti)
             if bb is None:
                 return
 
@@ -236,25 +237,32 @@ class AlignDlib:
 
         npLandmarks = np.float32(landmarks)
         npLandmarkIndices = np.array(landmarkIndices)
-        
+        templateLandmarks = MINMAX_TEMPLATE[npLandmarkIndices]
+
         fidPoints = npLandmarks[npLandmarkIndices]
-        templateMat = INV_TEMPLATE
-        
-        #create transformation matrix from output pixel coordinates to input pixel coordinates
-        H = np.zeros((2,3), dtype=np.float32)
+
+        templateMat = np.ones((3, 3), dtype=np.float32)
         for i in range(3):
-            H[0][i] = fidPoints[0][0] * templateMat[0][i] + fidPoints[1][0] * templateMat[1][i] + fidPoints[2][0] * templateMat[2][i]
-            H[1][i] = fidPoints[0][1] * templateMat[0][i] + fidPoints[1][1] * templateMat[1][i] + fidPoints[2][1] * templateMat[2][i]
-        
-        print H
-        print fidPoints
-        print npLandmarkIndices
-        imgWidth = np.shape(rgbImg)[0]
-        imgHeight = np.shape(rgbImg)[1]
-        thumbnail = np.zeros((imgDim, imgDim,3), np.uint8)
-        
-        #interpolation from input image to output pixels using transformation mat H to compute
-        #which input coordinates map to output
+            for j in range(2):
+                templateMat[i][j] = templateLandmarks[i][j] * imgDim * scale + imgDim*(1-scale)/2
+
+        templateMat = np.transpose(np.linalg.inv(templateMat))
+
+        # create transformation matrix from output pixel coordinates to input
+        # pixel coordinates
+        H = np.zeros((2, 3), dtype=np.float32)
+        for i in range(3):
+            H[0][i] = fidPoints[0][0] * templateMat[0][i] + fidPoints[1][0] * \
+                templateMat[1][i] + fidPoints[2][0] * templateMat[2][i]
+            H[1][i] = fidPoints[0][1] * templateMat[0][i] + fidPoints[1][1] * \
+                templateMat[1][i] + fidPoints[2][1] * templateMat[2][i]
+
+        imgWidth = np.shape(rgbImg)[1]
+        imgHeight = np.shape(rgbImg)[0]
+        thumbnail = np.zeros((imgDim, imgDim, 3), np.uint8)
+
+        # interpolation from input image to output pixels using transformation mat H to compute
+        # which input coordinates map to output
         for y in range(imgDim):
             for x in range(imgDim):
                 xprime = x * H[0][1] + y * H[0][0] + H[0][2]
@@ -275,9 +283,13 @@ class AlignDlib:
                 upperRight = rgbImg[ty][tx + horzOffset]
                 bottomLeft = rgbImg[ty + vertOffset][tx]
                 bottomRight = rgbImg[ty + vertOffset][tx + horzOffset]
-            
-                thumbnail[x][y][0] = upperLeft[0] * (1.0 - f1) * (1.0 - f2) + upperRight[0] * f1 * (1.0 - f2) + bottomLeft[0] * (1.0 - f1) * f2 + bottomRight[0] * f1 * f2
-                thumbnail[x][y][1] = upperLeft[1] * (1.0 - f1) * (1.0 - f2) + upperRight[1] * f1 * (1.0 - f2) + bottomLeft[1] * (1.0 - f1) * f2 + bottomRight[1] * f1 * f2
-                thumbnail[x][y][2] = upperLeft[2] * (1.0 - f1) * (1.0 - f2) + upperRight[2] * f1 * (1.0 - f2) + bottomLeft[2] * (1.0 - f1) * f2 + bottomRight[2] * f1 * f2
+
+                thumbnail[x][y][0] = upperLeft[0] * (1.0 - f1) * (1.0 - f2) + upperRight[0] * f1 * (
+                    1.0 - f2) + bottomLeft[0] * (1.0 - f1) * f2 + bottomRight[0] * f1 * f2
+                thumbnail[x][y][1] = upperLeft[1] * (1.0 - f1) * (1.0 - f2) + upperRight[1] * f1 * (
+                    1.0 - f2) + bottomLeft[1] * (1.0 - f1) * f2 + bottomRight[1] * f1 * f2
+                thumbnail[x][y][2] = upperLeft[2] * (1.0 - f1) * (1.0 - f2) + upperRight[2] * f1 * (
+                    1.0 - f2) + bottomLeft[2] * (1.0 - f1) * f2 + bottomRight[2] * f1 * f2
 
         return thumbnail
+      

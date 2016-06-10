@@ -10,8 +10,10 @@ tf.app.flags.DEFINE_string('input_dir', '', """Directory with unaligned images""
 tf.app.flags.DEFINE_string('output_dir', '', """Directory with aligned face thumbnails.""")
 tf.app.flags.DEFINE_string('dlib_face_predictor', '~/repo/openface/models/dlib/shape_predictor_68_face_landmarks.dat',
                            """File containing the dlib face predictor.""")
-tf.app.flags.DEFINE_integer('image_size', 256, """Image size (height, width) in pixels.""")
-tf.app.flags.DEFINE_integer('face_size', 224, """Size of the face thumbnail (height, width) in pixels.""")
+tf.app.flags.DEFINE_integer('image_size', 110, """Image size (height, width) in pixels.""")
+tf.app.flags.DEFINE_integer('face_size', 96, """Size of the face thumbnail (height, width) in pixels.""")
+tf.app.flags.DEFINE_boolean('use_new_alignment', False,
+                            """Indicates if the improved alignment transformation should be used.""")
 
 FLAGS = tf.app.flags.FLAGS
 
