@@ -357,6 +357,8 @@ def train(total_loss, global_step, optimizer, learning_rate, moving_average_deca
       opt = tf.train.AdagradOptimizer(learning_rate)
     elif optimizer=='ADADELTA':
       opt = tf.train.AdadeltaOptimizer(learning_rate, rho=0.9, epsilon=1e-6)
+    elif optimizer=='ADAM':
+      opt = tf.train.AdamOptimizer(learning_rate, beta1=0.9, beta2=0.999, epsilon=1e-8)
     else:
       raise ValueError('Invalid optimization algorithm')
 

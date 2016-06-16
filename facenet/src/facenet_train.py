@@ -55,7 +55,7 @@ tf.app.flags.DEFINE_boolean('use_lrn', False,
 tf.app.flags.DEFINE_float('keep_probability', 1.0,
                           """Keep probability of dropout for the fully connected layer(s).""")
 tf.app.flags.DEFINE_string('optimizer', 'ADAGRAD',
-                          """The optimization algorithm to use {'ADAGRAD', 'ADADELTA'}.""")
+                          """The optimization algorithm to use {'ADAGRAD', 'ADADELTA', 'ADAM'}.""")
 tf.app.flags.DEFINE_float('learning_rate', 0.1,
                           """Initial learning rate.""")
 tf.app.flags.DEFINE_float('moving_average_decay', 0.9999,
