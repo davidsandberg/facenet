@@ -92,6 +92,8 @@ def main(argv=None):
                             print(image_path)
                             nrof_prealigned_images += 1
                             misc.imsave(output_filename, cropped)
+                    else:
+                        print('Unable to align "%s"' % image_path)
                             
     print('Total number of images: %d' % nrof_images_total)
     print('Number of successfully aligned images: %d' % nrof_successfully_aligned)
