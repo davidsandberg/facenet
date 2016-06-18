@@ -568,9 +568,10 @@ def get_dataset(paths):
     for i in range(nrof_classes):
       class_name = classes[i]
       facedir = os.path.join(path_exp, class_name)
-      images = os.listdir(facedir)
-      image_paths = map(lambda x: os.path.join(facedir,x), images)
-      dataset.append(ImageClass(class_name, image_paths))
+      if os.path.isdir(facedir):
+        images = os.listdir(facedir)
+        image_paths = map(lambda x: os.path.join(facedir,x), images)
+        dataset.append(ImageClass(class_name, image_paths))
 
   return dataset
 
