@@ -3,14 +3,14 @@ This requires test images to be cropped a bit wider than the normal to give some
 """
 import tensorflow as tf
 import numpy as np
+import importlib
 import facenet
 import matplotlib as mpl
 import matplotlib.pyplot as plt
 from scipy import misc
-
-from tensorflow.python.platform import gfile
-
 import os
+
+FLAGS = tf.app.flags.FLAGS
 
 tf.app.flags.DEFINE_string('model_dir', '~/models/facenet/20160514-234418',
                            """Directory containing the graph definition and checkpoint files.""")
@@ -20,6 +20,8 @@ tf.app.flags.DEFINE_string('file_ext', '.png',
                            """The file extension for the LFW dataset, typically .png or .jpg.""")
 tf.app.flags.DEFINE_string('lfw_dir', '~/datasets/lfw/lfw_aligned_224/',
                            """Path to the data directory containing aligned face patches, cropped to give some room for image transformations.""")
+tf.app.flags.DEFINE_string('model_def', 'models.nn4',
+                           """Model definition. Points to a module containing the definition of the inference graph.""")
 tf.app.flags.DEFINE_integer('batch_size', 60,
                             """Number of images to process in a batch.""")
 tf.app.flags.DEFINE_integer('image_size', 96,
@@ -32,18 +34,7 @@ tf.app.flags.DEFINE_boolean('use_lrn', False,
                           """Enables Local Response Normalization after the first layers of the inception network.""")
 tf.app.flags.DEFINE_integer('seed', 666, """Random seed.""")
 
-FLAGS = tf.app.flags.FLAGS
-
-
-def create_graph(graphdef_filename):
-    """"Creates a graph from saved GraphDef file."""
-    # Creates graph from saved graph_def.pb.
-    with gfile.FastGFile(graphdef_filename, 'rb') as f:
-        graph_def = tf.GraphDef()
-        graph_def.ParseFromString(f.read())
-        _ = tf.import_graph_def(graph_def, name='')
-
-
+network = importlib.import_module(FLAGS.model_def, 'inference')
 
 def main():
     
@@ -65,8 +56,8 @@ def main():
         phase_train_placeholder = tf.placeholder(tf.bool, name='phase_train')
         
         # Build the inference graph
-        embeddings = facenet.inference_nn4_max_pool_96(images_placeholder, FLAGS.pool_type, FLAGS.use_lrn, 
-                                                       1.0, phase_train=phase_train_placeholder)
+        embeddings = network.inference(images_placeholder, FLAGS.pool_type, FLAGS.use_lrn, 
+                                       1.0, phase_train=phase_train_placeholder)
         
         # Create a saver for restoring variable averages
         ema = tf.train.ExponentialMovingAverage(1.0)

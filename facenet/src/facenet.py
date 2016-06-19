@@ -21,7 +21,7 @@ conv_counter = 1
 pool_counter = 1
 affine_counter = 1
 
-def _conv(inpOp, nIn, nOut, kH, kW, dH, dW, padType, prefix, phase_train=True, use_batch_norm=True):
+def conv(inpOp, nIn, nOut, kH, kW, dH, dW, padType, prefix, phase_train=True, use_batch_norm=True):
   global conv_counter
   global parameters
   name = prefix + '_' + str(conv_counter)
@@ -33,7 +33,7 @@ def _conv(inpOp, nIn, nOut, kH, kW, dH, dW, padType, prefix, phase_train=True, u
     conv = tf.nn.conv2d(inpOp, kernel, [1, dH, dW, 1], padding=padType)
     
     if use_batch_norm:
-      conv_bn = _batch_norm(conv, nOut, phase_train, 'batch_norm')
+      conv_bn = batch_norm(conv, nOut, phase_train, 'batch_norm')
     else:
       conv_bn = conv
     biases = tf.Variable(tf.constant(0.0, shape=[nOut], dtype=tf.float32),
@@ -43,7 +43,7 @@ def _conv(inpOp, nIn, nOut, kH, kW, dH, dW, padType, prefix, phase_train=True, u
     parameters += [kernel, biases]
   return conv1
 
-def _affine(inpOp, nIn, nOut):
+def affine(inpOp, nIn, nOut):
   global affine_counter
   global parameters
   name = 'affine' + str(affine_counter)
@@ -58,7 +58,7 @@ def _affine(inpOp, nIn, nOut):
     parameters += [kernel, biases]
     return affine1
   
-def _lppool(inpOp, pnorm, kH, kW, dH, dW, padding):
+def lppool(inpOp, pnorm, kH, kW, dH, dW, padding):
   global pool_counter
   global parameters
   name = 'pool' + str(pool_counter)
@@ -84,7 +84,7 @@ def _lppool(inpOp, pnorm, kH, kW, dH, dW, padding):
     
   return out
 
-def _mpool(inpOp, kH, kW, dH, dW, padding):
+def mpool(inpOp, kH, kW, dH, dW, padding):
   global pool_counter
   global parameters
   name = 'pool' + str(pool_counter)
@@ -97,7 +97,7 @@ def _mpool(inpOp, kH, kW, dH, dW, padding):
                    name=name)  
   return maxpool
 
-def _apool(inpOp, kH, kW, dH, dW, padding):
+def apool(inpOp, kH, kW, dH, dW, padding):
   global pool_counter
   global parameters
   name = 'pool' + str(pool_counter)
@@ -108,7 +108,7 @@ def _apool(inpOp, kH, kW, dH, dW, padding):
                         padding=padding,
                         name=name)
 
-def _batch_norm(x, n_out, phase_train, name, affine=True):
+def batch_norm(x, n_out, phase_train, name, affine=True):
   """
   Batch normalization on convolutional maps.
   Args:
@@ -144,7 +144,7 @@ def _batch_norm(x, n_out, phase_train, name, affine=True):
     parameters += [beta, gamma]
   return normed
 
-def _inception(inp, inSize, ks, o1s, o2s1, o2s2, o3s1, o3s2, o4s1, o4s2, o4s3, poolType, name, phase_train=True, use_batch_norm=True):
+def inception(inp, inSize, ks, o1s, o2s1, o2s2, o3s1, o3s2, o4s1, o4s2, o4s3, poolType, name, phase_train=True, use_batch_norm=True):
   
   print('name = ', name)
   print('inputSize = ', inSize)
@@ -164,130 +164,34 @@ def _inception(inp, inSize, ks, o1s, o2s1, o2s2, o3s1, o3s2, o4s1, o4s2, o4s3, p
   
   with tf.name_scope(name):
     if o1s>0:
-      conv1 = _conv(inp, inSize, o1s, 1, 1, 1, 1, 'SAME', 'in1_conv1x1', phase_train=phase_train, use_batch_norm=use_batch_norm)
+      conv1 = conv(inp, inSize, o1s, 1, 1, 1, 1, 'SAME', 'in1_conv1x1', phase_train=phase_train, use_batch_norm=use_batch_norm)
       net.append(conv1)
   
     if o2s1>0:
-      conv3a = _conv(inp, inSize, o2s1, 1, 1, 1, 1, 'SAME', 'in2_conv1x1', phase_train=phase_train, use_batch_norm=use_batch_norm)
-      conv3 = _conv(conv3a, o2s1, o2s2, 3, 3, ks, ks, 'SAME', 'in2_conv3x3', phase_train=phase_train, use_batch_norm=use_batch_norm)
+      conv3a = conv(inp, inSize, o2s1, 1, 1, 1, 1, 'SAME', 'in2_conv1x1', phase_train=phase_train, use_batch_norm=use_batch_norm)
+      conv3 = conv(conv3a, o2s1, o2s2, 3, 3, ks, ks, 'SAME', 'in2_conv3x3', phase_train=phase_train, use_batch_norm=use_batch_norm)
       net.append(conv3)
   
     if o3s1>0:
-      conv5a = _conv(inp, inSize, o3s1, 1, 1, 1, 1, 'SAME', 'in3_conv1x1', phase_train=phase_train, use_batch_norm=use_batch_norm)
-      conv5 = _conv(conv5a, o3s1, o3s2, 5, 5, ks, ks, 'SAME', 'in3_conv5x5', phase_train=phase_train, use_batch_norm=use_batch_norm)
+      conv5a = conv(inp, inSize, o3s1, 1, 1, 1, 1, 'SAME', 'in3_conv1x1', phase_train=phase_train, use_batch_norm=use_batch_norm)
+      conv5 = conv(conv5a, o3s1, o3s2, 5, 5, ks, ks, 'SAME', 'in3_conv5x5', phase_train=phase_train, use_batch_norm=use_batch_norm)
       net.append(conv5)
   
     if poolType=='MAX':
-      pool = _mpool(inp, o4s1, o4s1, o4s3, o4s3, 'SAME')
+      pool = mpool(inp, o4s1, o4s1, o4s3, o4s3, 'SAME')
     elif poolType=='L2':
-      pool = _lppool(inp, 2, o4s1, o4s1, o4s3, o4s3, 'SAME')
+      pool = lppool(inp, 2, o4s1, o4s1, o4s3, o4s3, 'SAME')
     else:
       raise ValueError('Invalid pooling type "%s"' % poolType)
     
     if o4s2>0:
-      pool_conv = _conv(pool, inSize, o4s2, 1, 1, 1, 1, 'SAME', 'in4_conv1x1', phase_train=phase_train, use_batch_norm=use_batch_norm)
+      pool_conv = conv(pool, inSize, o4s2, 1, 1, 1, 1, 'SAME', 'in4_conv1x1', phase_train=phase_train, use_batch_norm=use_batch_norm)
     else:
       pool_conv = pool
     net.append(pool_conv)
   
     incept = array_ops.concat(3, net, name=name)
   return incept
-
-def inference_nn4_max_pool_96(images, pool_type, use_lrn, keep_probability, phase_train=True):
-  """ Define an inference network for face recognition based 
-         on inception modules using batch normalization
-  
-  Args:
-    images: The images to run inference on, dimensions batch_size x height x width x channels
-    phase_train: True if batch normalization should operate in training mode
-  """
-  conv1 = _conv(images, 3, 64, 7, 7, 2, 2, 'SAME', 'conv1_7x7', phase_train=phase_train, use_batch_norm=True)
-  pool1 = _mpool(conv1,  3, 3, 2, 2, 'SAME')
-  if use_lrn:
-    lrn1 = tf.nn.local_response_normalization(pool1, depth_radius=5, bias=1.0, alpha=1e-4, beta=0.75)
-  else:
-    lrn1 = pool1
-  conv2 = _conv(lrn1,  64, 64, 1, 1, 1, 1, 'SAME', 'conv2_1x1', phase_train=phase_train, use_batch_norm=True)
-  conv3 = _conv(conv2,  64, 192, 3, 3, 1, 1, 'SAME', 'conv3_3x3', phase_train=phase_train, use_batch_norm=True)
-  if use_lrn:
-    lrn2 = tf.nn.local_response_normalization(conv3, depth_radius=5, bias=1.0, alpha=1e-4, beta=0.75)
-  else:
-    lrn2 = conv3
-  pool3 = _mpool(lrn2,  3, 3, 2, 2, 'SAME')
-
-  incept3a = _inception(pool3,    192, 1, 64, 96, 128, 16, 32, 3, 32, 1, 'MAX', 'incept3a', phase_train=phase_train, use_batch_norm=True)
-  incept3b = _inception(incept3a, 256, 1, 64, 96, 128, 32, 64, 3, 64, 1, pool_type, 'incept3b', phase_train=phase_train, use_batch_norm=True)
-  incept3c = _inception(incept3b, 320, 2, 0, 128, 256, 32, 64, 3, 0, 2, 'MAX', 'incept3c', phase_train=phase_train, use_batch_norm=True)
-  
-  incept4a = _inception(incept3c, 640, 1, 256, 96, 192, 32, 64, 3, 128, 1, pool_type, 'incept4a', phase_train=phase_train, use_batch_norm=True)
-  incept4b = _inception(incept4a, 640, 1, 224, 112, 224, 32, 64, 3, 128, 1, pool_type, 'incept4b', phase_train=phase_train, use_batch_norm=True)
-  incept4c = _inception(incept4b, 640, 1, 192, 128, 256, 32, 64, 3, 128, 1, pool_type, 'incept4c', phase_train=phase_train, use_batch_norm=True)
-  incept4d = _inception(incept4c, 640, 1, 160, 144, 288, 32, 64, 3, 128, 1, pool_type, 'incept4d', phase_train=phase_train, use_batch_norm=True)
-  incept4e = _inception(incept4d, 640, 2, 0, 160, 256, 64, 128, 3, 0, 2, 'MAX', 'incept4e', phase_train=phase_train, use_batch_norm=True)
-  
-  incept5a = _inception(incept4e,    1024, 1, 384, 192, 384, 0, 0, 3, 128, 1, pool_type, 'incept5a', phase_train=phase_train, use_batch_norm=True)
-  incept5b = _inception(incept5a, 896, 1, 384, 192, 384, 0, 0, 3, 128, 1, 'MAX', 'incept5b', phase_train=phase_train, use_batch_norm=True)
-  pool6 = _apool(incept5b,  3, 3, 1, 1, 'VALID')
-
-  resh1 = tf.reshape(pool6, [-1, 896])
-  affn1 = _affine(resh1, 896, 128)
-  if keep_probability<1.0:
-    affn1 = control_flow_ops.cond(phase_train,
-                                  lambda: tf.nn.dropout(affn1, keep_probability), lambda: affn1)
-  norm = tf.nn.l2_normalize(affn1, 1, 1e-10, name='embeddings')
-
-  return norm
-
-def inference_vggface_96(images, phase_train=True):
-    #(1): nn.SpatialConvolutionMM(3 -> 64, 3x3, 1,1, 1,1)
-    conv1 = _conv(images, 3, 64, 3, 3, 1, 1, 'SAME', 'conv1_3x3', phase_train=phase_train, use_batch_norm=False)
-    #(3): nn.SpatialConvolutionMM(64 -> 64, 3x3, 1,1, 1,1)
-    conv2 = _conv(conv1, 64, 64, 3, 3, 1, 1, 'SAME', 'conv2_3x3', phase_train=phase_train, use_batch_norm=False)
-    #(5): nn.SpatialMaxPooling(2,2,2,2)
-    pool1 = _mpool(conv2,  2, 2, 2, 2, 'SAME')
-    #(6): nn.SpatialConvolutionMM(64 -> 128, 3x3, 1,1, 1,1)
-    conv3 = _conv(pool1, 64, 128, 3, 3, 1, 1, 'SAME', 'conv3_3x3', phase_train=phase_train, use_batch_norm=False)
-    #(8): nn.SpatialConvolutionMM(128 -> 128, 3x3, 1,1, 1,1)
-    conv4 = _conv(conv3, 128, 128, 3, 3, 1, 1, 'SAME', 'conv4_3x3', phase_train=phase_train, use_batch_norm=False)
-    #(10): nn.SpatialMaxPooling(2,2,2,2)
-    pool2 = _mpool(conv4,  2, 2, 2, 2, 'SAME')
-    #(11): nn.SpatialConvolutionMM(128 -> 256, 3x3, 1,1, 1,1)
-    conv5 = _conv(pool2, 128, 256, 3, 3, 1, 1, 'SAME', 'conv5_3x3', phase_train=phase_train, use_batch_norm=False)
-    #(13): nn.SpatialConvolutionMM(256 -> 256, 3x3, 1,1, 1,1)
-    conv6 = _conv(conv5, 256, 256, 3, 3, 1, 1, 'SAME', 'conv6_3x3', phase_train=phase_train, use_batch_norm=False)
-    #(15): nn.SpatialConvolutionMM(256 -> 256, 3x3, 1,1, 1,1)
-    conv7 = _conv(conv6, 256, 256, 3, 3, 1, 1, 'SAME', 'conv7_3x3', phase_train=phase_train, use_batch_norm=False)
-    #(17): nn.SpatialMaxPooling(2,2,2,2)
-    pool3 = _mpool(conv7,  2, 2, 2, 2, 'SAME')
-    #(18): nn.SpatialConvolutionMM(256 -> 512, 3x3, 1,1, 1,1)
-    conv8 = _conv(pool3, 256, 512, 3, 3, 1, 1, 'SAME', 'conv8_3x3', phase_train=phase_train, use_batch_norm=False)
-    #(20): nn.SpatialConvolutionMM(512 -> 512, 3x3, 1,1, 1,1)
-    conv9 = _conv(conv8, 512, 512, 3, 3, 1, 1, 'SAME', 'conv9_3x3', phase_train=phase_train, use_batch_norm=False)
-    #(22): nn.SpatialConvolutionMM(512 -> 512, 3x3, 1,1, 1,1)
-    conv10 = _conv(conv9, 512, 512, 3, 3, 1, 1, 'SAME', 'conv10_3x3', phase_train=phase_train, use_batch_norm=False)
-    #(24): nn.SpatialMaxPooling(2,2,2,2)
-    pool4 = _mpool(conv10,  2, 2, 2, 2, 'SAME')
-    #(25): nn.SpatialConvolutionMM(512 -> 512, 3x3, 1,1, 1,1)
-    conv11 = _conv(pool4, 512, 512, 3, 3, 1, 1, 'SAME', 'conv11_3x3', phase_train=phase_train, use_batch_norm=False)
-    #(27): nn.SpatialConvolutionMM(512 -> 512, 3x3, 1,1, 1,1)
-    conv12 = _conv(conv11, 512, 512, 3, 3, 1, 1, 'SAME', 'conv12_3x3', phase_train=phase_train, use_batch_norm=False)
-    #(29): nn.SpatialConvolutionMM(512 -> 512, 3x3, 1,1, 1,1)
-    conv13 = _conv(conv12, 512, 512, 3, 3, 1, 1, 'SAME', 'conv13_3x3', phase_train=phase_train, use_batch_norm=False)
-    #(31): nn.SpatialMaxPooling(2,2,2,2)
-    pool5 = _mpool(conv13,  2, 2, 2, 2, 'SAME')
-    #(32): nn.View
-    resh1 = tf.reshape(pool5, [-1, 4608])
-    #(33): nn.Linear(25088 -> 4096)
-    #affn1 = _affine(resh1, 4608, 4096)
-    #(35): nn.Dropout(0.500000)
-    #(36): nn.Linear(4096 -> 4096)
-    #affn2 = _affine(affn1, 4096, 4096)
-    #(38): nn.Dropout(0.500000)
-    #(39): nn.Linear(4096 -> 2622)
-    affn2 = _affine(resh1, 4608, 128)
-    norm = tf.nn.l2_normalize(affn2, 1, 1e-4, name='embeddings')
-    
-    return norm
 
 def triplet_loss(anchor, positive, negative, alpha):
   """Calculate the triplet loss according to the FaceNet paper

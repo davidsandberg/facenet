@@ -1,15 +1,18 @@
-"""Validate a face recognizer on the "Labeled Faces in the Wild" dataset (http://vis-www.cs.umass.edu/lfw/).
-Embeddings are calculated using the pairs from http://vis-www.cs.umass.edu/lfw/pairs.txt and the ROC curve
-is calculated and plotted
+"""Visualize higher layer filters by finding the input image that maximizes the response of a given filter using gradient ascent.
+NOTE. The results are somewhat strange and the code needs to be verified.
 """
 import tensorflow as tf
 import numpy as np
-import facenet
+import importlib
 import os
 import matplotlib.pyplot as plt
 
+FLAGS = tf.app.flags.FLAGS
+
 tf.app.flags.DEFINE_string('model_dir', '~/models/facenet/20160514-234418',
                            """Directory containing the graph definition and checkpoint files.""")
+tf.app.flags.DEFINE_string('model_def', 'models.nn4',
+                           """Model definition. Points to a module containing the definition of the inference graph.""")
 tf.app.flags.DEFINE_integer('batch_size', 1,
                             """Number of images to process in a batch.""")
 tf.app.flags.DEFINE_integer('image_size', 96,
@@ -21,7 +24,7 @@ tf.app.flags.DEFINE_boolean('use_lrn', False,
 tf.app.flags.DEFINE_integer('seed', 666,
                             """Random seed.""")
 
-FLAGS = tf.app.flags.FLAGS
+network = importlib.import_module(FLAGS.model_def, 'inference')
 
 def main():
     # Set random seed
@@ -40,7 +43,7 @@ def main():
         phase_train_placeholder = tf.placeholder(tf.bool, name='phase_train')
 
         # Build the inference graph
-        _ = facenet.inference_nn4_max_pool_96(images, 'MAX', False, 1.0, phase_train=phase_train_placeholder)
+        _ = network.inference(images, FLAGS.pool_type, FLAGS.use_lrn, 1.0, phase_train=phase_train_placeholder)
           
         # Get the tensor that contains the filters that we want to do gradient ascent on
         opt_tensor = tf.get_default_graph().get_tensor_by_name('incept5b/incept5b:0')

@@ -13,6 +13,7 @@ import time
 
 import tensorflow as tf
 import numpy as np
+import importlib
 import facenet
 
 FLAGS = tf.app.flags.FLAGS
@@ -24,7 +25,9 @@ tf.app.flags.DEFINE_string('models_base_dir', '~/models/facenet',
 tf.app.flags.DEFINE_string('model_name', '',
                            """Model directory name. Used when continuing training of an existing model. Leave empty to train new model.""")
 tf.app.flags.DEFINE_string('data_dir', '~/datasets/facescrub/fs_aligned:~/datasets/casia/casia-webface-aligned',
-                           """Path to the data directory containing aligned face patches. Multiple directories are seperated with colon.""")
+                           """Path to the data directory containing aligned face patches. Multiple directories are separated with colon.""")
+tf.app.flags.DEFINE_string('model_def', 'models.nn4',
+                           """Model definition. Points to a module containing the definition of the inference graph.""")
 tf.app.flags.DEFINE_integer('max_nrof_epochs', 500,
                             """Number of epochs to run.""")
 tf.app.flags.DEFINE_integer('checkpoint_period', 10,
@@ -66,7 +69,10 @@ tf.app.flags.DEFINE_string('split_mode', 'SPLIT_CLASSES',
                            """Defines the method used to split the data set into a train and test set { SPLIT_CLASSES, SPLIT_IMAGES }""")
 tf.app.flags.DEFINE_integer('seed', 666, """Random seed.""")
 
+network = importlib.import_module(FLAGS.model_def, 'inference')
+
 def main(argv=None):  # pylint: disable=unused-argument
+  
     if FLAGS.model_name:
         subdir = FLAGS.model_name
         preload_model = True
@@ -101,8 +107,8 @@ def main(argv=None):  # pylint: disable=unused-argument
         phase_train_placeholder = tf.placeholder(tf.bool, name='phase_train')
 
         # Build the inference graph
-        embeddings = facenet.inference_nn4_max_pool_96(images_placeholder, FLAGS.pool_type, FLAGS.use_lrn, 
-                                                       FLAGS.keep_probability, phase_train=phase_train_placeholder)
+        embeddings = network.inference(images_placeholder, FLAGS.pool_type, FLAGS.use_lrn, 
+                                       FLAGS.keep_probability, phase_train=phase_train_placeholder)
 
         # Split example embeddings into anchor, positive and negative
         anchor, positive, negative = tf.split(0, 3, embeddings)

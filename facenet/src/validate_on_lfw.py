@@ -4,11 +4,12 @@ is calculated and plotted
 """
 import tensorflow as tf
 import numpy as np
+import importlib
 import facenet
 import os
 import time
 
-# from tensorflow.python.platform import gfile
+FLAGS = tf.app.flags.FLAGS
 
 tf.app.flags.DEFINE_string('model_dir', '~/models/facenet/20160514-234418',
                            """Directory containing the graph definition and checkpoint files.""")
@@ -18,6 +19,8 @@ tf.app.flags.DEFINE_string('file_ext', '.png',
                            """The file extension for the LFW dataset, typically .png or .jpg.""")
 tf.app.flags.DEFINE_string('lfw_dir', '~/datasets/lfw/lfw_realigned/',
                            """Path to the data directory containing aligned face patches.""")
+tf.app.flags.DEFINE_string('model_def', 'models.nn4',
+                           """Model definition. Points to a module containing the definition of the inference graph.""")
 tf.app.flags.DEFINE_integer('batch_size', 60,
                             """Number of images to process in a batch.""")
 tf.app.flags.DEFINE_integer('image_size', 96,
@@ -29,23 +32,14 @@ tf.app.flags.DEFINE_boolean('use_lrn', False,
 tf.app.flags.DEFINE_integer('seed', 666,
                             """Random seed.""")
 
-FLAGS = tf.app.flags.FLAGS
+network = importlib.import_module(FLAGS.model_def, 'inference')
 
 def main():
-    
     
     pairs = read_pairs(os.path.expanduser(FLAGS.lfw_pairs))
     paths, actual_issame = get_paths(os.path.expanduser(FLAGS.lfw_dir), pairs)
     
     with tf.Graph().as_default():
-
-        # Creates graph from saved GraphDef
-        #  NOTE: This does not work at the moment. Needs tensorflow to store variables in the graph_def.
-#         graphdef_filename = os.path.join(os.path.expanduser(FLAGS.model_dir), 'graphdef', 'graph_def.pb')
-#         with gfile.FastGFile(graphdef_filename, 'rb') as f:
-#             graph_def = tf.GraphDef()
-#             graph_def.ParseFromString(f.read())
-#             images_placeholder, phase_train_placeholder, embeddings = tf.import_graph_def(graph_def, return_elements = ['input', 'phase_train', 'embeddings'], name='')
 
         # Placeholder for input images
         images_placeholder = tf.placeholder(tf.float32, shape=(FLAGS.batch_size, FLAGS.image_size, FLAGS.image_size, 3), name='input')
@@ -54,8 +48,8 @@ def main():
         phase_train_placeholder = tf.placeholder(tf.bool, name='phase_train')
           
         # Build the inference graph
-        embeddings = facenet.inference_nn4_max_pool_96(images_placeholder, FLAGS.pool_type, FLAGS.use_lrn, 
-                                                       1.0, phase_train=phase_train_placeholder)
+        embeddings = network.inference(images_placeholder, FLAGS.pool_type, FLAGS.use_lrn, 
+                                       1.0, phase_train=phase_train_placeholder)
           
         # Create a saver for restoring variable averages
         ema = tf.train.ExponentialMovingAverage(1.0)
