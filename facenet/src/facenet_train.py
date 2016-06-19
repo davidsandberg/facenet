@@ -94,6 +94,9 @@ def main(argv=None):  # pylint: disable=unused-argument
     dataset = facenet.get_dataset(FLAGS.data_dir)
     train_set, validation_set = facenet.split_dataset(dataset, FLAGS.train_set_fraction, FLAGS.split_mode)
     
+    shuffle = np.arange((FLAGS.images_per_person-1)*FLAGS.people_per_batch*4)
+    np.random.shuffle(shuffle)
+    
     print('Model directory: %s' % model_dir)
 
     with tf.Graph().as_default():
@@ -150,10 +153,10 @@ def main(argv=None):  # pylint: disable=unused-argument
                              global_step, embeddings, loss, train_op, summary_op, summary_writer)
                 # Test on validation set
                 validate(sess, validation_set, epoch, images_placeholder, phase_train_placeholder,
-                         global_step, embeddings, loss, 'validation', summary_writer)
+                         global_step, embeddings, loss, 'validation', summary_writer, shuffle)
                 # Test on training set
                 validate(sess, train_set, epoch, images_placeholder, phase_train_placeholder,
-                         global_step, embeddings, loss, 'training', summary_writer)
+                         global_step, embeddings, loss, 'training', summary_writer, shuffle)
 
                 if (epoch % FLAGS.checkpoint_period == 0) or (epoch==FLAGS.max_nrof_epochs-1):
                   # Save the model checkpoint
@@ -216,7 +219,7 @@ def train(sess, dataset, epoch, images_placeholder, phase_train_placeholder,
 
 
 def validate(sess, dataset, epoch, images_placeholder, phase_train_placeholder,
-             global_step, embeddings, loss, prefix_str, summary_writer):
+             global_step, embeddings, loss, prefix_str, summary_writer, shuffle):
     nrof_people = FLAGS.people_per_batch * 4
     print('Loading %s data' % prefix_str)
     # Sample people and load new data
@@ -224,7 +227,7 @@ def validate(sess, dataset, epoch, images_placeholder, phase_train_placeholder,
     image_data = facenet.load_data(image_paths, False, False, FLAGS.image_size)
 
     print('Selecting random triplets from %s set' % prefix_str)
-    triplets, nrof_triplets = facenet.select_validation_triplets(num_per_class, nrof_people, image_data, FLAGS.batch_size)
+    triplets, nrof_triplets = facenet.select_validation_triplets(num_per_class, nrof_people, image_data, FLAGS.batch_size, shuffle)
 
     start_time = time.time()
     anchor_list = []

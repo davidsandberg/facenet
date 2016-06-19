@@ -413,7 +413,7 @@ def select_training_triplets(embeddings, num_per_class, image_data, people_per_b
   return triplets, nrof_random_negs, nrof_triplets
 
   
-def select_validation_triplets(num_per_class, people_per_batch, image_data, batch_size):
+def select_validation_triplets(num_per_class, people_per_batch, image_data, batch_size, shuffle):
 
   nrof_images = image_data.shape[0]
   nrof_trip = nrof_images - people_per_batch
@@ -423,8 +423,6 @@ def select_validation_triplets(num_per_class, people_per_batch, image_data, batc
   ns_arr = np.zeros(shp)
   
   trip_idx = 0
-  shuffle = np.arange(nrof_trip)
-  np.random.shuffle(shuffle)
   emb_start_idx = 0
   for i in xrange(len(num_per_class)):
     n = num_per_class[i]
