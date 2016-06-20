@@ -10,6 +10,7 @@ from datetime import datetime
 from subprocess import Popen, PIPE
 import os.path
 import time
+import random
 
 import tensorflow as tf
 import numpy as np
@@ -94,9 +95,6 @@ def main(argv=None):  # pylint: disable=unused-argument
     dataset = facenet.get_dataset(FLAGS.data_dir)
     train_set, validation_set = facenet.split_dataset(dataset, FLAGS.train_set_fraction, FLAGS.split_mode)
     
-    shuffle = np.arange((FLAGS.images_per_person-1)*FLAGS.people_per_batch*4)
-    np.random.shuffle(shuffle)
-    
     print('Model directory: %s' % model_dir)
 
     with tf.Graph().as_default():
@@ -104,7 +102,7 @@ def main(argv=None):  # pylint: disable=unused-argument
         global_step = tf.Variable(0, trainable=False)
 
         # Placeholder for input images
-        images_placeholder = tf.placeholder(tf.float32, shape=(FLAGS.batch_size, FLAGS.image_size, FLAGS.image_size, 3), name='input')
+        images_placeholder = tf.placeholder(tf.float32, shape=(None, FLAGS.image_size, FLAGS.image_size, 3), name='input')
 
         # Placeholder for phase_train
         phase_train_placeholder = tf.placeholder(tf.bool, name='phase_train')
@@ -151,25 +149,25 @@ def main(argv=None):  # pylint: disable=unused-argument
                 # Train for one epoch
                 step = train(sess, train_set, epoch, images_placeholder, phase_train_placeholder,
                              global_step, embeddings, loss, train_op, summary_op, summary_writer)
+                
+                # Store the state of the random number generator
+                rng_state = random.getstate()
                 # Test on validation set
+                np.random.seed(seed=FLAGS.seed)
                 validate(sess, validation_set, epoch, images_placeholder, phase_train_placeholder,
-                         global_step, embeddings, loss, 'validation', summary_writer, shuffle)
+                         global_step, embeddings, loss, 'validation', summary_writer)
                 # Test on training set
+                np.random.seed(seed=FLAGS.seed)
                 validate(sess, train_set, epoch, images_placeholder, phase_train_placeholder,
-                         global_step, embeddings, loss, 'training', summary_writer, shuffle)
-
+                         global_step, embeddings, loss, 'training', summary_writer)
+                # Restore state of the random number generator
+                random.setstate(rng_state)
+  
                 if (epoch % FLAGS.checkpoint_period == 0) or (epoch==FLAGS.max_nrof_epochs-1):
                   # Save the model checkpoint
                   print('Saving checkpoint')
                   checkpoint_path = os.path.join(model_dir, 'model.ckpt')
                   saver.save(sess, checkpoint_path, global_step=step)
-                  
-                # Save the model if it hasn't been saved before
-                graphdef_dir = os.path.join(model_dir, 'graphdef')
-                graphdef_filename = 'graph_def.pb'
-                if (not os.path.exists(os.path.join(graphdef_dir, graphdef_filename))):
-                    print('Saving graph definition')
-                    tf.train.write_graph(sess.graph_def, graphdef_dir, graphdef_filename, False)
 
 
 def train(sess, dataset, epoch, images_placeholder, phase_train_placeholder,
@@ -219,7 +217,7 @@ def train(sess, dataset, epoch, images_placeholder, phase_train_placeholder,
 
 
 def validate(sess, dataset, epoch, images_placeholder, phase_train_placeholder,
-             global_step, embeddings, loss, prefix_str, summary_writer, shuffle):
+             global_step, embeddings, loss, prefix_str, summary_writer):
     nrof_people = FLAGS.people_per_batch * 4
     print('Loading %s data' % prefix_str)
     # Sample people and load new data
@@ -227,7 +225,7 @@ def validate(sess, dataset, epoch, images_placeholder, phase_train_placeholder,
     image_data = facenet.load_data(image_paths, False, False, FLAGS.image_size)
 
     print('Selecting random triplets from %s set' % prefix_str)
-    triplets, nrof_triplets = facenet.select_validation_triplets(num_per_class, nrof_people, image_data, FLAGS.batch_size, shuffle)
+    triplets, nrof_triplets = facenet.select_validation_triplets(num_per_class, nrof_people, image_data, FLAGS.batch_size)
 
     start_time = time.time()
     anchor_list = []
