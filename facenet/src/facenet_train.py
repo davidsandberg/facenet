@@ -10,7 +10,6 @@ from datetime import datetime
 from subprocess import Popen, PIPE
 import os.path
 import time
-import random
 
 import tensorflow as tf
 import numpy as np
@@ -151,7 +150,7 @@ def main(argv=None):  # pylint: disable=unused-argument
                              global_step, embeddings, loss, train_op, summary_op, summary_writer)
                 
                 # Store the state of the random number generator
-                rng_state = random.getstate()
+                rng_state = np.random.get_state()
                 # Test on validation set
                 np.random.seed(seed=FLAGS.seed)
                 validate(sess, validation_set, epoch, images_placeholder, phase_train_placeholder,
@@ -161,7 +160,7 @@ def main(argv=None):  # pylint: disable=unused-argument
                 validate(sess, train_set, epoch, images_placeholder, phase_train_placeholder,
                          global_step, embeddings, loss, 'training', summary_writer)
                 # Restore state of the random number generator
-                random.setstate(rng_state)
+                np.random.set_state(rng_state)
   
                 if (epoch % FLAGS.checkpoint_period == 0) or (epoch==FLAGS.max_nrof_epochs-1):
                   # Save the model checkpoint
