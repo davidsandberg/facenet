@@ -34,7 +34,21 @@ def main():
             
             print('Reading model "%s"' % FLAGS.model_file)
             new_saver = tf.train.import_meta_graph(os.path.expanduser(FLAGS.model_file+'.meta'))
-            new_saver.restore(sess, os.path.expanduser(FLAGS.model_file))
+            
+            all_vars_dict = {var.name: var for var in tf.all_variables()}
+
+            restore_vars = {}
+            for var_name in all_vars_dict:
+                if '/ExponentialMovingAverage' in var_name:
+                    param_name = var_name.replace('/ExponentialMovingAverage', '')
+                    if param_name in all_vars_dict:
+                        param = all_vars_dict[param_name]
+                        print('%s\t%s' % (var_name, param))
+                        restore_vars[var_name] = param
+            
+            saver = tf.train.Saver(restore_vars, saver_def=new_saver.as_saver_def())
+            saver.restore(sess, os.path.expanduser(FLAGS.model_file))
+            
             images_placeholder = tf.get_default_graph().get_tensor_by_name("input:0")
             phase_train_placeholder = tf.get_default_graph().get_tensor_by_name("phase_train:0")
             embeddings = tf.get_default_graph().get_tensor_by_name("embeddings:0")
