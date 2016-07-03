@@ -17,12 +17,14 @@ tf.app.flags.DEFINE_string('model_dir', '~/models/facenet/20160514-234418',
                            """Directory containing the graph definition and checkpoint files.""")
 tf.app.flags.DEFINE_string('model_def', 'models.nn4',
                            """Model definition. Points to a module containing the definition of the inference graph.""")
+tf.app.flags.DEFINE_integer('seed', 666, """Random seed.""")
 
 network = importlib.import_module(FLAGS.model_def, 'inference')
 
 def main():
 
   # Start with a gray image with a little noise
+  np.random.seed(seed=FLAGS.seed)
   img_noise = np.random.uniform(size=(96,96,3)) + 100.0
 
   sess = tf.Session()
@@ -89,7 +91,7 @@ def main():
   
   def T(layer):
       '''Helper for getting layer output tensor'''
-      return tf.get_default_graph().get_tensor_by_name("%s:0"%layer)
+      return tf.get_default_graph().get_tensor_by_name('%s:0' % layer)
   
   def render_naive(t_obj, img0=img_noise, iter_n=20, step=1.0):
       t_score = tf.reduce_mean(t_obj) # defining the optimization objective
@@ -236,15 +238,29 @@ def main():
               img += g*(step / (np.abs(g).mean()+1e-7))
           showarray(img/255.0)
 
+  layers = [op.name for op in tf.get_default_graph().get_operations() if op.type=='Conv2D']
+  feature_nums = {layer: int(T(layer).get_shape()[-1]) for layer in layers}
+
+  print('Number of layers: %d' % len(layers))
+
+  for layer in sorted(feature_nums.keys()):
+    print('%s%d' % ((layer+': ').ljust(40), feature_nums[layer]))
 
   # Picking some internal layer. Note that we use outputs before applying the ReLU nonlinearity
   # to have non-zero gradients for features with negative initial activations.
-  layer = 'incept5b/incept5b'
-  #layer = 'mixed4d_3x3_bottleneck_pre_relu'
-  channel = 139 # picking some feature channel to visualize
+  layer = 'incept5b/in4_conv1x1_55/Conv2D'
+  print('Number of features in layer "%s": %d' % (layer, feature_nums[layer]))
+
+#   channels = range(feature_nums[layer])
+#   np.random.shuffle(channels)
+#   for i in range(16):
+#     print('Rendering feature %d' % channels[i])
+#     plt.subplot(4,4,i+1)
+#     render_multiscale(T(layer)[:,:,:,channels[i]])
+
+  channel = 0 # picking some feature channel to visualize
   
-#   for ch in range(0,139):
-#     render_naive(T(layer)[:,:,:,ch])
+  render_naive(T(layer)[:,:,:,channel])
 
   render_multiscale(T(layer)[:,:,:,channel])
 
@@ -253,10 +269,6 @@ def main():
   k5x5 = k[:,:,None,None]/k.sum()*np.eye(3, dtype=np.float32)
   
   render_lapnorm(T(layer)[:,:,:,channel])
-  
-  render_lapnorm(T(layer)[:,:,:,65])
-  
-  render_lapnorm(T('mixed3b_1x1_pre_relu')[:,:,:,101])
   
   render_lapnorm(T(layer)[:,:,:,65]+T(layer)[:,:,:,139], octave_n=4)
   
