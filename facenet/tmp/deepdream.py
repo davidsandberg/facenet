@@ -1,55 +1,38 @@
-"""Visualize individual feature channels and their combinations to explore the space of patterns learned by the neural network
-Based on http://nbviewer.jupyter.org/github/tensorflow/tensorflow/blob/master/tensorflow/examples/tutorials/deepdream/deepdream.ipynb
-"""
-
-import os
+# boilerplate code
 import numpy as np
 from functools import partial
 import PIL.Image
 
 import tensorflow as tf
 import matplotlib.pyplot as plt
-import importlib
 
-FLAGS = tf.app.flags.FLAGS
-
-tf.app.flags.DEFINE_string('model_dir', '~/models/facenet/20160514-234418',
-                           """Directory containing the graph definition and checkpoint files.""")
-tf.app.flags.DEFINE_string('model_def', 'models.nn4',
-                           """Model definition. Points to a module containing the definition of the inference graph.""")
-
-network = importlib.import_module(FLAGS.model_def, 'inference')
 
 def main():
-
-  # Start with a gray image with a little noise
-  img_noise = np.random.uniform(size=(96,96,3)) + 100.0
-
-  sess = tf.Session()
-
-  t_input = tf.placeholder(np.float32, name='input') # define the input tensor
-  image_mean = 117.0
-  t_preprocessed = tf.expand_dims(t_input-image_mean, 0)
-   
-  # Placeholder for phase_train
-  phase_train_placeholder = tf.placeholder(tf.bool, name='phase_train')
-
-  # Build the inference graph
-  _ = network.inference(t_preprocessed, 'MAX', False, 1.0, phase_train=phase_train_placeholder)
-    
-  # Create a saver for restoring variable averages
-  ema = tf.train.ExponentialMovingAverage(1.0)
-  restore_vars = ema.variables_to_restore()
-  saver = tf.train.Saver(restore_vars)
-
-  # Restore the parameters
-  ckpt = tf.train.get_checkpoint_state(os.path.expanduser(FLAGS.model_dir))
-  if ckpt and ckpt.model_checkpoint_path:
-      saver.restore(sess, ckpt.model_checkpoint_path)
-  else:
-      raise ValueError('Checkpoint not found')
-
   
+  # download pre-trained model by running the command below in a shell
+  #  wget https://storage.googleapis.com/download.tensorflow.org/models/inception5h.zip && unzip inception5h.zip
+
+  # start with a gray image with a little noise
+  img_noise = np.random.uniform(size=(224,224,3)) + 100.0
+
+  model_fn = 'tensorflow_inception_graph.pb'
+  
+  # creating TensorFlow session and loading the model
+  graph = tf.Graph()
+  sess = tf.InteractiveSession(graph=graph)
+  with tf.gfile.FastGFile(model_fn, 'rb') as f:
+      graph_def = tf.GraphDef()
+      graph_def.ParseFromString(f.read())
+  t_input = tf.placeholder(np.float32, name='input') # define the input tensor
+  imagenet_mean = 117.0
+  t_preprocessed = tf.expand_dims(t_input-imagenet_mean, 0)
+  tf.import_graph_def(graph_def, {'input':t_preprocessed})
+  
+  layers = [op.name for op in graph.get_operations() if op.type=='Conv2D' and 'import/' in op.name]
+  feature_nums = [int(graph.get_tensor_by_name(name+':0').get_shape()[-1]) for name in layers]
+  
+  print('Number of layers', len(layers))
+  print('Total number of feature channels:', sum(feature_nums))
 
 
   # Helper functions for TF Graph visualization
@@ -82,14 +65,13 @@ def main():
       plt.imshow(a)
       plt.show()
       
-      
   def visstd(a, s=0.1):
       '''Normalize the image range for visualization'''
       return (a-a.mean())/max(a.std(), 1e-4)*s + 0.5
   
   def T(layer):
       '''Helper for getting layer output tensor'''
-      return tf.get_default_graph().get_tensor_by_name("%s:0"%layer)
+      return graph.get_tensor_by_name("import/%s:0"%layer)
   
   def render_naive(t_obj, img0=img_noise, iter_n=20, step=1.0):
       t_score = tf.reduce_mean(t_obj) # defining the optimization objective
@@ -97,10 +79,13 @@ def main():
       
       img = img0.copy()
       for _ in range(iter_n):
-          g, _ = sess.run([t_grad, t_score], {t_input:img, phase_train_placeholder:False})
+          g, _ = sess.run([t_grad, t_score], {t_input:img})
           # normalizing the gradient, so the same step size should work 
           g /= g.std()+1e-8         # for different layers and networks
           img += g*step
+#          print(score, end = ' ')
+#      clear_output()
+#      print('\n')
       showarray(visstd(img))
       
   def tffunc(*argtypes):
@@ -111,7 +96,7 @@ def main():
       def wrap(f):
           out = f(*placeholders)
           def wrapper(*args, **kw):
-              return out.eval(dict(zip(placeholders, args)), session=sess)
+              return out.eval(dict(zip(placeholders, args)), session=kw.get('session'))
           return wrapper
       return wrap
   
@@ -134,7 +119,7 @@ def main():
       for y in range(0, max(h-sz//2, sz),sz):
           for x in range(0, max(w-sz//2, sz),sz):
               sub = img_shift[y:y+sz,x:x+sz]
-              g = sess.run(t_grad, {t_input:sub, phase_train_placeholder:False})
+              g = sess.run(t_grad, {t_input:sub})
               grad[y:y+sz,x:x+sz] = g
       return np.roll(np.roll(grad, -sx, 1), -sy, 0)    
     
@@ -236,15 +221,12 @@ def main():
               img += g*(step / (np.abs(g).mean()+1e-7))
           showarray(img/255.0)
 
-
   # Picking some internal layer. Note that we use outputs before applying the ReLU nonlinearity
   # to have non-zero gradients for features with negative initial activations.
-  layer = 'incept5b/incept5b'
-  #layer = 'mixed4d_3x3_bottleneck_pre_relu'
+  layer = 'mixed4d_3x3_bottleneck_pre_relu'
   channel = 139 # picking some feature channel to visualize
   
-#   for ch in range(0,139):
-#     render_naive(T(layer)[:,:,:,ch])
+  render_naive(T(layer)[:,:,:,channel])
 
   render_multiscale(T(layer)[:,:,:,channel])
 
@@ -260,13 +242,14 @@ def main():
   
   render_lapnorm(T(layer)[:,:,:,65]+T(layer)[:,:,:,139], octave_n=4)
   
-  # Not tested yet
-  if False:  
-    img0 = PIL.Image.open('pilatus800.jpg')
-    img0 = np.float32(img0)
-    showarray(img0/255.0)
-    render_deepdream(tf.square(T('mixed4c')), img0)
-    render_deepdream(T(layer)[:,:,:,139], img0)
+  
+  img0 = PIL.Image.open('pilatus800.jpg')
+  img0 = np.float32(img0)
+  showarray(img0/255.0)
+  
+  render_deepdream(tf.square(T('mixed4c')), img0)
+  
+  render_deepdream(T(layer)[:,:,:,139], img0)
   
 
 if __name__ == '__main__':
