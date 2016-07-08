@@ -34,8 +34,8 @@ tf.app.flags.DEFINE_integer('seed', 666,
 
 network = importlib.import_module(FLAGS.model_def, 'inference')
 
-def main():
-    
+def main(argv=None):
+  
     pairs = read_pairs(os.path.expanduser(FLAGS.lfw_pairs))
     paths, actual_issame = get_paths(os.path.expanduser(FLAGS.lfw_dir), pairs)
     
@@ -81,6 +81,9 @@ def main():
             embeddings2 = emb_array[1::2]
             tpr, fpr, accuracy = facenet.calculate_roc(thresholds, embeddings1, embeddings2, np.asarray(actual_issame), FLAGS.seed)
             print('Accuracy: %1.3f+-%1.3f' % (np.mean(accuracy), np.std(accuracy)))
+            thresholds = np.arange(0, 4, 0.001)
+            val, val_std, far = facenet.calculate_val(thresholds, embeddings1, embeddings2, np.asarray(actual_issame), 1e-3, FLAGS.seed)
+            print('VAL=%2.5f+-%2.5f @ FAR=%2.5f' % (val, val_std, far))
             facenet.plot_roc(fpr, tpr, 'NN4')
             
 
@@ -115,6 +118,6 @@ def read_pairs(pairs_filename):
             pairs.append(pair)
     assert(len(pairs) == 6000)
     return np.array(pairs)
-
+  
 if __name__ == '__main__':
-    main()
+  tf.app.run()
