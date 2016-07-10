@@ -32,30 +32,19 @@ def main():
 
         with tf.Session() as sess:
             
-            print('Reading model "%s"' % FLAGS.model_file)
-            new_saver = tf.train.import_meta_graph(os.path.expanduser(FLAGS.model_file+'.meta'))
+            # Load the model
+            print('Loading model "%s"' % FLAGS.model_file)
+            load_model(FLAGS.model_file)
             
-            all_vars_dict = {var.name: var for var in tf.all_variables()}
-
-            restore_vars = {}
-            for var_name in all_vars_dict:
-                if '/ExponentialMovingAverage' in var_name:
-                    param_name = var_name.replace('/ExponentialMovingAverage', '')
-                    if param_name in all_vars_dict:
-                        param = all_vars_dict[param_name]
-                        print('%s\t%s' % (var_name, param))
-                        restore_vars[var_name] = param
-            
-            saver = tf.train.Saver(restore_vars, saver_def=new_saver.as_saver_def())
-            saver.restore(sess, os.path.expanduser(FLAGS.model_file))
-            
+            # Get input and output tensors
             images_placeholder = tf.get_default_graph().get_tensor_by_name("input:0")
             phase_train_placeholder = tf.get_default_graph().get_tensor_by_name("phase_train:0")
             embeddings = tf.get_default_graph().get_tensor_by_name("embeddings:0")
             image_size = images_placeholder.get_shape()[1]
-    
+            
+            # Run forward pass to calculate embeddings
             nrof_images = len(paths)
-            nrof_batches = int(nrof_images / FLAGS.batch_size)  # Run forward pass on the remainder in the last batch
+            nrof_batches = int(nrof_images / FLAGS.batch_size)
             emb_list = []
             for i in range(nrof_batches):
                 start_time = time.time()
@@ -66,7 +55,8 @@ def main():
                 duration = time.time() - start_time
                 print('Calculated embeddings for batch %d of %d: time=%.3f seconds' % (i+1,nrof_batches, duration))
             emb_array = np.vstack(emb_list)  # Stack the embeddings to a nrof_examples_per_epoch x 128 matrix
-            
+
+            # Calculate evaluation metrics
             thresholds = np.arange(0, 4, 0.01)
             embeddings1 = emb_array[0::2]
             embeddings2 = emb_array[1::2]
@@ -74,6 +64,15 @@ def main():
             print('Accuracy: %1.3f+-%1.3f' % (np.mean(accuracy), np.std(accuracy)))
             facenet.plot_roc(fpr, tpr, 'NN4')
             
+def load_model(model_file):
+    tf.train.import_meta_graph(os.path.expanduser(FLAGS.model_file+'.meta'))
+    ema = tf.train.ExponentialMovingAverage(1.0)
+    restore_vars = {}
+    for key, value in ema.variables_to_restore().items():
+        if 'ExponentialMovingAverage' in key:
+            restore_vars[key] = value
+    saver = tf.train.Saver(restore_vars, name='ema_restore')
+    saver.restore(tf.get_default_session(), os.path.expanduser(model_file))
 
 def get_paths(lfw_dir, pairs):
     nrof_skipped_pairs = 0
