@@ -35,7 +35,7 @@ def main(argv=None):
             
             # Load the model
             print('Loading model "%s"' % FLAGS.model_file)
-            load_model(FLAGS.model_file)
+            facenet.load_model(FLAGS.model_file)
             
             # Get input and output tensors
             images_placeholder = tf.get_default_graph().get_tensor_by_name("input:0")
@@ -68,16 +68,6 @@ def main(argv=None):
             print('Validation rate: %2.5f+-%2.5f @ FAR=%2.5f' % (val, val_std, far))
             facenet.plot_roc(fpr, tpr, 'NN4')
             
-def load_model(model_file):
-    tf.train.import_meta_graph(os.path.expanduser(FLAGS.model_file+'.meta'))
-    ema = tf.train.ExponentialMovingAverage(1.0)
-    restore_vars = {}
-    for key, value in ema.variables_to_restore().items():
-        if 'ExponentialMovingAverage' in key:
-            restore_vars[key] = value
-    saver = tf.train.Saver(restore_vars, name='ema_restore')
-    saver.restore(tf.get_default_session(), os.path.expanduser(model_file))
-
 def get_paths(lfw_dir, pairs):
     nrof_skipped_pairs = 0
     path_list = []

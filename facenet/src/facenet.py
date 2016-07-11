@@ -537,6 +537,16 @@ def sample_people(dataset, people_per_batch, images_per_person):
 
   return image_paths, num_per_class
 
+def load_model(model_file):
+    tf.train.import_meta_graph(os.path.expanduser(model_file+'.meta'))
+    ema = tf.train.ExponentialMovingAverage(1.0)
+    restore_vars = {}
+    for key, value in ema.variables_to_restore().items():
+        if 'ExponentialMovingAverage' in key:
+            restore_vars[key] = value
+    saver = tf.train.Saver(restore_vars, name='ema_restore')
+    saver.restore(tf.get_default_session(), os.path.expanduser(model_file))
+
 def calculate_roc(thresholds, embeddings1, embeddings2, actual_issame, seed):
   assert(embeddings1.shape[0] == embeddings2.shape[0])
   assert(embeddings1.shape[1] == embeddings2.shape[1])
