@@ -17,7 +17,7 @@ tf.app.flags.DEFINE_integer('image_size', 110, """Image size (height, width) in 
 tf.app.flags.DEFINE_integer('face_size', 96, """Size of the face thumbnail (height, width) in pixels.""")
 tf.app.flags.DEFINE_boolean('use_new_alignment', False,
                             """Indicates if the improved alignment transformation should be used.""")
-tf.app.flags.DEFINE_string('prealigned_path', '', """Replace image with a pre-aligned version when face detection fails.""")
+tf.app.flags.DEFINE_string('prealigned_dir', '', """Replace image with a pre-aligned version when face detection fails.""")
 tf.app.flags.DEFINE_float('prealigned_scale', 0.87, """The amount of scaling to apply to prealigned images before taking the center crop.""")
 
 FLAGS = tf.app.flags.FLAGS
