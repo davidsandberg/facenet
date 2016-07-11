@@ -1,6 +1,7 @@
 """Validate a face recognizer on the "Labeled Faces in the Wild" dataset (http://vis-www.cs.umass.edu/lfw/).
 Embeddings are calculated using the pairs from http://vis-www.cs.umass.edu/lfw/pairs.txt and the ROC curve
-is calculated and plotted
+is calculated and plotted. Both the model metagraph and the model parameters need to exist
+in the same directory, and the metagraph should have the extension '.meta'.
 """
 import tensorflow as tf
 import numpy as np
@@ -11,8 +12,8 @@ import time
 FLAGS = tf.app.flags.FLAGS
 
 tf.app.flags.DEFINE_string('model_file', '~/models/facenet/20160514-234418/model.ckpt-500000',
-                           """File containing the graph definition as a MetaGraph.""")
-tf.app.flags.DEFINE_string('lfw_pairs', '~/repo/facenet/data/lfw/pairs.txt',
+                           """File containing the model parameters as well as the model metagraph (with extension '.meta')""")
+tf.app.flags.DEFINE_string('lfw_pairs', '../data/pairs.txt',
                            """The file containing the pairs to use for validation.""")
 tf.app.flags.DEFINE_string('file_ext', '.png',
                            """The file extension for the LFW dataset, typically .png or .jpg.""")
@@ -64,7 +65,7 @@ def main(argv=None):
             print('Accuracy: %1.3f+-%1.3f' % (np.mean(accuracy), np.std(accuracy)))
             thresholds = np.arange(0, 4, 0.001)
             val, val_std, far = facenet.calculate_val(thresholds, embeddings1, embeddings2, np.asarray(actual_issame), 1e-3, FLAGS.seed)
-            print('VAL=%2.5f+-%2.5f @ FAR=%2.5f' % (val, val_std, far))
+            print('Validation rate: %2.5f+-%2.5f @ FAR=%2.5f' % (val, val_std, far))
             facenet.plot_roc(fpr, tpr, 'NN4')
             
 def load_model(model_file):
