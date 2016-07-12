@@ -20,32 +20,34 @@ import facenet
 # Column6: ImageData_Base64Encoded
 
 def main(args):
-  output_dir = os.path.expanduser(args.output_dir)
-
-  if not os.path.exists(output_dir):
-      os.mkdir(output_dir)
-
-  # Store some git revision info in a text file in the log directory
-  src_path,_ = os.path.split(os.path.realpath(__file__))
-  facenet.store_revision_info(src_path, output_dir, ' '.join(sys.argv))
+    output_dir = os.path.expanduser(args.output_dir)
   
-  for f in args.tsv_files:
-      for line in f:
-          fields = line.split('\t')
-          class_dir = fields[0]
-          img_name = fields[1] + '-' + fields[4] + '.png'
-          img_string = fields[6]
-          img_dec_string = base64.b64decode(img_string)
-          img_data = np.fromstring(img_dec_string, dtype=np.uint8)
-          img = cv2.imdecode(img_data, cv2.cv.CV_LOAD_IMAGE_COLOR)
-          if args.size>0:
-              img = misc.imresize(img, (args.size, args.size), interp='bilinear')
-          full_class_dir = os.path.join(output_dir, class_dir)
-          if not os.path.exists(full_class_dir):
-              os.mkdir(full_class_dir)
-          full_path = os.path.join(full_class_dir, img_name)
-          cv2.imwrite(full_path, img)
-          print('%s' % full_path)
+    if not os.path.exists(output_dir):
+        os.mkdir(output_dir)
+  
+    # Store some git revision info in a text file in the log directory
+    src_path,_ = os.path.split(os.path.realpath(__file__))
+    facenet.store_revision_info(src_path, output_dir, ' '.join(sys.argv))
+    
+    i = 0
+    for f in args.tsv_files:
+        for line in f:
+            fields = line.split('\t')
+            class_dir = fields[0]
+            img_name = fields[1] + '-' + fields[4] + '.png'
+            img_string = fields[6]
+            img_dec_string = base64.b64decode(img_string)
+            img_data = np.fromstring(img_dec_string, dtype=np.uint8)
+            img = cv2.imdecode(img_data, cv2.cv.CV_LOAD_IMAGE_COLOR)
+            if args.size>0:
+                img = misc.imresize(img, (args.size, args.size), interp='bilinear')
+            full_class_dir = os.path.join(output_dir, class_dir)
+            if not os.path.exists(full_class_dir):
+                os.mkdir(full_class_dir)
+            full_path = os.path.join(full_class_dir, img_name)
+            cv2.imwrite(full_path, img)
+            print('%8d: %s' % (i, full_path))
+            i += 1
 
   
 if __name__ == '__main__':
