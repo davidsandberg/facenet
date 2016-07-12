@@ -1,7 +1,6 @@
 """Performs face alignment and stores face thumbnails in the output directory."""
 
 from scipy import misc
-from subprocess import Popen, PIPE
 import tensorflow as tf
 import facenet
 import os
@@ -30,7 +29,7 @@ def main(argv=None):
         os.makedirs(output_dir)
     # Store some git revision info in a text file in the log directory
     src_path,_ = os.path.split(os.path.realpath(__file__))
-    store_revision_info(src_path, output_dir, ' '.join(argv))
+    facenet.store_revision_info(src_path, output_dir, ' '.join(argv))
     dataset = facenet.get_dataset(FLAGS.input_dir)
     random.shuffle(dataset)
     # Scale the image such that the face fills the frame when cropped to crop_size
@@ -99,24 +98,6 @@ def main(argv=None):
     print('Number of successfully aligned images: %d' % nrof_successfully_aligned)
     print('Number of pre-aligned images: %d' % nrof_prealigned_images)
             
-def store_revision_info(src_path, output_dir, arg_string):
-  
-  # Get git hash 
-  gitproc = Popen(['git', 'rev-parse', 'HEAD'], stdout = PIPE, cwd=src_path)
-  (stdout, _) = gitproc.communicate()
-  git_hash = stdout.strip()
-
-  # Get local changes
-  gitproc = Popen(['git', 'diff', 'HEAD'], stdout = PIPE, cwd=src_path)
-  (stdout, _) = gitproc.communicate()
-  git_diff = stdout.strip()
-  
-  # Store a text file in the log directory
-  rev_info_filename = os.path.join(output_dir, 'revision_info.txt')
-  with open(rev_info_filename, "w") as text_file:
-    text_file.write('arguments: %s\n--------------------\n' % arg_string)
-    text_file.write('git hash: %s\n--------------------\n' % git_hash)
-    text_file.write('%s' % git_diff)
 
 if __name__ == '__main__':
     tf.app.run()

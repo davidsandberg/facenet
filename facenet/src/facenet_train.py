@@ -7,7 +7,6 @@ from __future__ import division
 from __future__ import print_function
 
 from datetime import datetime
-from subprocess import Popen, PIPE
 import os.path
 import time
 
@@ -86,10 +85,10 @@ def main(argv=None):  # pylint: disable=unused-argument
     if not os.path.isdir(model_dir):  # Create the model directory if it doesn't exist
         os.mkdir(model_dir)
 
-    # Store some git revision info in a text file in the log directory        
+    # Store some git revision info in a text file in the log directory
     src_path,_ = os.path.split(os.path.realpath(__file__))
-    store_training_info(src_path, log_dir, ' '.join(argv))
-    
+    facenet.store_revision_info(src_path, log_dir, ' '.join(argv))
+
     np.random.seed(seed=FLAGS.seed)
     dataset = facenet.get_dataset(FLAGS.data_dir)
     train_set, validation_set = facenet.split_dataset(dataset, FLAGS.train_set_fraction, FLAGS.split_mode)
@@ -263,25 +262,7 @@ def validate(sess, dataset, epoch, images_placeholder, phase_train_placeholder,
     summary_writer.add_summary(summary, step)
 
     if False:
-      facenet.plot_roc(fpr, tpr, 'NN4')
+        facenet.plot_roc(fpr, tpr, 'NN4')
 
-def store_training_info(src_path, log_dir, arg_string):
-    # Get git hash 
-    gitproc = Popen(['git', 'rev-parse', 'HEAD'], stdout = PIPE, cwd=src_path)
-    (stdout, _) = gitproc.communicate()
-    git_hash = stdout.strip()
-
-    # Get local changes
-    gitproc = Popen(['git', 'diff', 'HEAD'], stdout = PIPE, cwd=src_path)
-    (stdout, _) = gitproc.communicate()
-    git_diff = stdout.strip()
-    
-    # Store a text file in the log directory
-    rev_info_filename = os.path.join(log_dir, 'revision_info.txt')
-    with open(rev_info_filename, "w") as text_file:
-      text_file.write('arguments: %s\n--------------------\n' % arg_string)
-      text_file.write('git hash: %s\n--------------------\n' % git_hash)
-      text_file.write('%s' % git_diff)
-      
 if __name__ == '__main__':
     tf.app.run()

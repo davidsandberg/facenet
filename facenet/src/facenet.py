@@ -6,8 +6,7 @@ from __future__ import division
 from __future__ import print_function
 
 import os
-from os import path
-from six.moves import xrange
+from subprocess import Popen, PIPE
 import tensorflow as tf
 from tensorflow.python.ops import array_ops
 from tensorflow.python.ops import control_flow_ops
@@ -324,7 +323,7 @@ def to_rgb(img):
 def load_data(image_paths, do_random_crop, do_random_flip, image_size, do_prewhiten=True):
   nrof_samples = len(image_paths)
   img_list = [None] * nrof_samples
-  for i in xrange(nrof_samples):
+  for i in range(nrof_samples):
     img = misc.imread(image_paths[i])
     if img.ndim == 2:
       img = to_rgb(img)
@@ -639,3 +638,22 @@ def calculate_val_far(threshold, dist, actual_issame):
   val = float(true_accept) / float(n_same)
   far = float(false_accept) / float(n_diff)
   return val, far
+
+def store_revision_info(src_path, output_dir, arg_string):
+  
+  # Get git hash
+  gitproc = Popen(['git', 'rev-parse', 'HEAD'], stdout = PIPE, cwd=src_path)
+  (stdout, _) = gitproc.communicate()
+  git_hash = stdout.strip()
+
+  # Get local changes
+  gitproc = Popen(['git', 'diff', 'HEAD'], stdout = PIPE, cwd=src_path)
+  (stdout, _) = gitproc.communicate()
+  git_diff = stdout.strip()
+  
+  # Store a text file in the log directory
+  rev_info_filename = os.path.join(output_dir, 'revision_info.txt')
+  with open(rev_info_filename, "w") as text_file:
+    text_file.write('arguments: %s\n--------------------\n' % arg_string)
+    text_file.write('git hash: %s\n--------------------\n' % git_hash)
+    text_file.write('%s' % git_diff)
