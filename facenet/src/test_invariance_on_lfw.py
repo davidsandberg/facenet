@@ -3,85 +3,57 @@ This requires test images to be cropped a bit wider than the normal to give some
 """
 import tensorflow as tf
 import numpy as np
-import importlib
 import facenet
-import matplotlib as mpl
 import matplotlib.pyplot as plt
 from scipy import misc
 import os
 
 FLAGS = tf.app.flags.FLAGS
 
-tf.app.flags.DEFINE_string('model_dir', '~/models/facenet/20160514-234418',
-                           """Directory containing the graph definition and checkpoint files.""")
+tf.app.flags.DEFINE_string('model_file', '~/models/facenet/20160514-234418/model.ckpt-500000',
+                           """File containing the model parameters as well as the model metagraph (with extension '.meta')""")
 tf.app.flags.DEFINE_string('lfw_pairs', '~/repo/facenet/data/lfw/pairs.txt',
                            """The file containing the pairs to use for validation.""")
 tf.app.flags.DEFINE_string('file_ext', '.png',
                            """The file extension for the LFW dataset, typically .png or .jpg.""")
 tf.app.flags.DEFINE_string('lfw_dir', '~/datasets/lfw/lfw_aligned_224/',
                            """Path to the data directory containing aligned face patches, cropped to give some room for image transformations.""")
-tf.app.flags.DEFINE_string('model_def', 'models.nn4',
-                           """Model definition. Points to a module containing the definition of the inference graph.""")
 tf.app.flags.DEFINE_integer('batch_size', 60,
                             """Number of images to process in a batch.""")
-tf.app.flags.DEFINE_integer('image_size', 96,
-                            """Image size (height, width) in pixels.""")
 tf.app.flags.DEFINE_integer('orig_image_size', 224,
                             """Image size (height, width) in pixels of the original (uncropped/unscaled) images.""")
-tf.app.flags.DEFINE_string('pool_type', 'MAX',
-                          """The type of pooling to use for some of the inception layers {'MAX', 'L2'}.""")
-tf.app.flags.DEFINE_boolean('use_lrn', False,
-                          """Enables Local Response Normalization after the first layers of the inception network.""")
 tf.app.flags.DEFINE_integer('seed', 666, """Random seed.""")
 
-network = importlib.import_module(FLAGS.model_def, 'inference')
-
-def main():
-    
-    # Creates graph from saved GraphDef
-    #  NOTE: This does not work at the moment. Needs tensorflow to store variables in the graph_def.
-    #create_graph(os.path.join(FLAGS.model_dir, 'graphdef', 'graph_def.pb'))
+def main(argv=None):
     
     pairs = read_pairs(os.path.expanduser(FLAGS.lfw_pairs))
     paths, actual_issame = get_paths(os.path.expanduser(FLAGS.lfw_dir), pairs)
     
-    mpl.interactive(True)
-    
     with tf.Graph().as_default():
 
-        # Placeholder for input images
-        images_placeholder = tf.placeholder(tf.float32, shape=(FLAGS.batch_size, FLAGS.image_size, FLAGS.image_size, 3), name='Input')
-        
-        # Placeholder for phase_train
-        phase_train_placeholder = tf.placeholder(tf.bool, name='phase_train')
-        
-        # Build the inference graph
-        embeddings = network.inference(images_placeholder, FLAGS.pool_type, FLAGS.use_lrn, 
-                                       1.0, phase_train=phase_train_placeholder)
-        
-        # Create a saver for restoring variable averages
-        ema = tf.train.ExponentialMovingAverage(1.0)
-        saver = tf.train.Saver(ema.variables_to_restore())
-    
         with tf.Session() as sess:
     
-            ckpt = tf.train.get_checkpoint_state(os.path.expanduser(FLAGS.model_dir))
-            if ckpt and ckpt.model_checkpoint_path:
-                saver.restore(sess, ckpt.model_checkpoint_path)
-            else:
-                raise ValueError('Checkpoint not found')
+            # Load the model
+            print('Loading model "%s"' % FLAGS.model_file)
+            facenet.load_model(FLAGS.model_file)
+            
+            # Get input and output tensors
+            images_placeholder = tf.get_default_graph().get_tensor_by_name("input:0")
+            phase_train_placeholder = tf.get_default_graph().get_tensor_by_name("phase_train:0")
+            embeddings = tf.get_default_graph().get_tensor_by_name("embeddings:0")
+            image_size = int(images_placeholder.get_shape()[1])
             
             # Run test on LFW to check accuracy for different horizontal/vertical translations of input images
             if True:
                 offsets = np.arange(-30, 31, 3)
                 horizontal_offset_accuracy = [None] * len(offsets)
                 for idx, offset in enumerate(offsets):
-                    accuracy = evaluate_accuracy(sess, images_placeholder, phase_train_placeholder, embeddings, paths, actual_issame, translate_images, (offset,0))
+                    accuracy = evaluate_accuracy(sess, images_placeholder, phase_train_placeholder, image_size, embeddings, paths, actual_issame, translate_images, (offset,0))
                     print('Hoffset: %1.3f  Accuracy: %1.3f+-%1.3f' % (offset, np.mean(accuracy), np.std(accuracy)))
                     horizontal_offset_accuracy[idx] = np.mean(accuracy)
                 vertical_offset_accuracy = [None] * len(offsets)
                 for idx, offset in enumerate(offsets):
-                    accuracy = evaluate_accuracy(sess, images_placeholder, phase_train_placeholder, embeddings, paths, actual_issame, translate_images, (0,offset))
+                    accuracy = evaluate_accuracy(sess, images_placeholder, phase_train_placeholder, image_size, embeddings, paths, actual_issame, translate_images, (0,offset))
                     print('Voffset: %1.3f  Accuracy: %1.3f+-%1.3f' % (offset, np.mean(accuracy), np.std(accuracy)))
                     vertical_offset_accuracy[idx] = np.mean(accuracy)
                 fig = plt.figure(1)
@@ -104,7 +76,7 @@ def main():
                 angles = np.arange(-30, 31, 3)
                 rotation_accuracy = [None] * len(angles)
                 for idx, angle in enumerate(angles):
-                    accuracy = evaluate_accuracy(sess, images_placeholder, phase_train_placeholder, embeddings, paths, actual_issame, rotate_images, angle)
+                    accuracy = evaluate_accuracy(sess, images_placeholder, phase_train_placeholder, image_size, embeddings, paths, actual_issame, rotate_images, angle)
                     print('Angle: %1.3f  Accuracy: %1.3f+-%1.3f' % (angle, np.mean(accuracy), np.std(accuracy)))
                     rotation_accuracy[idx] = np.mean(accuracy)
                 fig = plt.figure(2)
@@ -124,7 +96,7 @@ def main():
                 scales = np.arange(0.5, 1.5, 0.05)
                 scale_accuracy = [None] * len(scales)
                 for scale_idx, scale in enumerate(scales):
-                    accuracy = evaluate_accuracy(sess, images_placeholder, phase_train_placeholder, embeddings, paths, actual_issame, scale_images, scale)
+                    accuracy = evaluate_accuracy(sess, images_placeholder, phase_train_placeholder, image_size, embeddings, paths, actual_issame, scale_images, scale)
                     print('Scale: %1.3f  Accuracy: %1.3f+-%1.3f' % (scale, np.mean(accuracy), np.std(accuracy)))
                     scale_accuracy[scale_idx] = np.mean(accuracy)
                 fig = plt.figure(3)
@@ -144,14 +116,14 @@ def save_result(aug, acc, filename):
         for i in range(aug.size):
             f.write('%6.4f %6.4f\n' % (aug[i], acc[i]))
             
-def evaluate_accuracy(sess, images_placeholder, phase_train_placeholder, embeddings, paths, actual_issame, augument_images, aug_value):
+def evaluate_accuracy(sess, images_placeholder, phase_train_placeholder, image_size, embeddings, paths, actual_issame, augument_images, aug_value):
         nrof_images = len(paths)
         nrof_batches = int(nrof_images / FLAGS.batch_size)  # Run forward pass on the remainder in the last batch
         emb_list = []
         for i in range(nrof_batches):
             paths_batch = paths[i*FLAGS.batch_size:(i+1)*FLAGS.batch_size]
             images = facenet.load_data(paths_batch, False, False, FLAGS.orig_image_size)
-            images_aug = augument_images(images, aug_value)
+            images_aug = augument_images(images, aug_value, image_size)
             feed_dict = { images_placeholder: images_aug, phase_train_placeholder: False }
             emb_list += sess.run([embeddings], feed_dict=feed_dict)
         emb_array = np.vstack(emb_list)  # Stack the embeddings to a nrof_examples_per_epoch x 128 matrix
@@ -162,30 +134,30 @@ def evaluate_accuracy(sess, images_placeholder, phase_train_placeholder, embeddi
         _, _, accuracy = facenet.calculate_roc(thresholds, embeddings1, embeddings2, np.asarray(actual_issame), FLAGS.seed)
         return accuracy
 
-def scale_images(images, scale):
+def scale_images(images, scale, image_size):
     images_scale_list = [None] * images.shape[0]
     for i in range(images.shape[0]):
         images_scale_list[i] = misc.imresize(images[i,:,:,:], scale)
     images_scale = np.stack(images_scale_list,axis=0)
     sz1 = images_scale.shape[1]/2
-    sz2 = FLAGS.image_size/2
+    sz2 = image_size/2
     images_crop = images_scale[:,(sz1-sz2):(sz1+sz2),(sz1-sz2):(sz1+sz2),:]
     return images_crop
 
-def rotate_images(images, angle):
+def rotate_images(images, angle, image_size):
     images_list = [None] * images.shape[0]
     for i in range(images.shape[0]):
         images_list[i] = misc.imrotate(images[i,:,:,:], angle)
     images_rot = np.stack(images_list,axis=0)
     sz1 = images_rot.shape[1]/2
-    sz2 = FLAGS.image_size/2
+    sz2 = image_size/2
     images_crop = images_rot[:,(sz1-sz2):(sz1+sz2),(sz1-sz2):(sz1+sz2),:]
     return images_crop
 
-def translate_images(images, offset):
+def translate_images(images, offset, image_size):
     h, v = offset
     sz1 = images.shape[1]/2
-    sz2 = FLAGS.image_size/2
+    sz2 = image_size/2
     images_crop = images[:,(sz1-sz2+v):(sz1+sz2+v),(sz1-sz2+h):(sz1+sz2+h),:]
     return images_crop
 
@@ -222,4 +194,4 @@ def read_pairs(pairs_filename):
     return np.array(pairs)
 
 if __name__ == '__main__':
-    main()
+    tf.app.run()
