@@ -25,7 +25,7 @@ def main(args):
     if not os.path.exists(output_dir):
         os.mkdir(output_dir)
   
-    # Store some git revision info in a text file in the log directory
+    # Store some git revision info in a text file in the output directory
     src_path,_ = os.path.split(os.path.realpath(__file__))
     facenet.store_revision_info(src_path, output_dir, ' '.join(sys.argv))
     
@@ -34,7 +34,7 @@ def main(args):
         for line in f:
             fields = line.split('\t')
             class_dir = fields[0]
-            img_name = fields[1] + '-' + fields[4] + '.png'
+            img_name = fields[1] + '-' + fields[4] + '.' + args.output_format
             img_string = fields[6]
             img_dec_string = base64.b64decode(img_string)
             img_data = np.fromstring(img_dec_string, dtype=np.uint8)
@@ -56,6 +56,7 @@ if __name__ == '__main__':
     parser.add_argument('output_dir', type=str, help='Output base directory for the image dataset')
     parser.add_argument('tsv_files', type=argparse.FileType('r'), nargs='+', help='Input TSV file name(s)')
     parser.add_argument('--size', type=int, help='Images are resized to the given size', default=-1)
+    parser.add_argument('--output_format', type=str, help='Format of the output images', default='jpg', choices=['jpg', 'png'])
 
     main(parser.parse_args())
 
