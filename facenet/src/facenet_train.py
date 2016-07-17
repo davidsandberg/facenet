@@ -17,19 +17,19 @@ import facenet
 
 FLAGS = tf.app.flags.FLAGS
 
-tf.app.flags.DEFINE_string('logs_base_dir', '~/logs/facenet',
+tf.app.flags.DEFINE_string('logs_base_dir', '../logs/nn4_small2_v1',
                            """Directory where to write event logs.""")
-tf.app.flags.DEFINE_string('models_base_dir', '~/models/facenet',
+tf.app.flags.DEFINE_string('models_base_dir', '../models/nn4_small2_v1',
                            """Directory where to write trained models and checkpoints.""")
 tf.app.flags.DEFINE_string('model_name', '',
                            """Model directory name. Used when continuing training of an existing model. Leave empty to train new model.""")
-tf.app.flags.DEFINE_string('data_dir', '~/datasets/facescrub/fs_aligned:~/datasets/casia/casia-webface-aligned',
+tf.app.flags.DEFINE_string('data_dir', '/hdd/dataset/casia-facescrub-align/',
                            """Path to the data directory containing aligned face patches. Multiple directories are separated with colon.""")
-tf.app.flags.DEFINE_string('model_def', 'models.nn4',
+tf.app.flags.DEFINE_string('model_def', 'models.nn4_small2_v1',
                            """Model definition. Points to a module containing the definition of the inference graph.""")
 tf.app.flags.DEFINE_integer('max_nrof_epochs', 500,
                             """Number of epochs to run.""")
-tf.app.flags.DEFINE_integer('checkpoint_period', 10,
+tf.app.flags.DEFINE_integer('checkpoint_period', 100,
                             """The number of epochs between checkpoints""")
 tf.app.flags.DEFINE_boolean('log_device_placement', False,
                             """Whether to log device placement.""")
@@ -71,7 +71,7 @@ tf.app.flags.DEFINE_integer('seed', 666, """Random seed.""")
 network = importlib.import_module(FLAGS.model_def, 'inference')
 
 def main(argv=None):  # pylint: disable=unused-argument
-  
+
     if FLAGS.model_name:
         subdir = FLAGS.model_name
         preload_model = True
@@ -92,7 +92,7 @@ def main(argv=None):  # pylint: disable=unused-argument
     np.random.seed(seed=FLAGS.seed)
     dataset = facenet.get_dataset(FLAGS.data_dir)
     train_set, validation_set = facenet.split_dataset(dataset, FLAGS.train_set_fraction, FLAGS.split_mode)
-    
+
     print('Model directory: %s' % model_dir)
 
     with tf.Graph().as_default():
@@ -106,7 +106,7 @@ def main(argv=None):  # pylint: disable=unused-argument
         phase_train_placeholder = tf.placeholder(tf.bool, name='phase_train')
 
         # Build the inference graph
-        embeddings = network.inference(images_placeholder, FLAGS.pool_type, FLAGS.use_lrn, 
+        embeddings = network.inference(images_placeholder, FLAGS.pool_type, FLAGS.use_lrn,
                                        FLAGS.keep_probability, phase_train=phase_train_placeholder)
 
         # Split example embeddings into anchor, positive and negative
@@ -147,7 +147,7 @@ def main(argv=None):  # pylint: disable=unused-argument
                 # Train for one epoch
                 step = train(sess, train_set, epoch, images_placeholder, phase_train_placeholder,
                              global_step, embeddings, loss, train_op, summary_op, summary_writer)
-                
+
                 # Store the state of the random number generator
                 rng_state = np.random.get_state()
                 # Test on validation set
@@ -160,7 +160,7 @@ def main(argv=None):  # pylint: disable=unused-argument
                          global_step, embeddings, loss, 'training', summary_writer)
                 # Restore state of the random number generator
                 np.random.set_state(rng_state)
-  
+
                 if (epoch % FLAGS.checkpoint_period == 0) or (epoch==FLAGS.max_nrof_epochs-1):
                   # Save the model checkpoint
                   print('Saving checkpoint')
@@ -189,8 +189,8 @@ def train(sess, dataset, epoch, images_placeholder, phase_train_placeholder,
             emb_list += sess.run([embeddings], feed_dict=feed_dict)
         emb_array = np.vstack(emb_list)  # Stack the embeddings to a nrof_examples_per_epoch x 128 matrix
         # Select triplets based on the embeddings
-        triplets, nrof_random_negs, nrof_triplets = facenet.select_training_triplets(emb_array, num_per_class, 
-                                                                                     image_data, FLAGS.people_per_batch, 
+        triplets, nrof_random_negs, nrof_triplets = facenet.select_training_triplets(emb_array, num_per_class,
+                                                                                     image_data, FLAGS.people_per_batch,
                                                                                      FLAGS.alpha)
         duration = time.time() - start_time
         print('(nrof_random_negs, nrof_triplets) = (%d, %d): time=%.3f seconds' % (
