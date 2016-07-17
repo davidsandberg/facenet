@@ -199,7 +199,7 @@ def triplet_loss(anchor, positive, negative, alpha):
   Args:
     anchor: the embeddings for the anchor images.
     positive: the embeddings for the positive images.
-    positive: the embeddings for the negative images.
+    negative: the embeddings for the negative images.
 
   Returns:
     the triplet loss according to the FaceNet paper as a float tensor.
