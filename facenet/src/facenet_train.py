@@ -174,8 +174,11 @@ def train(sess, dataset, epoch, images_placeholder, phase_train_placeholder,
     while batch_number < FLAGS.epoch_size:
         print('Loading training data')
         # Sample people and load new data
+        start_time = time.time()
         image_paths, num_per_class = facenet.sample_people(dataset, FLAGS.people_per_batch, FLAGS.images_per_person)
         image_data = facenet.load_data(image_paths, FLAGS.random_crop, FLAGS.random_flip, FLAGS.image_size)
+        load_time = time.time() - start_time
+        print('Loaded %d images in %.2f seconds' % (image_data.shape[0], load_time))
 
         print('Selecting suitable triplets for training')
         start_time = time.time()
@@ -192,11 +195,12 @@ def train(sess, dataset, epoch, images_placeholder, phase_train_placeholder,
         triplets, nrof_random_negs, nrof_triplets = facenet.select_training_triplets(emb_array, num_per_class, 
                                                                                      image_data, FLAGS.people_per_batch, 
                                                                                      FLAGS.alpha)
-        duration = time.time() - start_time
+        selection_time = time.time() - start_time
         print('(nrof_random_negs, nrof_triplets) = (%d, %d): time=%.3f seconds' % (
-        nrof_random_negs, nrof_triplets, duration))
+        nrof_random_negs, nrof_triplets, selection_time))
 
         # Perform training on the selected triplets
+        train_time = 0
         i = 0
         while i * FLAGS.batch_size < nrof_triplets * 3 and batch_number < FLAGS.epoch_size:
             start_time = time.time()
@@ -211,6 +215,14 @@ def train(sess, dataset, epoch, images_placeholder, phase_train_placeholder,
                   (epoch, batch_number, FLAGS.epoch_size, duration, err))
             batch_number += 1
             i += 1
+            train_time += duration
+        # Add validation loss and accuracy to summary
+        summary = tf.Summary()
+        summary.value.add(tag='time/load', simple_value=load_time)
+        summary.value.add(tag='time/selection', simple_value=selection_time)
+        summary.value.add(tag='time/train', simple_value=train_time)
+        summary.value.add(tag='time/total', simple_value=load_time+selection_time+train_time)
+        summary_writer.add_summary(summary, step)
     return step
 
 
@@ -257,8 +269,8 @@ def validate(sess, dataset, epoch, images_placeholder, phase_train_placeholder,
 
     # Add validation loss and accuracy to summary
     summary = tf.Summary()
-    summary.value.add(tag='{}_loss'.format(prefix_str), simple_value=np.mean(triplet_loss_list).astype(float))
-    summary.value.add(tag='{}_accuracy'.format(prefix_str), simple_value=np.mean(accuracy))
+    summary.value.add(tag='{}/loss'.format(prefix_str), simple_value=np.mean(triplet_loss_list).astype(float))
+    summary.value.add(tag='{}/accuracy'.format(prefix_str), simple_value=np.mean(accuracy))
     summary_writer.add_summary(summary, step)
 
     if False:
