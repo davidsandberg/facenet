@@ -57,6 +57,8 @@ tf.app.flags.DEFINE_boolean('use_lrn', False,
                           """Enables Local Response Normalization after the first layers of the inception network.""")
 tf.app.flags.DEFINE_float('keep_probability', 1.0,
                           """Keep probability of dropout for the fully connected layer(s).""")
+tf.app.flags.DEFINE_float('weight_decay', 0.0,
+                          """L2 weight regularization.""")
 tf.app.flags.DEFINE_string('optimizer', 'ADAGRAD',
                           """The optimization algorithm to use {'ADAGRAD', 'ADADELTA', 'ADAM'}.""")
 tf.app.flags.DEFINE_float('learning_rate', 0.1,
@@ -122,7 +124,7 @@ def main(argv=None):  # pylint: disable=unused-argument
 
         # Build the inference graph
         embeddings = network.inference(images_placeholder, FLAGS.pool_type, FLAGS.use_lrn, 
-                                       FLAGS.keep_probability, phase_train=phase_train_placeholder)
+                                       FLAGS.keep_probability, phase_train=phase_train_placeholder, weight_decay=FLAGS.weight_decay)
 
         # Split example embeddings into anchor, positive and negative
         anchor, positive, negative = tf.split(0, 3, embeddings)

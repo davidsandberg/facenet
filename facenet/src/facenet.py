@@ -21,13 +21,13 @@ conv_counter = 1
 pool_counter = 1
 affine_counter = 1
 
-def conv(inpOp, nIn, nOut, kH, kW, dH, dW, padType, prefix, phase_train=True, use_batch_norm=True):
+def conv(inpOp, nIn, nOut, kH, kW, dH, dW, padType, prefix, phase_train=True, use_batch_norm=True, weight_decay=0.0):
   global conv_counter
   global parameters
   name = prefix + '_' + str(conv_counter)
   conv_counter += 1
   with tf.variable_scope(name):
-    l2_regularizer = lambda t: l2_loss(t, weight=4e-5)
+    l2_regularizer = lambda t: l2_loss(t, weight=weight_decay)
     kernel = tf.get_variable("weights", [kH, kW, nIn, nOut],
         initializer=tf.truncated_normal_initializer(stddev=1e-1),
         regularizer=l2_regularizer)
@@ -43,13 +43,13 @@ def conv(inpOp, nIn, nOut, kH, kW, dH, dW, padType, prefix, phase_train=True, us
     parameters += [kernel, biases]
   return conv1
 
-def affine(inpOp, nIn, nOut):
+def affine(inpOp, nIn, nOut, weight_decay=0.0):
   global affine_counter
   global parameters
   name = 'affine' + str(affine_counter)
   affine_counter += 1
   with tf.variable_scope(name):
-    l2_regularizer = lambda t: l2_loss(t, weight=4e-5)
+    l2_regularizer = lambda t: l2_loss(t, weight=weight_decay)
     weights = tf.get_variable("weights", [nIn, nOut],
         initializer=tf.truncated_normal_initializer(stddev=1e-1),
         regularizer=l2_regularizer)
@@ -160,7 +160,7 @@ def batch_norm(x, n_out, phase_train, name, affine=True):
     parameters += [beta, gamma]
   return normed
 
-def inception(inp, inSize, ks, o1s, o2s1, o2s2, o3s1, o3s2, o4s1, o4s2, o4s3, poolType, name, phase_train=True, use_batch_norm=True):
+def inception(inp, inSize, ks, o1s, o2s1, o2s2, o3s1, o3s2, o4s1, o4s2, o4s3, poolType, name, phase_train=True, use_batch_norm=True, weight_decay=0.0):
   
   print('name = ', name)
   print('inputSize = ', inSize)
@@ -180,17 +180,17 @@ def inception(inp, inSize, ks, o1s, o2s1, o2s2, o3s1, o3s2, o4s1, o4s2, o4s3, po
   
   with tf.name_scope(name):
     if o1s>0:
-      conv1 = conv(inp, inSize, o1s, 1, 1, 1, 1, 'SAME', 'in1_conv1x1', phase_train=phase_train, use_batch_norm=use_batch_norm)
+      conv1 = conv(inp, inSize, o1s, 1, 1, 1, 1, 'SAME', 'in1_conv1x1', phase_train=phase_train, use_batch_norm=use_batch_norm, weight_decay=weight_decay)
       net.append(conv1)
   
     if o2s1>0:
-      conv3a = conv(inp, inSize, o2s1, 1, 1, 1, 1, 'SAME', 'in2_conv1x1', phase_train=phase_train, use_batch_norm=use_batch_norm)
-      conv3 = conv(conv3a, o2s1, o2s2, 3, 3, ks, ks, 'SAME', 'in2_conv3x3', phase_train=phase_train, use_batch_norm=use_batch_norm)
+      conv3a = conv(inp, inSize, o2s1, 1, 1, 1, 1, 'SAME', 'in2_conv1x1', phase_train=phase_train, use_batch_norm=use_batch_norm, weight_decay=weight_decay)
+      conv3 = conv(conv3a, o2s1, o2s2, 3, 3, ks, ks, 'SAME', 'in2_conv3x3', phase_train=phase_train, use_batch_norm=use_batch_norm, weight_decay=weight_decay)
       net.append(conv3)
   
     if o3s1>0:
-      conv5a = conv(inp, inSize, o3s1, 1, 1, 1, 1, 'SAME', 'in3_conv1x1', phase_train=phase_train, use_batch_norm=use_batch_norm)
-      conv5 = conv(conv5a, o3s1, o3s2, 5, 5, ks, ks, 'SAME', 'in3_conv5x5', phase_train=phase_train, use_batch_norm=use_batch_norm)
+      conv5a = conv(inp, inSize, o3s1, 1, 1, 1, 1, 'SAME', 'in3_conv1x1', phase_train=phase_train, use_batch_norm=use_batch_norm, weight_decay=weight_decay)
+      conv5 = conv(conv5a, o3s1, o3s2, 5, 5, ks, ks, 'SAME', 'in3_conv5x5', phase_train=phase_train, use_batch_norm=use_batch_norm, weight_decay=weight_decay)
       net.append(conv5)
   
     if poolType=='MAX':
@@ -201,7 +201,7 @@ def inception(inp, inSize, ks, o1s, o2s1, o2s2, o3s1, o3s2, o4s1, o4s2, o4s3, po
       raise ValueError('Invalid pooling type "%s"' % poolType)
     
     if o4s2>0:
-      pool_conv = conv(pool, inSize, o4s2, 1, 1, 1, 1, 'SAME', 'in4_conv1x1', phase_train=phase_train, use_batch_norm=use_batch_norm)
+      pool_conv = conv(pool, inSize, o4s2, 1, 1, 1, 1, 'SAME', 'in4_conv1x1', phase_train=phase_train, use_batch_norm=use_batch_norm, weight_decay=weight_decay)
     else:
       pool_conv = pool
     net.append(pool_conv)
