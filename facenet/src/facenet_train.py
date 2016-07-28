@@ -58,7 +58,7 @@ def main(args):
 
         # Build the inference graph
         embeddings = network.inference(images_placeholder, args.pool_type, args.use_lrn, 
-                                       args.keep_probability, phase_train=phase_train_placeholder, weight_decay=args.weight_decay)
+             args.keep_probability, phase_train=phase_train_placeholder, weight_decay=args.weight_decay)
 
         # Split example embeddings into anchor, positive and negative
         anchor, positive, negative = tf.split(0, 3, embeddings)
@@ -104,8 +104,8 @@ def main(args):
                              global_step, embeddings, loss, train_op, summary_op, summary_writer)
                
                 _, _, accuracy, val, val_std, far = lfw.validate(sess, 
-                    paths, actual_issame, args.seed, 60,
-                    images_placeholder, phase_train_placeholder, embeddings)
+                    paths, actual_issame, args.seed, args.batch_size,
+                    images_placeholder, phase_train_placeholder, embeddings, nrof_folds=args.lfw_nrof_folds)
                 print('Accuracy: %1.3f+-%1.3f' % (np.mean(accuracy), np.std(accuracy)))
                 print('Validation rate: %2.5f+-%2.5f @ FAR=%2.5f' % (val, val_std, far))
                 # Add validation loss and accuracy to summary
@@ -236,6 +236,8 @@ def parse_arguments(argv):
         help='The file extension for the LFW dataset.', default='png', choices=['jpg', 'png'])
     parser.add_argument('--lfw_dir', type=str,
         help='Path to the data directory containing aligned face patches.', default='~/datasets/lfw/lfw_realigned/')
+    parser.add_argument('--lfw_nrof_folds', type=int,
+        help='Number of folds to use for cross validation. Mainly used for testing.', default=10)
     return parser.parse_args(argv)
   
 

@@ -497,12 +497,11 @@ def load_model(model_file):
     saver = tf.train.Saver(restore_vars, name='ema_restore')
     saver.restore(tf.get_default_session(), os.path.expanduser(model_file))
 
-def calculate_roc(thresholds, embeddings1, embeddings2, actual_issame, seed):
+def calculate_roc(thresholds, embeddings1, embeddings2, actual_issame, seed, nrof_folds=10):
   assert(embeddings1.shape[0] == embeddings2.shape[0])
   assert(embeddings1.shape[1] == embeddings2.shape[1])
   nrof_pairs = min(len(actual_issame), embeddings1.shape[0])
   nrof_thresholds = len(thresholds)
-  nrof_folds = 10
   folds = KFold(n=nrof_pairs, n_folds=nrof_folds, shuffle=True, random_state=seed)
   
   tprs = np.zeros((nrof_folds,nrof_thresholds))
@@ -549,12 +548,11 @@ def plot_roc(fpr, tpr, label):
   plt.grid(True)
   plt.show()
   
-def calculate_val(thresholds, embeddings1, embeddings2, actual_issame, far_target, seed):
+def calculate_val(thresholds, embeddings1, embeddings2, actual_issame, far_target, seed, nrof_folds=10):
   assert(embeddings1.shape[0] == embeddings2.shape[0])
   assert(embeddings1.shape[1] == embeddings2.shape[1])
   nrof_pairs = min(len(actual_issame), embeddings1.shape[0])
   nrof_thresholds = len(thresholds)
-  nrof_folds = 10
   folds = KFold(n=nrof_pairs, n_folds=nrof_folds, shuffle=True, random_state=seed)
   
   val = np.zeros(nrof_folds)

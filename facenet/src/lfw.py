@@ -1,18 +1,21 @@
 import os
 import numpy as np
 import facenet
+import math
 
-def validate(sess, paths, actual_issame, seed, batch_size, images_placeholder, phase_train_placeholder, embeddings):
+def validate(sess, paths, actual_issame, seed, batch_size, images_placeholder, phase_train_placeholder, embeddings, nrof_folds=10):
 
     image_size = images_placeholder.get_shape()[1]
     
     # Run forward pass to calculate embeddings
     print('Runnning forward pass on LFW images')
     nrof_images = len(paths)
-    nrof_batches = int(nrof_images / batch_size)
+    nrof_batches = int(math.ceil(1.0*nrof_images / batch_size))
     emb_list = []
     for i in range(nrof_batches):
-        paths_batch = paths[i*batch_size:(i+1)*batch_size]
+        start_index = i*batch_size
+        end_index = min((i+1)*batch_size, nrof_images)
+        paths_batch = paths[start_index:end_index]
         images = facenet.load_data(paths_batch, False, False, image_size)
         feed_dict = { images_placeholder: images, phase_train_placeholder: False }
         emb_list += sess.run([embeddings], feed_dict=feed_dict)
@@ -22,9 +25,11 @@ def validate(sess, paths, actual_issame, seed, batch_size, images_placeholder, p
     thresholds = np.arange(0, 4, 0.01)
     embeddings1 = emb_array[0::2]
     embeddings2 = emb_array[1::2]
-    tpr, fpr, accuracy = facenet.calculate_roc(thresholds, embeddings1, embeddings2, np.asarray(actual_issame), seed)
+    tpr, fpr, accuracy = facenet.calculate_roc(thresholds, embeddings1, embeddings2,
+        np.asarray(actual_issame), seed, nrof_folds=nrof_folds)
     thresholds = np.arange(0, 4, 0.001)
-    val, val_std, far = facenet.calculate_val(thresholds, embeddings1, embeddings2, np.asarray(actual_issame), 1e-3, seed)
+    val, val_std, far = facenet.calculate_val(thresholds, embeddings1, embeddings2,
+        np.asarray(actual_issame), 1e-3, seed, nrof_folds=nrof_folds)
     return tpr, fpr, accuracy, val, val_std, far
 
 def get_paths(lfw_dir, pairs, file_ext):
@@ -56,7 +61,6 @@ def read_pairs(pairs_filename):
         for line in f.readlines()[1:]:
             pair = line.strip().split()
             pairs.append(pair)
-    assert(len(pairs) == 6000)
     return np.array(pairs)
 
 
