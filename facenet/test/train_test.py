@@ -5,6 +5,7 @@ import numpy as np
 import cv2
 import os
 import shutil
+import validate_on_lfw
 
 class TrainTest(unittest.TestCase):
   
@@ -35,7 +36,15 @@ class TrainTest(unittest.TestCase):
                 '--lfw_dir', self.dataset_dir,
                 '--lfw_nrof_folds', '2' ]
         args = facenet_train.parse_arguments(argv)
-        facenet_train.main(args)
+        model_dir = facenet_train.main(args)
+        model_file = os.path.join(model_dir, 'model.ckpt-1')
+        # Check that the trained model can be loaded
+        argv = ['--model_file', model_file,
+                '--lfw_pairs', self.lfw_pairs_file,
+                '--lfw_dir', self.dataset_dir,
+                '--lfw_nrof_folds', '2' ]
+        args = validate_on_lfw.parse_arguments(argv)
+        validate_on_lfw.main(args)
 
     def test_training_nn4_small2_v1(self):
         argv = ['--logs_base_dir', self.tmp_dir,

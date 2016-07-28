@@ -119,6 +119,7 @@ def main(args):
                     print('Saving checkpoint')
                     checkpoint_path = os.path.join(model_dir, 'model.ckpt')
                     saver.save(sess, checkpoint_path, global_step=step)
+    return model_dir
 
 
 def train(args, sess, dataset, epoch, images_placeholder, phase_train_placeholder,

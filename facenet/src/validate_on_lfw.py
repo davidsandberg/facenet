@@ -5,37 +5,27 @@ in the same directory, and the metagraph should have the extension '.meta'.
 """
 import tensorflow as tf
 import numpy as np
+import argparse
 import facenet
 import lfw
 import os
+import sys
 
-FLAGS = tf.app.flags.FLAGS
-
-tf.app.flags.DEFINE_string('model_file', '~/models/facenet/20160514-234418/model.ckpt-500000',
-                           """File containing the model parameters as well as the model metagraph (with extension '.meta')""")
-tf.app.flags.DEFINE_string('lfw_pairs', '../data/pairs.txt',
-                           """The file containing the pairs to use for validation.""")
-tf.app.flags.DEFINE_string('file_ext', '.png',
-                           """The file extension for the LFW dataset, typically .png or .jpg.""")
-tf.app.flags.DEFINE_string('lfw_dir', '~/datasets/lfw/lfw_realigned/',
-                           """Path to the data directory containing aligned face patches.""")
-tf.app.flags.DEFINE_integer('seed', 666, """Random seed.""")
-
-def main(argv=None):
+def main(args):
   
     with tf.Graph().as_default():
 
         with tf.Session() as sess:
             
             # Read the file containing the pairs used for testing
-            pairs = lfw.read_pairs(os.path.expanduser(FLAGS.lfw_pairs))
+            pairs = lfw.read_pairs(os.path.expanduser(args.lfw_pairs))
 
             # Get the paths for the corresponding images
-            paths, actual_issame = lfw.get_paths(os.path.expanduser(FLAGS.lfw_dir), pairs, FLAGS.file_ext)
+            paths, actual_issame = lfw.get_paths(os.path.expanduser(args.lfw_dir), pairs, args.lfw_file_ext)
             
             # Load the model
-            print('Loading model "%s"' % FLAGS.model_file)
-            facenet.load_model(FLAGS.model_file)
+            print('Loading model "%s"' % args.model_file)
+            facenet.load_model(args.model_file)
             
             # Get input and output tensors
             images_placeholder = tf.get_default_graph().get_tensor_by_name("input:0")
@@ -43,12 +33,28 @@ def main(argv=None):
             embeddings = tf.get_default_graph().get_tensor_by_name("embeddings:0")
 
             tpr, fpr, accuracy, val, val_std, far = lfw.validate(sess, 
-                paths, actual_issame, FLAGS.seed, 60, 
+                paths, actual_issame, args.seed, 60, 
                 images_placeholder, phase_train_placeholder, embeddings)
             print('Accuracy: %1.3f+-%1.3f' % (np.mean(accuracy), np.std(accuracy)))
             print('Validation rate: %2.5f+-%2.5f @ FAR=%2.5f' % (val, val_std, far))
             
             facenet.plot_roc(fpr, tpr, 'NN4')
             
+def parse_arguments(argv):
+    parser = argparse.ArgumentParser()
+    
+    parser.add_argument('--model_file', type=str, 
+        help='File containing the model parameters as well as the model metagraph (with extension ".meta")', 
+        default='~/models/facenet/20160514-234418/model.ckpt-500000')
+    parser.add_argument('--lfw_pairs', type=str,
+        help='The file containing the pairs to use for validation.', default='../data/pairs.txt')
+    parser.add_argument('--lfw_file_ext', type=str,
+        help='The file extension for the LFW dataset.', default='png', choices=['jpg', 'png'])
+    parser.add_argument('--lfw_dir', type=str,
+        help='Path to the data directory containing aligned face patches.', default='~/datasets/lfw/lfw_realigned/')
+    parser.add_argument('--lfw_nrof_folds', type=int,
+        help='Number of folds to use for cross validation. Mainly used for testing.', default=10)
+    return parser.parse_args(argv)
+
 if __name__ == '__main__':
-    tf.app.run()
+    main(parse_arguments(sys.argv[1:]))
