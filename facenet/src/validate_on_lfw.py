@@ -54,6 +54,8 @@ def parse_arguments(argv):
         help='Path to the data directory containing aligned face patches.', default='~/datasets/lfw/lfw_realigned/')
     parser.add_argument('--lfw_nrof_folds', type=int,
         help='Number of folds to use for cross validation. Mainly used for testing.', default=10)
+    parser.add_argument('--seed', type=int,
+        help='Random seed.', default=666)
     return parser.parse_args(argv)
 
 if __name__ == '__main__':
