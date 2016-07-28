@@ -371,7 +371,7 @@ def get_triplet_batch(triplets, batch_index, batch_size):
   batch = np.vstack([a, p, n])
   return batch
 
-def select_training_triplets(embeddings, num_per_class, image_data, people_per_batch, alpha):
+def select_triplets(embeddings, num_per_class, image_data, people_per_batch, alpha):
 
   def dist(emb1, emb2):
     x = np.square(np.subtract(emb1, emb2))
@@ -429,42 +429,6 @@ def select_training_triplets(embeddings, num_per_class, image_data, people_per_b
   return triplets, nrof_random_negs, nrof_triplets
 
   
-def select_validation_triplets(num_per_class, people_per_batch, image_data, batch_size):
-  
-  nrof_images = image_data.shape[0]
-  nrof_trip = nrof_images - people_per_batch
-  shp = [nrof_trip, image_data.shape[1], image_data.shape[2], image_data.shape[3]]
-  as_arr = np.zeros(shp)
-  ps_arr = np.zeros(shp)
-  ns_arr = np.zeros(shp)
-  
-  trip_idx = 0
-  shuffle = np.arange(nrof_trip)
-  np.random.shuffle(shuffle)
-  emb_start_idx = 0
-  for i in xrange(len(num_per_class)):
-    n = num_per_class[i]
-    for j in range(1,n):
-      a_idx = emb_start_idx
-      p_idx = emb_start_idx + j
-      as_arr[shuffle[trip_idx]] = image_data[a_idx]
-      ps_arr[shuffle[trip_idx]] = image_data[p_idx]
-
-      # Select a random negative example
-      sel_neg_idx = emb_start_idx
-      while sel_neg_idx>=emb_start_idx and sel_neg_idx<=emb_start_idx+n-1:
-        sel_neg_idx = (np.random.randint(1, 2**32) % nrof_images) -1
-
-      ns_arr[shuffle[trip_idx]] = image_data[sel_neg_idx]
-      trip_idx += 1
-      
-    emb_start_idx += n
-    
-  nrof_triplets = trip_idx // batch_size * batch_size
-  triplets = (as_arr[0:nrof_triplets,:,:,:], ps_arr[0:nrof_triplets,:,:,:], ns_arr[0:nrof_triplets,:,:,:])
-
-  return triplets, nrof_triplets
-  
 
 class ImageClass():
   "Stores the paths to images for a given class"
@@ -494,35 +458,6 @@ def get_dataset(paths):
         dataset.append(ImageClass(class_name, image_paths))
 
   return dataset
-
-def split_dataset(dataset, split_ratio, mode):
-  if mode=='SPLIT_CLASSES':
-    nrof_classes = len(dataset)
-    class_indices = np.arange(nrof_classes)
-    np.random.shuffle(class_indices)
-    split = int(round(nrof_classes*split_ratio))
-    train_set = [dataset[i] for i in class_indices[0:split]]
-    test_set = [dataset[i] for i in class_indices[split:-1]]
-  elif mode=='SPLIT_IMAGES':
-    train_set = []
-    test_set = []
-    min_nrof_images = 2
-    for cls in dataset:
-      paths = cls.image_paths
-      np.random.shuffle(paths)
-      split = int(round(len(paths)*split_ratio))
-      if split<min_nrof_images:
-        # If the number of train set images are too few we throw an exception
-        raise ValueError('Too few images in train set (%d) for class "%s"' % (split, cls.name))
-      if len(paths)-split<min_nrof_images:
-        # If the number of test set images are too few we use all images for training
-        split = len(paths)
-      train_set.append(ImageClass(cls.name, paths[0:split]))
-      if split<len(paths):
-        test_set.append(ImageClass(cls.name, paths[split:-1]))
-  else:
-    raise ValueError('Invalid train/test split mode "%s"' % mode)
-  return train_set, test_set
 
 def sample_people(dataset, people_per_batch, images_per_person):
   nrof_images = people_per_batch * images_per_person

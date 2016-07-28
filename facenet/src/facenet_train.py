@@ -145,7 +145,7 @@ def train(args, sess, dataset, epoch, images_placeholder, phase_train_placeholde
             emb_list += sess.run([embeddings], feed_dict=feed_dict)
         emb_array = np.vstack(emb_list)  # Stack the embeddings to a nrof_examples_per_epoch x 128 matrix
         # Select triplets based on the embeddings
-        triplets, nrof_random_negs, nrof_triplets = facenet.select_training_triplets(
+        triplets, nrof_random_negs, nrof_triplets = facenet.select_triplets(
             emb_array, num_per_class, image_data, args.people_per_batch, args.alpha)
         selection_time = time.time() - start_time
         print('(nrof_random_negs, nrof_triplets) = (%d, %d): time=%.3f seconds' % (
