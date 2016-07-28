@@ -26,20 +26,20 @@ def conv(inpOp, nIn, nOut, kH, kW, dH, dW, padType, prefix, phase_train=True, us
   global parameters
   name = prefix + '_' + str(conv_counter)
   conv_counter += 1
-  with tf.name_scope(name) as scope:
-    kernel = tf.Variable(tf.truncated_normal([kH, kW, nIn, nOut],
-                                             dtype=tf.float32,
-                                             stddev=1e-1), name='weights')
+  with tf.variable_scope(name) as scope:
+    l2_regularizer = lambda t: l2_loss(t, weight=4e-5)
+    kernel = tf.get_variable("weights", [kH, kW, nIn, nOut],
+        initializer=tf.truncated_normal_initializer(stddev=1e-1),
+        regularizer=l2_regularizer)
     conv = tf.nn.conv2d(inpOp, kernel, [1, dH, dW, 1], padding=padType)
     
     if use_batch_norm:
       conv_bn = batch_norm(conv, nOut, phase_train, 'batch_norm')
     else:
       conv_bn = conv
-    biases = tf.Variable(tf.constant(0.0, shape=[nOut], dtype=tf.float32),
-                         trainable=True, name='biases')
+    biases = tf.get_variable("biases", [nOut], initializer=tf.constant_initializer())
     bias = tf.nn.bias_add(conv_bn, biases)
-    conv1 = tf.nn.relu(bias, name=scope)
+    conv1 = tf.nn.relu(bias)
     parameters += [kernel, biases]
   return conv1
 
@@ -48,16 +48,32 @@ def affine(inpOp, nIn, nOut):
   global parameters
   name = 'affine' + str(affine_counter)
   affine_counter += 1
-  with tf.name_scope(name):
-    kernel = tf.Variable(tf.truncated_normal([nIn, nOut],
-                                             dtype=tf.float32,
-                                             stddev=1e-1), name='weights')
-    biases = tf.Variable(tf.constant(0.0, shape=[nOut], dtype=tf.float32),
-                         trainable=True, name='biases')
-    affine1 = tf.nn.relu_layer(inpOp, kernel, biases, name=name)
-    parameters += [kernel, biases]
+  with tf.variable_scope(name):
+    l2_regularizer = lambda t: l2_loss(t, weight=4e-5)
+    weights = tf.get_variable("weights", [nIn, nOut],
+        initializer=tf.truncated_normal_initializer(stddev=1e-1),
+        regularizer=l2_regularizer)
+    biases = tf.get_variable("biases", [nOut], initializer=tf.constant_initializer())
+    affine1 = tf.nn.relu_layer(inpOp, weights, biases)
+    parameters += [weights, biases]
     return affine1
-  
+
+def l2_loss(tensor, weight=1.0, scope=None):
+  """Define a L2Loss, useful for regularize, i.e. weight decay.
+  Args:
+    tensor: tensor to regularize.
+    weight: an optional weight to modulate the loss.
+    scope: Optional scope for op_scope.
+  Returns:
+    the L2 loss op.
+  """
+  with tf.op_scope([tensor], scope, 'l2_loss'):
+    weight = tf.convert_to_tensor(weight,
+                                  dtype=tensor.dtype.base_dtype,
+                                  name='loss_weight')
+    loss = tf.mul(weight, tf.nn.l2_loss(tensor), name='value')
+    return loss
+
 def lppool(inpOp, pnorm, kH, kW, dH, dW, padding):
   global pool_counter
   global parameters

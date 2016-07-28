@@ -114,9 +114,13 @@ def main(argv=None):  # pylint: disable=unused-argument
 
         # Calculate triplet loss
         loss = facenet.triplet_loss(anchor, positive, negative, FLAGS.alpha)
+        
+        # Calculate the total loss
+        regularization_losses = tf.get_collection(tf.GraphKeys.REGULARIZATION_LOSSES)
+        total_loss = tf.add_n([loss] + regularization_losses, name='total_loss')
 
         # Build a Graph that trains the model with one batch of examples and updates the model parameters
-        train_op, _ = facenet.train(loss, global_step, FLAGS.optimizer, FLAGS.learning_rate, FLAGS.moving_average_decay)
+        train_op, _ = facenet.train(total_loss, global_step, FLAGS.optimizer, FLAGS.learning_rate, FLAGS.moving_average_decay)
 
         # Create a saver
         saver = tf.train.Saver(tf.all_variables(), max_to_keep=0)
