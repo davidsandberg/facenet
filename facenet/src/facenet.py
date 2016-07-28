@@ -26,7 +26,7 @@ def conv(inpOp, nIn, nOut, kH, kW, dH, dW, padType, prefix, phase_train=True, us
   global parameters
   name = prefix + '_' + str(conv_counter)
   conv_counter += 1
-  with tf.variable_scope(name) as scope:
+  with tf.variable_scope(name):
     l2_regularizer = lambda t: l2_loss(t, weight=4e-5)
     kernel = tf.get_variable("weights", [kH, kW, nIn, nOut],
         initializer=tf.truncated_normal_initializer(stddev=1e-1),
