@@ -242,56 +242,5 @@ def train(sess, dataset, epoch, images_placeholder, phase_train_placeholder,
         summary_writer.add_summary(summary, step)
     return step
 
-
-def validate(sess, dataset, epoch, images_placeholder, phase_train_placeholder,
-             global_step, embeddings, loss, prefix_str, summary_writer):
-    nrof_people = FLAGS.people_per_batch * 4
-    print('Loading %s data' % prefix_str)
-    # Sample people and load new data
-    image_paths, num_per_class = facenet.sample_people(dataset, nrof_people, FLAGS.images_per_person)
-    image_data = facenet.load_data(image_paths, False, False, FLAGS.image_size)
-
-    print('Selecting random triplets from %s set' % prefix_str)
-    triplets, nrof_triplets = facenet.select_validation_triplets(num_per_class, nrof_people, image_data, FLAGS.batch_size)
-
-    start_time = time.time()
-    anchor_list = []
-    positive_list = []
-    negative_list = []
-    triplet_loss_list = []
-    # Run a forward pass for the sampled images
-    print('Running forward pass on %s set' % prefix_str)
-    nrof_batches_per_epoch = nrof_triplets * 3 // FLAGS.batch_size
-    for i in xrange(nrof_batches_per_epoch):
-        batch = facenet.get_triplet_batch(triplets, i, FLAGS.batch_size)
-        feed_dict = {images_placeholder: batch, phase_train_placeholder: False}
-        emb, triplet_loss, step = sess.run([embeddings, loss, global_step], feed_dict=feed_dict)
-        nrof_batch_triplets = emb.shape[0] / 3
-        anchor_list.append(emb[(0 * nrof_batch_triplets):(1 * nrof_batch_triplets), :])
-        positive_list.append(emb[(1 * nrof_batch_triplets):(2 * nrof_batch_triplets), :])
-        negative_list.append(emb[(2 * nrof_batch_triplets):(3 * nrof_batch_triplets), :])
-        triplet_loss_list.append(triplet_loss)
-    anchor = np.vstack(anchor_list)
-    positive = np.vstack(positive_list)
-    negative = np.vstack(negative_list)
-    duration = time.time() - start_time
-
-    thresholds = np.arange(0, 4, 0.01)
-    embeddings1 = np.vstack([anchor, anchor])
-    embeddings2 = np.vstack([positive, negative])
-    actual_issame = np.asarray([True] * anchor.shape[0] + [False] * anchor.shape[0])
-    tpr, fpr, accuracy = facenet.calculate_roc(thresholds, embeddings1, embeddings2, actual_issame, FLAGS.seed)
-    print('Epoch: [%d]\tTime %.3f\ttripErr %2.3f\t%sAccuracy %1.3f+-%1.3f' % (
-    epoch, duration, np.mean(triplet_loss_list), prefix_str, np.mean(accuracy), np.std(accuracy)))
-
-    # Add validation loss and accuracy to summary
-    summary = tf.Summary()
-    summary.value.add(tag='{}/loss'.format(prefix_str), simple_value=np.mean(triplet_loss_list).astype(float))
-    summary.value.add(tag='{}/accuracy'.format(prefix_str), simple_value=np.mean(accuracy))
-    summary_writer.add_summary(summary, step)
-
-    if False:
-        facenet.plot_roc(fpr, tpr, 'NN4')
-
 if __name__ == '__main__':
     tf.app.run()
