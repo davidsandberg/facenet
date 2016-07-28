@@ -14,6 +14,7 @@ import tensorflow as tf
 import numpy as np
 import importlib
 import facenet
+import lfw
 
 FLAGS = tf.app.flags.FLAGS
 
@@ -68,6 +69,15 @@ tf.app.flags.DEFINE_string('split_mode', 'SPLIT_CLASSES',
                            """Defines the method used to split the data set into a train and test set { SPLIT_CLASSES, SPLIT_IMAGES }""")
 tf.app.flags.DEFINE_integer('seed', 666, """Random seed.""")
 
+# Parameters for validation on LFW
+tf.app.flags.DEFINE_string('lfw_pairs', '../data/pairs.txt',
+                           """The file containing the pairs to use for validation.""")
+tf.app.flags.DEFINE_string('file_ext', '.png',
+                           """The file extension for the LFW dataset, typically .png or .jpg.""")
+tf.app.flags.DEFINE_string('lfw_dir', '~/datasets/lfw/lfw_realigned/',
+                           """Path to the data directory containing aligned face patches.""")
+
+
 network = importlib.import_module(FLAGS.model_def, 'inference')
 
 def main(argv=None):  # pylint: disable=unused-argument
@@ -90,11 +100,16 @@ def main(argv=None):  # pylint: disable=unused-argument
     facenet.store_revision_info(src_path, log_dir, ' '.join(argv))
 
     np.random.seed(seed=FLAGS.seed)
-    dataset = facenet.get_dataset(FLAGS.data_dir)
-    train_set, validation_set = facenet.split_dataset(dataset, FLAGS.train_set_fraction, FLAGS.split_mode)
+    train_set = facenet.get_dataset(FLAGS.data_dir)
     
     print('Model directory: %s' % model_dir)
+    
+    # Read the file containing the pairs used for testing
+    pairs = lfw.read_pairs(os.path.expanduser(FLAGS.lfw_pairs))
 
+    # Get the paths for the corresponding images
+    paths, actual_issame = lfw.get_paths(os.path.expanduser(FLAGS.lfw_dir), pairs, FLAGS.file_ext)
+    
     with tf.Graph().as_default():
         tf.set_random_seed(FLAGS.seed)
         global_step = tf.Variable(0, trainable=False)
@@ -151,20 +166,18 @@ def main(argv=None):  # pylint: disable=unused-argument
                 # Train for one epoch
                 step = train(sess, train_set, epoch, images_placeholder, phase_train_placeholder,
                              global_step, embeddings, loss, train_op, summary_op, summary_writer)
-                
-                # Store the state of the random number generator
-                rng_state = np.random.get_state()
-                # Test on validation set
-                np.random.seed(seed=FLAGS.seed)
-                validate(sess, validation_set, epoch, images_placeholder, phase_train_placeholder,
-                         global_step, embeddings, loss, 'validation', summary_writer)
-                # Test on training set
-                np.random.seed(seed=FLAGS.seed)
-                validate(sess, train_set, epoch, images_placeholder, phase_train_placeholder,
-                         global_step, embeddings, loss, 'training', summary_writer)
-                # Restore state of the random number generator
-                np.random.set_state(rng_state)
-  
+               
+                _, _, accuracy, val, val_std, far = lfw.validate(sess, 
+                    paths, actual_issame, FLAGS.seed, 60,
+                    images_placeholder, phase_train_placeholder, embeddings)
+                print('Accuracy: %1.3f+-%1.3f' % (np.mean(accuracy), np.std(accuracy)))
+                print('Validation rate: %2.5f+-%2.5f @ FAR=%2.5f' % (val, val_std, far))
+                # Add validation loss and accuracy to summary
+                summary = tf.Summary()
+                summary.value.add(tag='lfw/accuracy', simple_value=np.mean(accuracy))
+                summary.value.add(tag='lfw/val_rate', simple_value=val)
+                summary_writer.add_summary(summary, step)
+
                 if (epoch % FLAGS.checkpoint_period == 0) or (epoch==FLAGS.max_nrof_epochs-1):
                   # Save the model checkpoint
                   print('Saving checkpoint')
