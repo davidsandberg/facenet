@@ -2,142 +2,76 @@
 FaceNet: A Unified Embedding for Face Recognition and Clustering: http://arxiv.org/abs/1503.03832
 
 """
-from __future__ import absolute_import
-from __future__ import division
-from __future__ import print_function
 
 from datetime import datetime
 import os.path
 import time
-
+import sys
 import tensorflow as tf
 import numpy as np
 import importlib
 import facenet
+import argparse
 import lfw
 
-FLAGS = tf.app.flags.FLAGS
-
-tf.app.flags.DEFINE_string('logs_base_dir', '~/logs/facenet',
-                           """Directory where to write event logs.""")
-tf.app.flags.DEFINE_string('models_base_dir', '~/models/facenet',
-                           """Directory where to write trained models and checkpoints.""")
-tf.app.flags.DEFINE_string('model_name', '',
-                           """Model directory name. Used when continuing training of an existing model. Leave empty to train new model.""")
-tf.app.flags.DEFINE_string('data_dir', '~/datasets/facescrub/fs_aligned:~/datasets/casia/casia-webface-aligned',
-                           """Path to the data directory containing aligned face patches. Multiple directories are separated with colon.""")
-tf.app.flags.DEFINE_string('model_def', 'models.nn4',
-                           """Model definition. Points to a module containing the definition of the inference graph.""")
-tf.app.flags.DEFINE_integer('max_nrof_epochs', 500,
-                            """Number of epochs to run.""")
-tf.app.flags.DEFINE_integer('checkpoint_period', 10,
-                            """The number of epochs between checkpoints""")
-tf.app.flags.DEFINE_boolean('log_device_placement', False,
-                            """Whether to log device placement.""")
-tf.app.flags.DEFINE_integer('batch_size', 90,
-                            """Number of images to process in a batch.""")
-tf.app.flags.DEFINE_integer('image_size', 96,
-                            """Image size (height, width) in pixels.""")
-tf.app.flags.DEFINE_integer('people_per_batch', 45,
-                            """Number of people per batch.""")
-tf.app.flags.DEFINE_integer('images_per_person', 40,
-                            """Number of images per person.""")
-tf.app.flags.DEFINE_integer('epoch_size', 1000,
-                            """Number of batches per epoch.""")
-tf.app.flags.DEFINE_float('alpha', 0.2,
-                          """Positive to negative triplet distance margin.""")
-tf.app.flags.DEFINE_boolean('random_crop', False,
-                          """Performs random cropping of training images. If false, the center image_size pixels from the training images are used.
-                          If the size of the images in the data directory is equal to image_size no cropping is performed""")
-tf.app.flags.DEFINE_boolean('random_flip', False,
-                          """Performs random horizontal flipping of training images.""")
-tf.app.flags.DEFINE_string('pool_type', 'MAX',
-                          """The type of pooling to use for some of the inception layers {'MAX', 'L2'}.""")
-tf.app.flags.DEFINE_boolean('use_lrn', False,
-                          """Enables Local Response Normalization after the first layers of the inception network.""")
-tf.app.flags.DEFINE_float('keep_probability', 1.0,
-                          """Keep probability of dropout for the fully connected layer(s).""")
-tf.app.flags.DEFINE_float('weight_decay', 0.0,
-                          """L2 weight regularization.""")
-tf.app.flags.DEFINE_string('optimizer', 'ADAGRAD',
-                          """The optimization algorithm to use {'ADAGRAD', 'ADADELTA', 'ADAM'}.""")
-tf.app.flags.DEFINE_float('learning_rate', 0.1,
-                          """Initial learning rate.""")
-tf.app.flags.DEFINE_float('moving_average_decay', 0.9999,
-                          """Exponential decay for tracking of training parameters.""")
-tf.app.flags.DEFINE_float('train_set_fraction', 0.9,
-                          """Fraction of the data set that is used for training.""")
-tf.app.flags.DEFINE_string('split_mode', 'SPLIT_CLASSES',
-                           """Defines the method used to split the data set into a train and test set { SPLIT_CLASSES, SPLIT_IMAGES }""")
-tf.app.flags.DEFINE_integer('seed', 666, """Random seed.""")
-
-# Parameters for validation on LFW
-tf.app.flags.DEFINE_string('lfw_pairs', '../data/pairs.txt',
-                           """The file containing the pairs to use for validation.""")
-tf.app.flags.DEFINE_string('file_ext', '.png',
-                           """The file extension for the LFW dataset, typically .png or .jpg.""")
-tf.app.flags.DEFINE_string('lfw_dir', '~/datasets/lfw/lfw_realigned/',
-                           """Path to the data directory containing aligned face patches.""")
-
-
-network = importlib.import_module(FLAGS.model_def, 'inference')
-
-def main(argv=None):  # pylint: disable=unused-argument
+def main(args):
   
-    if FLAGS.model_name:
-        subdir = FLAGS.model_name
+    network = importlib.import_module(args.model_def, 'inference')
+
+    if args.model_name:
+        subdir = args.model_name
         preload_model = True
     else:
         subdir = datetime.strftime(datetime.now(), '%Y%m%d-%H%M%S')
         preload_model = False
-    log_dir = os.path.join(os.path.expanduser(FLAGS.logs_base_dir), subdir)
+    log_dir = os.path.join(os.path.expanduser(args.logs_base_dir), subdir)
     if not os.path.isdir(log_dir):  # Create the log directory if it doesn't exist
         os.mkdir(log_dir)
-    model_dir = os.path.join(os.path.expanduser(FLAGS.models_base_dir), subdir)
+    model_dir = os.path.join(os.path.expanduser(args.models_base_dir), subdir)
     if not os.path.isdir(model_dir):  # Create the model directory if it doesn't exist
         os.mkdir(model_dir)
 
     # Store some git revision info in a text file in the log directory
     src_path,_ = os.path.split(os.path.realpath(__file__))
-    facenet.store_revision_info(src_path, log_dir, ' '.join(argv))
+    facenet.store_revision_info(src_path, log_dir, ' '.join(sys.argv))
 
-    np.random.seed(seed=FLAGS.seed)
-    train_set = facenet.get_dataset(FLAGS.data_dir)
+    np.random.seed(seed=args.seed)
+    train_set = facenet.get_dataset(args.data_dir)
     
     print('Model directory: %s' % model_dir)
     
     # Read the file containing the pairs used for testing
-    pairs = lfw.read_pairs(os.path.expanduser(FLAGS.lfw_pairs))
+    pairs = lfw.read_pairs(os.path.expanduser(args.lfw_pairs))
 
     # Get the paths for the corresponding images
-    paths, actual_issame = lfw.get_paths(os.path.expanduser(FLAGS.lfw_dir), pairs, FLAGS.file_ext)
+    paths, actual_issame = lfw.get_paths(os.path.expanduser(args.lfw_dir), pairs, args.lfw_file_ext)
     
     with tf.Graph().as_default():
-        tf.set_random_seed(FLAGS.seed)
+        tf.set_random_seed(args.seed)
         global_step = tf.Variable(0, trainable=False)
 
         # Placeholder for input images
-        images_placeholder = tf.placeholder(tf.float32, shape=(None, FLAGS.image_size, FLAGS.image_size, 3), name='input')
+        images_placeholder = tf.placeholder(tf.float32, shape=(None, args.image_size, args.image_size, 3), name='input')
 
         # Placeholder for phase_train
         phase_train_placeholder = tf.placeholder(tf.bool, name='phase_train')
 
         # Build the inference graph
-        embeddings = network.inference(images_placeholder, FLAGS.pool_type, FLAGS.use_lrn, 
-                                       FLAGS.keep_probability, phase_train=phase_train_placeholder, weight_decay=FLAGS.weight_decay)
+        embeddings = network.inference(images_placeholder, args.pool_type, args.use_lrn, 
+                                       args.keep_probability, phase_train=phase_train_placeholder, weight_decay=args.weight_decay)
 
         # Split example embeddings into anchor, positive and negative
         anchor, positive, negative = tf.split(0, 3, embeddings)
 
         # Calculate triplet loss
-        loss = facenet.triplet_loss(anchor, positive, negative, FLAGS.alpha)
+        loss = facenet.triplet_loss(anchor, positive, negative, args.alpha)
         
         # Calculate the total loss
         regularization_losses = tf.get_collection(tf.GraphKeys.REGULARIZATION_LOSSES)
         total_loss = tf.add_n([loss] + regularization_losses, name='total_loss')
 
         # Build a Graph that trains the model with one batch of examples and updates the model parameters
-        train_op, _ = facenet.train(total_loss, global_step, FLAGS.optimizer, FLAGS.learning_rate, FLAGS.moving_average_decay)
+        train_op, _ = facenet.train(total_loss, global_step, args.optimizer, args.learning_rate, args.moving_average_decay)
 
         # Create a saver
         saver = tf.train.Saver(tf.all_variables(), max_to_keep=0)
@@ -149,7 +83,7 @@ def main(argv=None):  # pylint: disable=unused-argument
         init = tf.initialize_all_variables()
 
         # Start running operations on the Graph.
-        sess = tf.Session(config=tf.ConfigProto(log_device_placement=FLAGS.log_device_placement))
+        sess = tf.Session()
         sess.run(init)
 
         summary_writer = tf.train.SummaryWriter(log_dir, sess.graph)
@@ -164,13 +98,13 @@ def main(argv=None):  # pylint: disable=unused-argument
                     raise ValueError('Checkpoint not found')
 
             # Training and validation loop
-            for epoch in range(FLAGS.max_nrof_epochs):
+            for epoch in range(args.max_nrof_epochs):
                 # Train for one epoch
-                step = train(sess, train_set, epoch, images_placeholder, phase_train_placeholder,
+                step = train(args, sess, train_set, epoch, images_placeholder, phase_train_placeholder,
                              global_step, embeddings, loss, train_op, summary_op, summary_writer)
                
                 _, _, accuracy, val, val_std, far = lfw.validate(sess, 
-                    paths, actual_issame, FLAGS.seed, 60,
+                    paths, actual_issame, args.seed, 60,
                     images_placeholder, phase_train_placeholder, embeddings)
                 print('Accuracy: %1.3f+-%1.3f' % (np.mean(accuracy), np.std(accuracy)))
                 print('Validation rate: %2.5f+-%2.5f @ FAR=%2.5f' % (val, val_std, far))
@@ -180,22 +114,22 @@ def main(argv=None):  # pylint: disable=unused-argument
                 summary.value.add(tag='lfw/val_rate', simple_value=val)
                 summary_writer.add_summary(summary, step)
 
-                if (epoch % FLAGS.checkpoint_period == 0) or (epoch==FLAGS.max_nrof_epochs-1):
+                if (epoch % args.checkpoint_period == 0) or (epoch==args.max_nrof_epochs-1):
                   # Save the model checkpoint
                   print('Saving checkpoint')
                   checkpoint_path = os.path.join(model_dir, 'model.ckpt')
                   saver.save(sess, checkpoint_path, global_step=step)
 
 
-def train(sess, dataset, epoch, images_placeholder, phase_train_placeholder,
+def train(args, sess, dataset, epoch, images_placeholder, phase_train_placeholder,
           global_step, embeddings, loss, train_op, summary_op, summary_writer):
     batch_number = 0
-    while batch_number < FLAGS.epoch_size:
+    while batch_number < args.epoch_size:
         print('Loading training data')
         # Sample people and load new data
         start_time = time.time()
-        image_paths, num_per_class = facenet.sample_people(dataset, FLAGS.people_per_batch, FLAGS.images_per_person)
-        image_data = facenet.load_data(image_paths, FLAGS.random_crop, FLAGS.random_flip, FLAGS.image_size)
+        image_paths, num_per_class = facenet.sample_people(dataset, args.people_per_batch, args.images_per_person)
+        image_data = facenet.load_data(image_paths, args.random_crop, args.random_flip, args.image_size)
         load_time = time.time() - start_time
         print('Loaded %d images in %.2f seconds' % (image_data.shape[0], load_time))
 
@@ -203,16 +137,16 @@ def train(sess, dataset, epoch, images_placeholder, phase_train_placeholder,
         start_time = time.time()
         emb_list = []
         # Run a forward pass for the sampled images
-        nrof_examples_per_epoch = FLAGS.people_per_batch * FLAGS.images_per_person
-        nrof_batches_per_epoch = int(np.floor(nrof_examples_per_epoch / FLAGS.batch_size))
+        nrof_examples_per_epoch = args.people_per_batch * args.images_per_person
+        nrof_batches_per_epoch = int(np.floor(nrof_examples_per_epoch / args.batch_size))
         for i in xrange(nrof_batches_per_epoch):
-            batch = facenet.get_batch(image_data, FLAGS.batch_size, i)
+            batch = facenet.get_batch(image_data, args.batch_size, i)
             feed_dict = {images_placeholder: batch, phase_train_placeholder: True}
             emb_list += sess.run([embeddings], feed_dict=feed_dict)
         emb_array = np.vstack(emb_list)  # Stack the embeddings to a nrof_examples_per_epoch x 128 matrix
         # Select triplets based on the embeddings
         triplets, nrof_random_negs, nrof_triplets = facenet.select_training_triplets(
-            emb_array, num_per_class, image_data, FLAGS.people_per_batch, FLAGS.alpha)
+            emb_array, num_per_class, image_data, args.people_per_batch, args.alpha)
         selection_time = time.time() - start_time
         print('(nrof_random_negs, nrof_triplets) = (%d, %d): time=%.3f seconds' % (
         nrof_random_negs, nrof_triplets, selection_time))
@@ -220,9 +154,9 @@ def train(sess, dataset, epoch, images_placeholder, phase_train_placeholder,
         # Perform training on the selected triplets
         train_time = 0
         i = 0
-        while i * FLAGS.batch_size < nrof_triplets * 3 and batch_number < FLAGS.epoch_size:
+        while i * args.batch_size < nrof_triplets * 3 and batch_number < args.epoch_size:
             start_time = time.time()
-            batch = facenet.get_triplet_batch(triplets, i, FLAGS.batch_size)
+            batch = facenet.get_triplet_batch(triplets, i, args.batch_size)
             feed_dict = {images_placeholder: batch, phase_train_placeholder: True}
             err, _, step = sess.run([loss, train_op, global_step], feed_dict=feed_dict)
             if (batch_number % 20 == 0):
@@ -230,7 +164,7 @@ def train(sess, dataset, epoch, images_placeholder, phase_train_placeholder,
                 summary_writer.add_summary(summary_str, global_step=step)
             duration = time.time() - start_time
             print('Epoch: [%d][%d/%d]\tTime %.3f\ttripErr %2.3f' %
-                  (epoch, batch_number, FLAGS.epoch_size, duration, err))
+                  (epoch, batch_number, args.epoch_size, duration, err))
             batch_number += 1
             i += 1
             train_time += duration
@@ -244,4 +178,64 @@ def train(sess, dataset, epoch, images_placeholder, phase_train_placeholder,
     return step
 
 if __name__ == '__main__':
-    tf.app.run()
+    parser = argparse.ArgumentParser()
+    
+    parser.add_argument('--logs_base_dir', type=str, 
+        help='Directory where to write event logs.', default='~/logs/facenet')
+    parser.add_argument('--models_base_dir', type=str,
+        help='Directory where to write trained models and checkpoints.', default='~/models/facenet')
+    parser.add_argument('--model_name', type=str,
+        help='Model directory name. Used when continuing training of an existing model. Leave empty to train new model.')
+    parser.add_argument('--data_dir', type=str,
+        help='Path to the data directory containing aligned face patches. Multiple directories are separated with colon.',
+        default='~/datasets/facescrub/fs_aligned:~/datasets/casia/casia-webface-aligned')
+    parser.add_argument('--model_def', type=str,
+        help='Model definition. Points to a module containing the definition of the inference graph.', default='models.nn4')
+    parser.add_argument('--max_nrof_epochs', type=int,
+        help='Number of epochs to run.', default=500)
+    parser.add_argument('--checkpoint_period', type=int,
+        help='The number of epochs between checkpoints', default=10)
+    parser.add_argument('--batch_size', type=int,
+        help='Number of images to process in a batch.', default=90)
+    parser.add_argument('--image_size', type=int,
+        help='Image size (height, width) in pixels.', default=96)
+    parser.add_argument('--people_per_batch', type=int,
+        help='Number of people per batch.', default=45)
+    parser.add_argument('--images_per_person', type=int,
+        help='Number of images per person.', default=40)
+    parser.add_argument('--epoch_size', type=int,
+        help='Number of batches per epoch.', default=1000)
+    parser.add_argument('--alpha', type=float,
+        help='Positive to negative triplet distance margin.', default=0.2)
+    parser.add_argument('--random_crop', 
+        help='Performs random cropping of training images. If false, the center image_size pixels from the training images are used. ' +
+         'If the size of the images in the data directory is equal to image_size no cropping is performed', action='store_true')
+    parser.add_argument('--random_flip', 
+        help='Performs random horizontal flipping of training images.', action='store_true')
+    parser.add_argument('--pool_type', type=str,
+        help='The type of pooling to use for some of the inception layers', default='MAX', choices=['MAX', 'L2'])
+    parser.add_argument('--use_lrn', 
+        help='Enables Local Response Normalization after the first layers of the inception network.', action='store_true')
+    parser.add_argument('--keep_probability', type=float,
+        help='Keep probability of dropout for the fully connected layer(s).', default=1.0)
+    parser.add_argument('--weight_decay', type=float,
+        help='L2 weight regularization.', default=0.0)
+    parser.add_argument('--optimizer', type=str, choices=['ADAGRAD', 'ADADELTA', 'ADAM'],
+        help='The optimization algorithm to use', default='ADAGRAD')
+    parser.add_argument('--learning_rate', type=float,
+        help='Initial learning rate.', default=0.1)
+    parser.add_argument('--moving_average_decay', type=float,
+        help='Exponential decay for tracking of training parameters.', default=0.9999)
+    parser.add_argument('--seed', type=int,
+        help='Random seed.', default=666)
+ 
+    # Parameters for validation on LFW
+    parser.add_argument('--lfw_pairs', type=str,
+        help='The file containing the pairs to use for validation.', default='../data/pairs.txt')
+    parser.add_argument('--lfw_file_ext', type=str,
+        help='The file extension for the LFW dataset.', default='png', choices=['jpg', 'png'])
+    parser.add_argument('--lfw_dir', type=str,
+        help='Path to the data directory containing aligned face patches.', default='~/datasets/lfw/lfw_realigned/')
+    
+    main(parser.parse_args())
+  
