@@ -10,8 +10,8 @@ import sys
 import tensorflow as tf
 import numpy as np
 import importlib
-import facenet
 import argparse
+import facenet
 import lfw
 
 def main(args):
@@ -115,10 +115,10 @@ def main(args):
                 summary_writer.add_summary(summary, step)
 
                 if (epoch % args.checkpoint_period == 0) or (epoch==args.max_nrof_epochs-1):
-                  # Save the model checkpoint
-                  print('Saving checkpoint')
-                  checkpoint_path = os.path.join(model_dir, 'model.ckpt')
-                  saver.save(sess, checkpoint_path, global_step=step)
+                    # Save the model checkpoint
+                    print('Saving checkpoint')
+                    checkpoint_path = os.path.join(model_dir, 'model.ckpt')
+                    saver.save(sess, checkpoint_path, global_step=step)
 
 
 def train(args, sess, dataset, epoch, images_placeholder, phase_train_placeholder,
@@ -242,5 +242,4 @@ def parse_arguments(argv):
   
 
 if __name__ == '__main__':
-    args = parse_arguments(sys.argv[1:])
-    main(args)
+    main(parse_arguments(sys.argv[1:]))

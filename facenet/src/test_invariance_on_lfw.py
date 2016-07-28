@@ -117,22 +117,22 @@ def save_result(aug, acc, filename):
             f.write('%6.4f %6.4f\n' % (aug[i], acc[i]))
             
 def evaluate_accuracy(sess, images_placeholder, phase_train_placeholder, image_size, embeddings, paths, actual_issame, augument_images, aug_value):
-        nrof_images = len(paths)
-        nrof_batches = int(nrof_images / FLAGS.batch_size)  # Run forward pass on the remainder in the last batch
-        emb_list = []
-        for i in range(nrof_batches):
-            paths_batch = paths[i*FLAGS.batch_size:(i+1)*FLAGS.batch_size]
-            images = facenet.load_data(paths_batch, False, False, FLAGS.orig_image_size)
-            images_aug = augument_images(images, aug_value, image_size)
-            feed_dict = { images_placeholder: images_aug, phase_train_placeholder: False }
-            emb_list += sess.run([embeddings], feed_dict=feed_dict)
-        emb_array = np.vstack(emb_list)  # Stack the embeddings to a nrof_examples_per_epoch x 128 matrix
-        
-        thresholds = np.arange(0, 4, 0.01)
-        embeddings1 = emb_array[0::2]
-        embeddings2 = emb_array[1::2]
-        _, _, accuracy = facenet.calculate_roc(thresholds, embeddings1, embeddings2, np.asarray(actual_issame), FLAGS.seed)
-        return accuracy
+    nrof_images = len(paths)
+    nrof_batches = int(nrof_images / FLAGS.batch_size)  # Run forward pass on the remainder in the last batch
+    emb_list = []
+    for i in range(nrof_batches):
+        paths_batch = paths[i*FLAGS.batch_size:(i+1)*FLAGS.batch_size]
+        images = facenet.load_data(paths_batch, False, False, FLAGS.orig_image_size)
+        images_aug = augument_images(images, aug_value, image_size)
+        feed_dict = { images_placeholder: images_aug, phase_train_placeholder: False }
+        emb_list += sess.run([embeddings], feed_dict=feed_dict)
+    emb_array = np.vstack(emb_list)  # Stack the embeddings to a nrof_examples_per_epoch x 128 matrix
+    
+    thresholds = np.arange(0, 4, 0.01)
+    embeddings1 = emb_array[0::2]
+    embeddings2 = emb_array[1::2]
+    _, _, accuracy = facenet.calculate_roc(thresholds, embeddings1, embeddings2, np.asarray(actual_issame), FLAGS.seed)
+    return accuracy
 
 def scale_images(images, scale, image_size):
     images_scale_list = [None] * images.shape[0]
