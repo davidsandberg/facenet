@@ -177,7 +177,7 @@ def train(args, sess, dataset, epoch, images_placeholder, phase_train_placeholde
         summary_writer.add_summary(summary, step)
     return step
 
-if __name__ == '__main__':
+def parse_arguments(argv):
     parser = argparse.ArgumentParser()
     
     parser.add_argument('--logs_base_dir', type=str, 
@@ -236,6 +236,9 @@ if __name__ == '__main__':
         help='The file extension for the LFW dataset.', default='png', choices=['jpg', 'png'])
     parser.add_argument('--lfw_dir', type=str,
         help='Path to the data directory containing aligned face patches.', default='~/datasets/lfw/lfw_realigned/')
-    
-    main(parser.parse_args())
+    return parser.parse_args(argv)
   
+
+if __name__ == '__main__':
+    args = parse_arguments(sys.argv[1:])
+    main(args)
