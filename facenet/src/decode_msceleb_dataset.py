@@ -56,7 +56,7 @@ if __name__ == '__main__':
     parser.add_argument('output_dir', type=str, help='Output base directory for the image dataset')
     parser.add_argument('tsv_files', type=argparse.FileType('r'), nargs='+', help='Input TSV file name(s)')
     parser.add_argument('--size', type=int, help='Images are resized to the given size', default=-1)
-    parser.add_argument('--output_format', type=str, help='Format of the output images', default='jpg', choices=['jpg', 'png'])
+    parser.add_argument('--output_format', type=str, help='Format of the output images', default='png', choices=['png', 'jpg'])
 
     main(parser.parse_args())
 
