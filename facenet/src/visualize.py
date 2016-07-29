@@ -6,25 +6,18 @@ import os
 import numpy as np
 from functools import partial
 import PIL.Image
-
+import sys
+import argparse
 import tensorflow as tf
 import matplotlib.pyplot as plt
 import importlib
 
-FLAGS = tf.app.flags.FLAGS
-
-tf.app.flags.DEFINE_string('model_dir', '~/models/facenet/20160514-234418',
-                           """Directory containing the graph definition and checkpoint files.""")
-tf.app.flags.DEFINE_string('model_def', 'models.nn4',
-                           """Model definition. Points to a module containing the definition of the inference graph.""")
-tf.app.flags.DEFINE_integer('seed', 666, """Random seed.""")
-
-network = importlib.import_module(FLAGS.model_def, 'inference')
-
-def main():
+def main(args):
   
+    network = importlib.import_module(args.model_def, 'inference')
+
     # Start with a gray image with a little noise
-    np.random.seed(seed=FLAGS.seed)
+    np.random.seed(seed=args.seed)
     img_noise = np.random.uniform(size=(96,96,3)) + 100.0
   
     sess = tf.Session()
@@ -45,14 +38,11 @@ def main():
     saver = tf.train.Saver(restore_vars)
   
     # Restore the parameters
-    ckpt = tf.train.get_checkpoint_state(os.path.expanduser(FLAGS.model_dir))
+    ckpt = tf.train.get_checkpoint_state(os.path.expanduser(args.model_dir))
     if ckpt and ckpt.model_checkpoint_path:
         saver.restore(sess, ckpt.model_checkpoint_path)
     else:
         raise ValueError('Checkpoint not found')
-  
-    
-  
   
     # Helper functions for TF Graph visualization
     
@@ -60,8 +50,7 @@ def main():
         a = np.uint8(np.clip(a, 0, 1)*255)
         plt.imshow(a)
         plt.show()
-        
-        
+               
     def visstd(a, s=0.1):
         '''Normalize the image range for visualization'''
         return (a-a.mean())/max(a.std(), 1e-4)*s + 0.5
@@ -228,12 +217,12 @@ def main():
     layer = 'incept5b/in4_conv1x1_55/Conv2D'
     print('Number of features in layer "%s": %d' % (layer, feature_nums[layer]))
   
-  #   channels = range(feature_nums[layer])
-  #   np.random.shuffle(channels)
-  #   for i in range(16):
-  #     print('Rendering feature %d' % channels[i])
-  #     plt.subplot(4,4,i+1)
-  #     render_multiscale(T(layer)[:,:,:,channels[i]])
+#   channels = range(feature_nums[layer])
+#   np.random.shuffle(channels)
+#   for i in range(16):
+#     print('Rendering feature %d' % channels[i])
+#     plt.subplot(4,4,i+1)
+#     render_multiscale(T(layer)[:,:,:,channels[i]])
   
     channel = 0 # picking some feature channel to visualize
     
@@ -250,13 +239,23 @@ def main():
     render_lapnorm(T(layer)[:,:,:,65]+T(layer)[:,:,:,139], octave_n=4)
     
     # Not tested yet
-    if False:
-        img0 = PIL.Image.open('pilatus800.jpg')
-        img0 = np.float32(img0)
-        showarray(img0/255.0)
-        render_deepdream(tf.square(T('mixed4c')), img0)
-        render_deepdream(T(layer)[:,:,:,139], img0)
+    img0 = PIL.Image.open('pilatus800.jpg')
+    img0 = np.float32(img0)
+    showarray(img0/255.0)
+    render_deepdream(tf.square(T('mixed4c')), img0)
+    render_deepdream(T(layer)[:,:,:,139], img0)
     
+def parse_arguments(argv):
+    parser = argparse.ArgumentParser()
+    
+    parser.add_argument('model_dir', type=str, 
+        help='Directory containing the graph definition and checkpoint files.')
+    parser.add_argument('--model_def', type=str, 
+        help='Model definition. Points to a module containing the definition of the inference graph.',
+        default='models.nn4')
+    parser.add_argument('--seed', type=int,
+        help='Random seed.', default=666)
+    return parser.parse_args(argv)
 
 if __name__ == '__main__':
-    main()
+    main(parse_arguments(sys.argv[1:]))

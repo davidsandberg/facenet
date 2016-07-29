@@ -49,7 +49,6 @@ def load_and_align_data(image_paths, image_size, align, landmarkIndices):
 def parse_arguments(argv):
     parser = argparse.ArgumentParser()
     
-    #'~/models/facenet/20160514-234418/model.ckpt-500000'
     parser.add_argument('model_file', type=str, 
         help='File containing the model parameters as well as the model metagraph (with extension ".meta")')
     parser.add_argument('image1', type=str, help='First image to compare.')

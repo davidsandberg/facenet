@@ -7,6 +7,7 @@ import shutil
 import facenet_train
 import validate_on_lfw
 import compare
+import visualize
 
 class TrainTest(unittest.TestCase):
   
@@ -64,12 +65,28 @@ class TrainTest(unittest.TestCase):
         facenet_train.main(args)
 
     def test_compare(self):
-        argv = ['../data/model.ckpt-500000', 
-                '../data/Anthony_Hopkins_0001.png',
-                '../data/Anthony_Hopkins_0002.png' ]
+        argv = ['../data/model/20160620-173927/model.ckpt-500000', 
+                '../data/images/Anthony_Hopkins_0001.png',
+                '../data/images/Anthony_Hopkins_0002.png' ]
         args = compare.parse_arguments(argv)
         compare.main(args)
 
+    def test_visualize(self):
+        model_dir = os.path.abspath('../data/model/20160620-173927')
+        create_checkpoint_file(model_dir, 'model.ckpt-500000')
+        argv = [model_dir, 
+                '--model_def', 'models.nn4' ]
+        args = visualize.parse_arguments(argv)
+        visualize.main(args)
+
+# Create a checkpoint file pointing to the model
+def create_checkpoint_file(model_dir, model_file):
+    checkpoint_filename = os.path.join(model_dir, 'checkpoint')
+    full_model_filename = os.path.join(model_dir, model_file)
+    with open(checkpoint_filename, 'w') as f:
+        f.write('model_checkpoint_path: "%s"\n' % full_model_filename)
+        f.write('all_model_checkpoint_paths: "%s"\n' % full_model_filename)
+        
 # Create a mock dataset with random pixel images
 def create_mock_dataset(dataset_dir):
    
