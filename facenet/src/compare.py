@@ -3,22 +3,15 @@
 from scipy import misc
 import tensorflow as tf
 import numpy as np
-import facenet
 import os
+import sys
+import argparse
+import facenet
 import align_dlib
 
-FLAGS = tf.app.flags.FLAGS
-
-tf.app.flags.DEFINE_string('model_file', '~/models/facenet/20160514-234418/model.ckpt-500000',
-                           """File containing the model parameters as well as the model metagraph (with extension '.meta')""")
-tf.app.flags.DEFINE_string('dlib_face_predictor', '../data/shape_predictor_68_face_landmarks.dat',
-                           """File containing the dlib face predictor.""")
-tf.app.flags.DEFINE_string('image1', '', """First image to compare.""")
-tf.app.flags.DEFINE_string('image2', '', """Second image to compare.""")
-
-def main():
-    align = align_dlib.AlignDlib(os.path.expanduser(FLAGS.dlib_face_predictor))
-    image_paths = [FLAGS.image1, FLAGS.image2]
+def main(args):
+    align = align_dlib.AlignDlib(os.path.expanduser(args.dlib_face_predictor))
+    image_paths = [args.image1, args.image2]
     landmarkIndices = align_dlib.AlignDlib.OUTER_EYES_AND_NOSE
 
     with tf.Graph().as_default():
@@ -26,8 +19,8 @@ def main():
         with tf.Session() as sess:
       
             # Load the model
-            print('Loading model "%s"' % FLAGS.model_file)
-            facenet.load_model(FLAGS.model_file)
+            print('Loading model "%s"' % args.model_file)
+            facenet.load_model(args.model_file)
     
             # Get input and output tensors
             images_placeholder = tf.get_default_graph().get_tensor_by_name("input:0")
@@ -53,5 +46,17 @@ def load_and_align_data(image_paths, image_size, align, landmarkIndices):
     images = np.stack(img_list)
     return images
 
+def parse_arguments(argv):
+    parser = argparse.ArgumentParser()
+    
+    #'~/models/facenet/20160514-234418/model.ckpt-500000'
+    parser.add_argument('model_file', type=str, 
+        help='File containing the model parameters as well as the model metagraph (with extension ".meta")')
+    parser.add_argument('image1', type=str, help='First image to compare.')
+    parser.add_argument('image2', type=str, help='Second image to compare.')
+    parser.add_argument('--dlib_face_predictor', type=str,
+        help='File containing the dlib face predictor.', default='../data/shape_predictor_68_face_landmarks.dat')
+    return parser.parse_args(argv)
+
 if __name__ == '__main__':
-    main()
+    main(parse_arguments(sys.argv[1:]))

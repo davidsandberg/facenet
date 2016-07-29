@@ -1,11 +1,12 @@
 import unittest
-import facenet_train
 import tempfile
 import numpy as np
 import cv2
 import os
 import shutil
+import facenet_train
 import validate_on_lfw
+import compare
 
 class TrainTest(unittest.TestCase):
   
@@ -61,6 +62,13 @@ class TrainTest(unittest.TestCase):
                 '--lfw_nrof_folds', '2' ]
         args = facenet_train.parse_arguments(argv)
         facenet_train.main(args)
+
+    def test_compare(self):
+        argv = ['../data/model.ckpt-500000', 
+                '../data/Anthony_Hopkins_0001.png',
+                '../data/Anthony_Hopkins_0002.png' ]
+        args = compare.parse_arguments(argv)
+        compare.main(args)
 
 # Create a mock dataset with random pixel images
 def create_mock_dataset(dataset_dir):
