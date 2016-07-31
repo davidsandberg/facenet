@@ -71,7 +71,8 @@ def main(args):
         total_loss = tf.add_n([loss] + regularization_losses, name='total_loss')
 
         # Build a Graph that trains the model with one batch of examples and updates the model parameters
-        train_op, _ = facenet.train(total_loss, global_step, args.optimizer, args.learning_rate, args.moving_average_decay)
+        train_op, _ = facenet.train(total_loss, global_step, args.optimizer, args.learning_rate, 
+            args.learning_rate_decay_epochs*args.epoch_size, args.learning_rate_decay_factor, args.moving_average_decay)
 
         # Create a saver
         saver = tf.train.Saver(tf.all_variables(), max_to_keep=0)
@@ -225,6 +226,10 @@ def parse_arguments(argv):
         help='The optimization algorithm to use', default='ADAGRAD')
     parser.add_argument('--learning_rate', type=float,
         help='Initial learning rate.', default=0.1)
+    parser.add_argument('--learning_rate_decay_epochs', type=int,
+        help='Number of epochs between learning rate decay.', default=100)
+    parser.add_argument('--learning_rate_decay_factor', type=float,
+        help='Learning rate decay factor.', default=1.0)
     parser.add_argument('--moving_average_decay', type=float,
         help='Exponential decay for tracking of training parameters.', default=0.9999)
     parser.add_argument('--seed', type=int,

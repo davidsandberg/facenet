@@ -256,7 +256,8 @@ def _add_loss_summaries(total_loss):
   
     return loss_averages_op
 
-def train(total_loss, global_step, optimizer, learning_rate, moving_average_decay):
+def train(total_loss, global_step, optimizer, initial_learning_rate, 
+    learning_rate_decay_steps, learning_rate_decay_factor, moving_average_decay):
     """Setup training for the FaceNet model.
   
     Create an optimizer and apply to all trainable variables. Add moving
@@ -271,7 +272,11 @@ def train(total_loss, global_step, optimizer, learning_rate, moving_average_deca
     """
     # Generate moving averages of all losses and associated summaries.
     loss_averages_op = _add_loss_summaries(total_loss)
-  
+    
+    learning_rate = tf.train.exponential_decay(initial_learning_rate, global_step,
+        learning_rate_decay_steps, learning_rate_decay_factor, staircase=True)
+    tf.scalar_summary('learning_rate', learning_rate)
+
     # Compute gradients.
     with tf.control_dependencies([loss_averages_op]):
         if optimizer=='ADAGRAD':
