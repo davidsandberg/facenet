@@ -52,10 +52,10 @@ def main(args):
                         print(image_path)
                         nrof_successfully_aligned += 1
                         misc.imsave(output_filename, aligned)
-                    elif args.prealigned_path:
+                    elif args.prealigned_dir:
                         # Face detection failed. Use center crop from pre-aligned dataset
                         class_name = os.path.split(output_class_dir)[1]
-                        image_path_without_ext = os.path.join(os.path.expanduser(args.prealigned_path), 
+                        image_path_without_ext = os.path.join(os.path.expanduser(args.prealigned_dir), 
                                                               class_name, filename)
                         # Find the extension of the image
                         exts = ('jpg', 'png')
