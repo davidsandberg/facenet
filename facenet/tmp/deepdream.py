@@ -1,16 +1,28 @@
 # boilerplate code
 import numpy as np
 from functools import partial
-import PIL.Image
 
 import tensorflow as tf
 import matplotlib.pyplot as plt
-
+import urllib2
+import os
+import zipfile
 
 def main():
-    
     # download pre-trained model by running the command below in a shell
     #  wget https://storage.googleapis.com/download.tensorflow.org/models/inception5h.zip && unzip inception5h.zip
+    url = 'https://storage.googleapis.com/download.tensorflow.org/models/inception5h.zip'
+    data_dir = '../data/'
+    model_name = os.path.split(url)[-1]
+    local_zip_file = os.path.join(data_dir, model_name)
+    if not os.path.exists(local_zip_file):
+        # Download
+        model_url = urllib2.urlopen(url)
+        with open(local_zip_file, 'wb') as output:
+            output.write(model_url.read())
+        # Extract
+        with zipfile.ZipFile(local_zip_file, 'r') as zip_ref:
+            zip_ref.extractall(data_dir)
   
     # start with a gray image with a little noise
     img_noise = np.random.uniform(size=(224,224,3)) + 100.0
@@ -20,7 +32,7 @@ def main():
     # creating TensorFlow session and loading the model
     graph = tf.Graph()
     sess = tf.InteractiveSession(graph=graph)
-    with tf.gfile.FastGFile(model_fn, 'rb') as f:
+    with tf.gfile.FastGFile(os.path.join(data_dir, model_fn), 'rb') as f:
         graph_def = tf.GraphDef()
         graph_def.ParseFromString(f.read())
     t_input = tf.placeholder(np.float32, name='input') # define the input tensor
@@ -225,31 +237,32 @@ def main():
     # to have non-zero gradients for features with negative initial activations.
     layer = 'mixed4d_3x3_bottleneck_pre_relu'
     channel = 139 # picking some feature channel to visualize
-    
     render_naive(T(layer)[:,:,:,channel])
+    
+    xxx = 1
   
-    render_multiscale(T(layer)[:,:,:,channel])
-  
-    k = np.float32([1,4,6,4,1])
-    k = np.outer(k, k)
-    k5x5 = k[:,:,None,None]/k.sum()*np.eye(3, dtype=np.float32)
-    
-    render_lapnorm(T(layer)[:,:,:,channel])
-    
-    render_lapnorm(T(layer)[:,:,:,65])
-    
-    render_lapnorm(T('mixed3b_1x1_pre_relu')[:,:,:,101])
-    
-    render_lapnorm(T(layer)[:,:,:,65]+T(layer)[:,:,:,139], octave_n=4)
-    
-    
-    img0 = PIL.Image.open('pilatus800.jpg')
-    img0 = np.float32(img0)
-    showarray(img0/255.0)
-    
-    render_deepdream(tf.square(T('mixed4c')), img0)
-    
-    render_deepdream(T(layer)[:,:,:,139], img0)
+#     render_multiscale(T(layer)[:,:,:,channel])
+#   
+#     k = np.float32([1,4,6,4,1])
+#     k = np.outer(k, k)
+#     k5x5 = k[:,:,None,None]/k.sum()*np.eye(3, dtype=np.float32)
+#     
+#     render_lapnorm(T(layer)[:,:,:,channel])
+#     
+#     render_lapnorm(T(layer)[:,:,:,65])
+#     
+#     render_lapnorm(T('mixed3b_1x1_pre_relu')[:,:,:,101])
+#     
+#     render_lapnorm(T(layer)[:,:,:,65]+T(layer)[:,:,:,139], octave_n=4)
+#     
+#     
+#     img0 = PIL.Image.open('pilatus800.jpg')
+#     img0 = np.float32(img0)
+#     showarray(img0/255.0)
+#     
+#     render_deepdream(tf.square(T('mixed4c')), img0)
+#     
+#     render_deepdream(T(layer)[:,:,:,139], img0)
     
   
 if __name__ == '__main__':
