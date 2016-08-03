@@ -39,6 +39,7 @@ def main(args):
     train_set = facenet.get_dataset(args.data_dir)
     
     print('Model directory: %s' % model_dir)
+    print('Log directory: %s' % log_dir)
     
     # Read the file containing the pairs used for testing
     pairs = lfw.read_pairs(os.path.expanduser(args.lfw_pairs))
