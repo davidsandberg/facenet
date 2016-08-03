@@ -8,6 +8,7 @@ import facenet_train
 import validate_on_lfw
 import compare
 import visualize
+import test_invariance_on_lfw
 
 class TrainTest(unittest.TestCase):
   
@@ -78,6 +79,20 @@ class TrainTest(unittest.TestCase):
                 '--model_def', 'models.nn4' ]
         args = visualize.parse_arguments(argv)
         visualize.main(args)
+
+    def test_test_invariance_on_lfw(self):
+        model_dir = os.path.abspath('../data/model/20160620-173927')
+        model_file = os.path.join(model_dir, 'model.ckpt-500000')
+        argv = ['--model_file', model_file,
+                '--lfw_pairs', self.lfw_pairs_file,
+                '--lfw_dir', self.dataset_dir,
+                '--lfw_nrof_folds', '2',
+                '--orig_image_size', '96',
+                '--nrof_offsets', '1',
+                '--nrof_angles', '1',
+                '--nrof_scales', '1' ]
+        args = test_invariance_on_lfw.parse_arguments(argv)
+        test_invariance_on_lfw.main(args)
 
 # Create a checkpoint file pointing to the model
 def create_checkpoint_file(model_dir, model_file):
