@@ -1,6 +1,7 @@
 # boilerplate code
 import numpy as np
 from functools import partial
+import PIL.Image
 
 import tensorflow as tf
 import matplotlib.pyplot as plt
@@ -48,12 +49,12 @@ def main():
   
   
     # Helper functions for TF Graph visualization
-    
+    #pylint: disable=unused-variable
     def strip_consts(graph_def, max_const_size=32):
         """Strip large constant values from graph_def."""
         strip_def = tf.GraphDef()
         for n0 in graph_def.node:
-            n = strip_def.node.add() 
+            n = strip_def.node.add() #pylint: disable=maybe-no-member
             n.MergeFrom(n0)
             if n.op == 'Const':
                 tensor = n.attr['value'].tensor
@@ -65,7 +66,7 @@ def main():
     def rename_nodes(graph_def, rename_func):
         res_def = tf.GraphDef()
         for n0 in graph_def.node:
-            n = res_def.node.add() 
+            n = res_def.node.add() #pylint: disable=maybe-no-member
             n.MergeFrom(n0)
             n.name = rename_func(n.name)
             for i, s in enumerate(n.input):
@@ -95,9 +96,6 @@ def main():
             # normalizing the gradient, so the same step size should work 
             g /= g.std()+1e-8         # for different layers and networks
             img += g*step
-  #          print(score, end = ' ')
-  #      clear_output()
-  #      print('\n')
         showarray(visstd(img))
         
     def tffunc(*argtypes):
@@ -239,30 +237,28 @@ def main():
     channel = 139 # picking some feature channel to visualize
     render_naive(T(layer)[:,:,:,channel])
     
-    xxx = 1
-  
-#     render_multiscale(T(layer)[:,:,:,channel])
-#   
-#     k = np.float32([1,4,6,4,1])
-#     k = np.outer(k, k)
-#     k5x5 = k[:,:,None,None]/k.sum()*np.eye(3, dtype=np.float32)
-#     
-#     render_lapnorm(T(layer)[:,:,:,channel])
-#     
-#     render_lapnorm(T(layer)[:,:,:,65])
-#     
-#     render_lapnorm(T('mixed3b_1x1_pre_relu')[:,:,:,101])
-#     
-#     render_lapnorm(T(layer)[:,:,:,65]+T(layer)[:,:,:,139], octave_n=4)
-#     
-#     
-#     img0 = PIL.Image.open('pilatus800.jpg')
-#     img0 = np.float32(img0)
-#     showarray(img0/255.0)
-#     
-#     render_deepdream(tf.square(T('mixed4c')), img0)
-#     
-#     render_deepdream(T(layer)[:,:,:,139], img0)
+    render_multiscale(T(layer)[:,:,:,channel])
+   
+    k = np.float32([1,4,6,4,1])
+    k = np.outer(k, k)
+    k5x5 = k[:,:,None,None]/k.sum()*np.eye(3, dtype=np.float32)
+     
+    render_lapnorm(T(layer)[:,:,:,channel])
+     
+    render_lapnorm(T(layer)[:,:,:,65])
+     
+    render_lapnorm(T('mixed3b_1x1_pre_relu')[:,:,:,101])
+     
+    render_lapnorm(T(layer)[:,:,:,65]+T(layer)[:,:,:,139], octave_n=4)
+     
+     
+    img0 = PIL.Image.open('pilatus800.jpg')
+    img0 = np.float32(img0)
+    showarray(img0/255.0)
+     
+    render_deepdream(tf.square(T('mixed4c')), img0)
+     
+    render_deepdream(T(layer)[:,:,:,139], img0)
     
   
 if __name__ == '__main__':

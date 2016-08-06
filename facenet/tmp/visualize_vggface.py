@@ -24,8 +24,6 @@ def main():
     img = render_naive(sess, t_input, nodes[layer][:,:,:,channel], img_noise)
     showarray(img)
 
-    xxx = 1
-
 def showarray(a):
     a = np.uint8(np.clip(a, 0, 1)*255)
     plt.imshow(a)

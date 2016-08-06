@@ -3,6 +3,10 @@ Embeddings are calculated using the pairs from http://vis-www.cs.umass.edu/lfw/p
 is calculated and plotted. Both the model metagraph and the model parameters need to exist
 in the same directory, and the metagraph should have the extension '.meta'.
 """
+from __future__ import absolute_import
+from __future__ import division
+from __future__ import print_function
+
 import tensorflow as tf
 import numpy as np
 import argparse

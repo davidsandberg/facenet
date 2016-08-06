@@ -97,6 +97,7 @@ class AlignDlib:
         """
         assert facePredictor is not None
 
+        #pylint: disable=maybe-no-member
         self.detector = dlib.get_frontal_face_detector()
         self.predictor = dlib.shape_predictor(facePredictor)
 
@@ -195,6 +196,7 @@ class AlignDlib:
         npLandmarks = np.float32(landmarks)
         npLandmarkIndices = np.array(landmarkIndices)
 
+        #pylint: disable=maybe-no-member
         H = cv2.getAffineTransform(npLandmarks[npLandmarkIndices],
                                    imgDim * MINMAX_TEMPLATE[npLandmarkIndices]*scale + imgDim*(1-scale)/2)
         thumbnail = cv2.warpAffine(rgbImg, H, (imgDim, imgDim))
@@ -292,4 +294,3 @@ class AlignDlib:
                     1.0 - f2) + bottomLeft[2] * (1.0 - f1) * f2 + bottomRight[2] * f1 * f2
 
         return thumbnail
-      

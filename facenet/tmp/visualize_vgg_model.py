@@ -23,16 +23,17 @@ noiseRatio = 0.6
 nodes = vggverydeep19.load('../data/imagenet-vgg-verydeep-19.mat', (600, 800))
 
 # Mean VGG-19 image
-meanImage19 = np.array([103.939, 116.779, 123.68]).reshape((1,1,1,3))
+meanImage19 = np.array([103.939, 116.779, 123.68]).reshape((1,1,1,3)) #pylint: disable=maybe-no-member
 
 
 
 # Squared-error loss of content between the two feature representations
-def sqErrorLossContent(session, modelGraph, layer):
+def sqErrorLossContent(sess, modelGraph, layer):
     p = session.run(modelGraph[layer])
+    #pylint: disable=maybe-no-member
     N = p.shape[3]
     M = p.shape[1] * p.shape[2]
-    return (1 / (4 * N * M)) * tf.reduce_sum(tf.pow(modelGraph[layer] - session.run(modelGraph[layer]), 2))
+    return (1 / (4 * N * M)) * tf.reduce_sum(tf.pow(modelGraph[layer] - sess.run(modelGraph[layer]), 2))
  
 # Squared-error loss of style between the two feature representations
 styleLayers = [

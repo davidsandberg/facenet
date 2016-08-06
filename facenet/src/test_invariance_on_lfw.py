@@ -1,6 +1,10 @@
 """Test invariance to translation, scaling and rotation on the "Labeled Faces in the Wild" dataset (http://vis-www.cs.umass.edu/lfw/).
 This requires test images to be cropped a bit wider than the normal to give some room for the transformations.
 """
+from __future__ import absolute_import
+from __future__ import division
+from __future__ import print_function
+
 import tensorflow as tf
 import numpy as np
 import argparse

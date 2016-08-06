@@ -1,7 +1,9 @@
 """Training a face recognizer with TensorFlow based on the FaceNet paper
 FaceNet: A Unified Embedding for Face Recognition and Clustering: http://arxiv.org/abs/1503.03832
-
 """
+from __future__ import absolute_import
+from __future__ import division
+from __future__ import print_function
 
 from datetime import datetime
 import os.path
@@ -94,6 +96,7 @@ def main(args):
 
             if preload_model:
                 ckpt = tf.train.get_checkpoint_state(model_dir)
+                #pylint: disable=maybe-no-member
                 if ckpt and ckpt.model_checkpoint_path:
                     saver.restore(sess, ckpt.model_checkpoint_path)
                 else:
@@ -112,6 +115,7 @@ def main(args):
                 print('Validation rate: %2.5f+-%2.5f @ FAR=%2.5f' % (val, val_std, far))
                 # Add validation loss and accuracy to summary
                 summary = tf.Summary()
+                #pylint: disable=maybe-no-member
                 summary.value.add(tag='lfw/accuracy', simple_value=np.mean(accuracy))
                 summary.value.add(tag='lfw/val_rate', simple_value=val)
                 summary_writer.add_summary(summary, step)
@@ -173,6 +177,7 @@ def train(args, sess, dataset, epoch, images_placeholder, phase_train_placeholde
             train_time += duration
         # Add validation loss and accuracy to summary
         summary = tf.Summary()
+        #pylint: disable=maybe-no-member
         summary.value.add(tag='time/load', simple_value=load_time)
         summary.value.add(tag='time/selection', simple_value=selection_time)
         summary.value.add(tag='time/train', simple_value=train_time)

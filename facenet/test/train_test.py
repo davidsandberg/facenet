@@ -117,7 +117,7 @@ def create_mock_dataset(dataset_dir):
             img_name = '%04d' % (j+1)
             img_path = os.path.join(class_dir, class_name+'_'+img_name + '.png')
             img = np.random.uniform(low=0.0, high=255.0, size=(96,96,3))
-            cv2.imwrite(img_path, img)
+            cv2.imwrite(img_path, img) #pylint: disable=maybe-no-member
 
 # Create a mock LFW pairs file
 def create_mock_lfw_pairs(tmp_dir):

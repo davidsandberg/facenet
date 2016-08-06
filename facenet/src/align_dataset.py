@@ -1,5 +1,9 @@
 """Performs face alignment and stores face thumbnails in the output directory."""
 
+from __future__ import absolute_import
+from __future__ import division
+from __future__ import print_function
+
 from scipy import misc
 import sys
 import os

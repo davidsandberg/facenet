@@ -1,5 +1,9 @@
 """Performs face alignment and calculates L2 distance between the embeddings of two images."""
 
+from __future__ import absolute_import
+from __future__ import division
+from __future__ import print_function
+
 from scipy import misc
 import tensorflow as tf
 import numpy as np

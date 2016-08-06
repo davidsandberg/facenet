@@ -1,6 +1,9 @@
 """Visualize individual feature channels and their combinations to explore the space of patterns learned by the neural network
 Based on http://nbviewer.jupyter.org/github/tensorflow/tensorflow/blob/master/tensorflow/examples/tutorials/deepdream/deepdream.ipynb
 """
+from __future__ import absolute_import
+from __future__ import division
+from __future__ import print_function
 
 import os
 import numpy as np
@@ -39,6 +42,7 @@ def main(args):
   
     # Restore the parameters
     ckpt = tf.train.get_checkpoint_state(os.path.expanduser(args.model_dir))
+    #pylint: disable=maybe-no-member
     if ckpt and ckpt.model_checkpoint_path:
         saver.restore(sess, ckpt.model_checkpoint_path)
     else:
@@ -78,7 +82,7 @@ def main(args):
         placeholders = list(map(tf.placeholder, argtypes))
         def wrap(f):
             out = f(*placeholders)
-            def wrapper(*args, **kw):
+            def wrapper(*args):
                 return out.eval(dict(zip(placeholders, args)), session=sess)
             return wrapper
         return wrap

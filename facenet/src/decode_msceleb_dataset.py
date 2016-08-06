@@ -1,6 +1,10 @@
 """Decode the MsCelebV1 dataset in TSV (tab separated values) format downloaded from
 https://www.microsoft.com/en-us/research/project/ms-celeb-1m-challenge-recognizing-one-million-celebrities-real-world/
 """
+from __future__ import absolute_import
+from __future__ import division
+from __future__ import print_function
+
 from scipy import misc
 import numpy as np
 import base64
@@ -38,14 +42,14 @@ def main(args):
             img_string = fields[6]
             img_dec_string = base64.b64decode(img_string)
             img_data = np.fromstring(img_dec_string, dtype=np.uint8)
-            img = cv2.imdecode(img_data, cv2.cv.CV_LOAD_IMAGE_COLOR)
+            img = cv2.imdecode(img_data, cv2.cv.CV_LOAD_IMAGE_COLOR) #pylint: disable=maybe-no-member
             if args.size>0:
                 img = misc.imresize(img, (args.size, args.size), interp='bilinear')
             full_class_dir = os.path.join(output_dir, class_dir)
             if not os.path.exists(full_class_dir):
                 os.mkdir(full_class_dir)
             full_path = os.path.join(full_class_dir, img_name)
-            cv2.imwrite(full_path, img)
+            cv2.imwrite(full_path, img) #pylint: disable=maybe-no-member
             print('%8d: %s' % (i, full_path))
             i += 1
 
