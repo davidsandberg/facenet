@@ -16,14 +16,7 @@ import matplotlib.pyplot as plt
 from sklearn.cross_validation import KFold
 from scipy import interpolate
 
-conv_counter = 1
-pool_counter = 1
-affine_counter = 1
-
-def conv(inpOp, nIn, nOut, kH, kW, dH, dW, padType, prefix, phase_train=True, use_batch_norm=True, weight_decay=0.0):
-    global conv_counter
-    name = prefix + '_' + str(conv_counter)
-    conv_counter += 1
+def conv(inpOp, nIn, nOut, kH, kW, dH, dW, padType, name, phase_train=True, use_batch_norm=True, weight_decay=0.0):
     with tf.variable_scope(name):
         l2_regularizer = lambda t: l2_loss(t, weight=weight_decay)
         kernel = tf.get_variable("weights", [kH, kW, nIn, nOut],
@@ -40,10 +33,7 @@ def conv(inpOp, nIn, nOut, kH, kW, dH, dW, padType, prefix, phase_train=True, us
         conv1 = tf.nn.relu(bias)
     return conv1
 
-def affine(inpOp, nIn, nOut, weight_decay=0.0):
-    global affine_counter
-    name = 'affine' + str(affine_counter)
-    affine_counter += 1
+def affine(inpOp, nIn, nOut, name, weight_decay=0.0):
     with tf.variable_scope(name):
         l2_regularizer = lambda t: l2_loss(t, weight=weight_decay)
         weights = tf.get_variable("weights", [nIn, nOut],
@@ -69,12 +59,8 @@ def l2_loss(tensor, weight=1.0, scope=None):
         loss = tf.mul(weight, tf.nn.l2_loss(tensor), name='value')
     return loss
 
-def lppool(inpOp, pnorm, kH, kW, dH, dW, padding):
-    global pool_counter
-    name = 'pool' + str(pool_counter)
-    pool_counter += 1
-    
-    with tf.name_scope('lppool'):
+def lppool(inpOp, pnorm, kH, kW, dH, dW, padding, name):
+    with tf.variable_scope(name):
         if pnorm == 2:
             pwr = tf.square(inpOp)
         else:
@@ -83,8 +69,7 @@ def lppool(inpOp, pnorm, kH, kW, dH, dW, padding):
         subsamp = tf.nn.avg_pool(pwr,
                               ksize=[1, kH, kW, 1],
                               strides=[1, dH, dW, 1],
-                              padding=padding,
-                              name=name)
+                              padding=padding)
         subsamp_sum = tf.mul(subsamp, kH*kW)
         
         if pnorm == 2:
@@ -94,27 +79,21 @@ def lppool(inpOp, pnorm, kH, kW, dH, dW, padding):
     
     return out
 
-def mpool(inpOp, kH, kW, dH, dW, padding):
-    global pool_counter
-    name = 'pool' + str(pool_counter)
-    pool_counter += 1
-    with tf.name_scope('maxpool'):
+def mpool(inpOp, kH, kW, dH, dW, padding, name):
+    with tf.variable_scope(name):
         maxpool = tf.nn.max_pool(inpOp,
                        ksize=[1, kH, kW, 1],
                        strides=[1, dH, dW, 1],
-                       padding=padding,
-                       name=name)  
+                       padding=padding)  
     return maxpool
 
-def apool(inpOp, kH, kW, dH, dW, padding):
-    global pool_counter
-    name = 'pool' + str(pool_counter)
-    pool_counter += 1
-    return tf.nn.avg_pool(inpOp,
-                          ksize=[1, kH, kW, 1],
-                          strides=[1, dH, dW, 1],
-                          padding=padding,
-                          name=name)
+def apool(inpOp, kH, kW, dH, dW, padding, name):
+    with tf.variable_scope(name):
+        avgpool = tf.nn.avg_pool(inpOp,
+                              ksize=[1, kH, kW, 1],
+                              strides=[1, dH, dW, 1],
+                              padding=padding)
+    return avgpool
 
 def batch_norm(x, n_out, phase_train, name, affn=True):
     """
@@ -129,7 +108,7 @@ def batch_norm(x, n_out, phase_train, name, affn=True):
         normed:      batch-normalized maps
     Ref: http://stackoverflow.com/questions/33949786/how-could-i-use-batch-normalization-in-tensorflow/33950177
     """
-    with tf.name_scope(name):
+    with tf.variable_scope(name):
   
         beta = tf.Variable(tf.constant(0.0, shape=[n_out]),
                            name=name+'/beta', trainable=True)
@@ -168,7 +147,7 @@ def inception(inp, inSize, ks, o1s, o2s1, o2s2, o3s1, o3s2, o4s1, o4s2, o4s3, po
     
     net = []
     
-    with tf.name_scope(name):
+    with tf.variable_scope(name):
         if o1s>0:
             conv1 = conv(inp, inSize, o1s, 1, 1, 1, 1, 'SAME', 'in1_conv1x1', phase_train=phase_train, use_batch_norm=use_batch_norm, weight_decay=weight_decay)
             net.append(conv1)
@@ -184,9 +163,9 @@ def inception(inp, inSize, ks, o1s, o2s1, o2s2, o3s1, o3s2, o4s1, o4s2, o4s3, po
             net.append(conv5)
       
         if poolType=='MAX':
-            pool = mpool(inp, o4s1, o4s1, o4s3, o4s3, 'SAME')
+            pool = mpool(inp, o4s1, o4s1, o4s3, o4s3, 'SAME', 'in4_pool')
         elif poolType=='L2':
-            pool = lppool(inp, 2, o4s1, o4s1, o4s3, o4s3, 'SAME')
+            pool = lppool(inp, 2, o4s1, o4s1, o4s3, o4s3, 'SAME', 'in4_pool')
         else:
             raise ValueError('Invalid pooling type "%s"' % poolType)
         
@@ -210,12 +189,12 @@ def triplet_loss(anchor, positive, negative, alpha):
     Returns:
       the triplet loss according to the FaceNet paper as a float tensor.
     """
-    with tf.name_scope('triplet_loss'):
+    with tf.variable_scope('triplet_loss'):
         pos_dist = tf.reduce_sum(tf.square(tf.sub(anchor, positive)), 1)  # Summing over distances in each batch
         neg_dist = tf.reduce_sum(tf.square(tf.sub(anchor, negative)), 1)
         
         basic_loss = tf.add(tf.sub(pos_dist,neg_dist), alpha)
-        loss = tf.reduce_mean(tf.maximum(basic_loss, 0.0), 0, name='tripletloss')
+        loss = tf.reduce_mean(tf.maximum(basic_loss, 0.0), 0)
       
     return loss
 
