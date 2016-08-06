@@ -16,14 +16,12 @@ import matplotlib.pyplot as plt
 from sklearn.cross_validation import KFold
 from scipy import interpolate
 
-parameters = []
 conv_counter = 1
 pool_counter = 1
 affine_counter = 1
 
 def conv(inpOp, nIn, nOut, kH, kW, dH, dW, padType, prefix, phase_train=True, use_batch_norm=True, weight_decay=0.0):
     global conv_counter
-    global parameters
     name = prefix + '_' + str(conv_counter)
     conv_counter += 1
     with tf.variable_scope(name):
@@ -31,21 +29,19 @@ def conv(inpOp, nIn, nOut, kH, kW, dH, dW, padType, prefix, phase_train=True, us
         kernel = tf.get_variable("weights", [kH, kW, nIn, nOut],
             initializer=tf.truncated_normal_initializer(stddev=1e-1),
             regularizer=l2_regularizer)
-        conv = tf.nn.conv2d(inpOp, kernel, [1, dH, dW, 1], padding=padType)
+        cnv = tf.nn.conv2d(inpOp, kernel, [1, dH, dW, 1], padding=padType)
         
         if use_batch_norm:
-            conv_bn = batch_norm(conv, nOut, phase_train, 'batch_norm')
+            conv_bn = batch_norm(cnv, nOut, phase_train, 'batch_norm')
         else:
-            conv_bn = conv
+            conv_bn = cnv
         biases = tf.get_variable("biases", [nOut], initializer=tf.constant_initializer())
         bias = tf.nn.bias_add(conv_bn, biases)
         conv1 = tf.nn.relu(bias)
-        parameters += [kernel, biases]
     return conv1
 
 def affine(inpOp, nIn, nOut, weight_decay=0.0):
     global affine_counter
-    global parameters
     name = 'affine' + str(affine_counter)
     affine_counter += 1
     with tf.variable_scope(name):
@@ -55,7 +51,6 @@ def affine(inpOp, nIn, nOut, weight_decay=0.0):
             regularizer=l2_regularizer)
         biases = tf.get_variable("biases", [nOut], initializer=tf.constant_initializer())
         affine1 = tf.nn.relu_layer(inpOp, weights, biases)
-        parameters += [weights, biases]
     return affine1
 
 def l2_loss(tensor, weight=1.0, scope=None):
@@ -76,7 +71,6 @@ def l2_loss(tensor, weight=1.0, scope=None):
 
 def lppool(inpOp, pnorm, kH, kW, dH, dW, padding):
     global pool_counter
-    global parameters
     name = 'pool' + str(pool_counter)
     pool_counter += 1
     
@@ -102,7 +96,6 @@ def lppool(inpOp, pnorm, kH, kW, dH, dW, padding):
 
 def mpool(inpOp, kH, kW, dH, dW, padding):
     global pool_counter
-    global parameters
     name = 'pool' + str(pool_counter)
     pool_counter += 1
     with tf.name_scope('maxpool'):
@@ -115,7 +108,6 @@ def mpool(inpOp, kH, kW, dH, dW, padding):
 
 def apool(inpOp, kH, kW, dH, dW, padding):
     global pool_counter
-    global parameters
     name = 'pool' + str(pool_counter)
     pool_counter += 1
     return tf.nn.avg_pool(inpOp,
@@ -124,7 +116,7 @@ def apool(inpOp, kH, kW, dH, dW, padding):
                           padding=padding,
                           name=name)
 
-def batch_norm(x, n_out, phase_train, name, affine=True):
+def batch_norm(x, n_out, phase_train, name, affn=True):
     """
     Batch normalization on convolutional maps.
     Args:
@@ -132,19 +124,17 @@ def batch_norm(x, n_out, phase_train, name, affine=True):
         n_out:       integer, depth of input maps
         phase_train: boolean tf.Variable, true indicates training phase
         scope:       string, variable scope
-        affine:      whether to affine-transform outputs
+        affn:      whether to affn-transform outputs
     Return:
         normed:      batch-normalized maps
     Ref: http://stackoverflow.com/questions/33949786/how-could-i-use-batch-normalization-in-tensorflow/33950177
     """
-    global parameters
-  
     with tf.name_scope(name):
   
         beta = tf.Variable(tf.constant(0.0, shape=[n_out]),
                            name=name+'/beta', trainable=True)
         gamma = tf.Variable(tf.constant(1.0, shape=[n_out]),
-                            name=name+'/gamma', trainable=affine)
+                            name=name+'/gamma', trainable=affn)
       
         batch_mean, batch_var = tf.nn.moments(x, [0,1,2], name='moments')
         ema = tf.train.ExponentialMovingAverage(decay=0.9)
@@ -156,8 +146,7 @@ def batch_norm(x, n_out, phase_train, name, affine=True):
                                           mean_var_with_update,
                                           lambda: (ema.average(batch_mean), ema.average(batch_var)))
         normed = tf.nn.batch_norm_with_global_normalization(x, mean, var,
-                                                            beta, gamma, 1e-3, affine, name=name)
-        parameters += [beta, gamma]
+                                                            beta, gamma, 1e-3, affn, name=name)
     return normed
 
 def inception(inp, inSize, ks, o1s, o2s1, o2s2, o3s1, o3s2, o4s1, o4s2, o4s3, poolType, name, 
@@ -460,7 +449,7 @@ def get_dataset(paths):
             facedir = os.path.join(path_exp, class_name)
             if os.path.isdir(facedir):
                 images = os.listdir(facedir)
-                image_paths = map(lambda x: os.path.join(facedir,x), images)
+                image_paths = [os.path.join(facedir,img) for img in images]
                 dataset.append(ImageClass(class_name, image_paths))
   
     return dataset
@@ -517,16 +506,16 @@ def calculate_roc(thresholds, embeddings1, embeddings2, actual_issame, seed, nro
     diff = np.subtract(embeddings1, embeddings2)
     dist = np.sum(np.square(diff),1)
     
-    for fold_idx, (train, test) in enumerate(folds):
+    for fold_idx, (train_set, test_set) in enumerate(folds):
         
         # Find the best threshold for the fold
         acc_train = np.zeros((nrof_thresholds))
         for threshold_idx, threshold in enumerate(thresholds):
-            _, _, acc_train[threshold_idx] = calculate_accuracy(threshold, dist[train], actual_issame[train])
+            _, _, acc_train[threshold_idx] = calculate_accuracy(threshold, dist[train_set], actual_issame[train_set])
         best_threshold_index = np.argmax(acc_train)
         for threshold_idx, threshold in enumerate(thresholds):
-            tprs[fold_idx,threshold_idx], fprs[fold_idx,threshold_idx], _ = calculate_accuracy(threshold, dist[test], actual_issame[test])
-        _, _, accuracy[fold_idx] = calculate_accuracy(thresholds[best_threshold_index], dist[test], actual_issame[test])
+            tprs[fold_idx,threshold_idx], fprs[fold_idx,threshold_idx], _ = calculate_accuracy(threshold, dist[test_set], actual_issame[test_set])
+        _, _, accuracy[fold_idx] = calculate_accuracy(thresholds[best_threshold_index], dist[test_set], actual_issame[test_set])
           
         tpr = np.mean(tprs,0)
         fpr = np.mean(fprs,0)
@@ -567,16 +556,16 @@ def calculate_val(thresholds, embeddings1, embeddings2, actual_issame, far_targe
     diff = np.subtract(embeddings1, embeddings2)
     dist = np.sum(np.square(diff),1)
     
-    for fold_idx, (train, test) in enumerate(folds):
+    for fold_idx, (train_set, test_set) in enumerate(folds):
       
         # Find the threshold that gives FAR = far_target
         far_train = np.zeros(nrof_thresholds)
         for threshold_idx, threshold in enumerate(thresholds):
-            _, far_train[threshold_idx] = calculate_val_far(threshold, dist[train], actual_issame[train])
+            _, far_train[threshold_idx] = calculate_val_far(threshold, dist[train_set], actual_issame[train_set])
         f = interpolate.interp1d(far_train, thresholds, kind='slinear')
         threshold = f(far_target)
     
-        val[fold_idx], far[fold_idx] = calculate_val_far(threshold, dist[test], actual_issame[test])
+        val[fold_idx], far[fold_idx] = calculate_val_far(threshold, dist[test_set], actual_issame[test_set])
   
     val_mean = np.mean(val)
     far_mean = np.mean(far)

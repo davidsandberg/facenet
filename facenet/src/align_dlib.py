@@ -114,7 +114,7 @@ class AlignDlib:
 
         try:
             return self.detector(rgbImg, 1)
-        except Exception as e:
+        except Exception as e: #pylint: disable=broad-except
             print("Warning: {}".format(e))
             # In rare cases, exceptions are thrown.
             return []
@@ -153,8 +153,10 @@ class AlignDlib:
         assert bb is not None
 
         points = self.predictor(rgbImg, bb)
-        return list(map(lambda p: (p.x, p.y), points.parts()))
+        #return list(map(lambda p: (p.x, p.y), points.parts()))
+        return [(p.x, p.y) for p in points.parts()]
 
+    #pylint: disable=dangerous-default-value
     def align(self, imgDim, rgbImg, bb=None,
               landmarks=None, landmarkIndices=INNER_EYES_AND_BOTTOM_LIP,
               skipMulti=False, scale=1.0):
