@@ -13,7 +13,6 @@ def main():
      
     # Build the inference graph
     nodes = vggface16.load('../data/vgg_face.mat', t_preprocessed)
-      
         
     img_noise = np.random.uniform(size=(224,224,3)) + 117.0
 

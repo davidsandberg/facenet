@@ -23,7 +23,7 @@ noiseRatio = 0.6
 nodes = vggverydeep19.load('../data/imagenet-vgg-verydeep-19.mat', (600, 800))
 
 # Mean VGG-19 image
-meanImage19 = np.array([103.939, 116.779, 123.68]).reshape((1,1,1,3)) #pylint: disable=maybe-no-member
+meanImage19 = np.array([103.939, 116.779, 123.68]).reshape((1,1,1,3)) #pylint: disable=no-member
 
 
 

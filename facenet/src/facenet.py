@@ -148,32 +148,36 @@ def inception(inp, inSize, ks, o1s, o2s1, o2s2, o3s1, o3s2, o4s1, o4s2, o4s3, po
     net = []
     
     with tf.variable_scope(name):
-        if o1s>0:
-            conv1 = conv(inp, inSize, o1s, 1, 1, 1, 1, 'SAME', 'in1_conv1x1', phase_train=phase_train, use_batch_norm=use_batch_norm, weight_decay=weight_decay)
-            net.append(conv1)
+        with tf.variable_scope('branch1_1x1'):
+            if o1s>0:
+                conv1 = conv(inp, inSize, o1s, 1, 1, 1, 1, 'SAME', 'conv1x1', phase_train=phase_train, use_batch_norm=use_batch_norm, weight_decay=weight_decay)
+                net.append(conv1)
       
-        if o2s1>0:
-            conv3a = conv(inp, inSize, o2s1, 1, 1, 1, 1, 'SAME', 'in2_conv1x1', phase_train=phase_train, use_batch_norm=use_batch_norm, weight_decay=weight_decay)
-            conv3 = conv(conv3a, o2s1, o2s2, 3, 3, ks, ks, 'SAME', 'in2_conv3x3', phase_train=phase_train, use_batch_norm=use_batch_norm, weight_decay=weight_decay)
-            net.append(conv3)
+        with tf.variable_scope('branch2_3x3'):
+            if o2s1>0:
+                conv3a = conv(inp, inSize, o2s1, 1, 1, 1, 1, 'SAME', 'conv1x1', phase_train=phase_train, use_batch_norm=use_batch_norm, weight_decay=weight_decay)
+                conv3 = conv(conv3a, o2s1, o2s2, 3, 3, ks, ks, 'SAME', 'conv3x3', phase_train=phase_train, use_batch_norm=use_batch_norm, weight_decay=weight_decay)
+                net.append(conv3)
       
-        if o3s1>0:
-            conv5a = conv(inp, inSize, o3s1, 1, 1, 1, 1, 'SAME', 'in3_conv1x1', phase_train=phase_train, use_batch_norm=use_batch_norm, weight_decay=weight_decay)
-            conv5 = conv(conv5a, o3s1, o3s2, 5, 5, ks, ks, 'SAME', 'in3_conv5x5', phase_train=phase_train, use_batch_norm=use_batch_norm, weight_decay=weight_decay)
-            net.append(conv5)
+        with tf.variable_scope('branch3_5x5'):
+            if o3s1>0:
+                conv5a = conv(inp, inSize, o3s1, 1, 1, 1, 1, 'SAME', 'conv1x1', phase_train=phase_train, use_batch_norm=use_batch_norm, weight_decay=weight_decay)
+                conv5 = conv(conv5a, o3s1, o3s2, 5, 5, ks, ks, 'SAME', 'conv5x5', phase_train=phase_train, use_batch_norm=use_batch_norm, weight_decay=weight_decay)
+                net.append(conv5)
       
-        if poolType=='MAX':
-            pool = mpool(inp, o4s1, o4s1, o4s3, o4s3, 'SAME', 'in4_pool')
-        elif poolType=='L2':
-            pool = lppool(inp, 2, o4s1, o4s1, o4s3, o4s3, 'SAME', 'in4_pool')
-        else:
-            raise ValueError('Invalid pooling type "%s"' % poolType)
-        
-        if o4s2>0:
-            pool_conv = conv(pool, inSize, o4s2, 1, 1, 1, 1, 'SAME', 'in4_conv1x1', phase_train=phase_train, use_batch_norm=use_batch_norm, weight_decay=weight_decay)
-        else:
-            pool_conv = pool
-        net.append(pool_conv)
+        with tf.variable_scope('branch4_pool'):
+            if poolType=='MAX':
+                pool = mpool(inp, o4s1, o4s1, o4s3, o4s3, 'SAME', 'pool')
+            elif poolType=='L2':
+                pool = lppool(inp, 2, o4s1, o4s1, o4s3, o4s3, 'SAME', 'pool')
+            else:
+                raise ValueError('Invalid pooling type "%s"' % poolType)
+            
+            if o4s2>0:
+                pool_conv = conv(pool, inSize, o4s2, 1, 1, 1, 1, 'SAME', 'conv1x1', phase_train=phase_train, use_batch_norm=use_batch_norm, weight_decay=weight_decay)
+            else:
+                pool_conv = pool
+            net.append(pool_conv)
       
         incept = array_ops.concat(3, net, name=name)
     return incept
