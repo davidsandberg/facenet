@@ -41,6 +41,7 @@ def main(args):
   
     # Restore the parameters
     ckpt = tf.train.get_checkpoint_state(os.path.expanduser(args.model_dir))
+    #pylint: disable=no-member
     if ckpt and ckpt.model_checkpoint_path:
         saver.restore(sess, ckpt.model_checkpoint_path)
     else:
