@@ -40,7 +40,7 @@ def main(args):
             # Run test on LFW to check accuracy for different horizontal/vertical translations of input images
             if args.nrof_offsets>0:
                 step = 3
-                offsets = np.asarray([x*step for x in range(-args.nrof_offsets/2+1, args.nrof_offsets/2+1)])
+                offsets = np.asarray([x*step for x in range(-args.nrof_offsets//2+1, args.nrof_offsets//2+1)])
                 horizontal_offset_accuracy = [None] * len(offsets)
                 for idx, offset in enumerate(offsets):
                     accuracy = evaluate_accuracy(sess, images_placeholder, phase_train_placeholder, image_size, embeddings, 
@@ -70,7 +70,7 @@ def main(args):
             # Run test on LFW to check accuracy for different rotation of input images
             if args.nrof_angles>0:
                 step = 3
-                angles = np.asarray([x*step for x in range(-args.nrof_offsets/2+1, args.nrof_offsets/2+1)])
+                angles = np.asarray([x*step for x in range(-args.nrof_offsets//2+1, args.nrof_offsets//2+1)])
                 rotation_accuracy = [None] * len(angles)
                 for idx, angle in enumerate(angles):
                     accuracy = evaluate_accuracy(sess, images_placeholder, phase_train_placeholder, image_size, embeddings, 
@@ -91,7 +91,7 @@ def main(args):
             # Run test on LFW to check accuracy for different scaling of input images
             if args.nrof_scales>0:
                 step = 0.05
-                scales = np.asarray([x*step+1 for x in range(-args.nrof_offsets/2+1, args.nrof_offsets/2+1)])
+                scales = np.asarray([x*step+1 for x in range(-args.nrof_offsets//2+1, args.nrof_offsets//2+1)])
                 scale_accuracy = [None] * len(scales)
                 for scale_idx, scale in enumerate(scales):
                     accuracy = evaluate_accuracy(sess, images_placeholder, phase_train_placeholder, image_size, embeddings, 

@@ -38,7 +38,7 @@ def main(args):
 
             tpr, fpr, accuracy, val, val_std, far = lfw.validate(sess, 
                 paths, actual_issame, args.seed, 60, 
-                images_placeholder, phase_train_placeholder, embeddings)
+                images_placeholder, phase_train_placeholder, embeddings, nrof_folds=args.lfw_nrof_folds)
             print('Accuracy: %1.3f+-%1.3f' % (np.mean(accuracy), np.std(accuracy)))
             print('Validation rate: %2.5f+-%2.5f @ FAR=%2.5f' % (val, val_std, far))
             
