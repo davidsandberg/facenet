@@ -28,10 +28,10 @@ def main(args):
         preload_model = False
     log_dir = os.path.join(os.path.expanduser(args.logs_base_dir), subdir)
     if not os.path.isdir(log_dir):  # Create the log directory if it doesn't exist
-        os.mkdir(log_dir)
+        os.makedirs(log_dir)
     model_dir = os.path.join(os.path.expanduser(args.models_base_dir), subdir)
     if not os.path.isdir(model_dir):  # Create the model directory if it doesn't exist
-        os.mkdir(model_dir)
+        os.makedirs(model_dir)
 
     # Store some git revision info in a text file in the log directory
     src_path,_ = os.path.split(os.path.realpath(__file__))
@@ -59,6 +59,9 @@ def main(args):
         # Placeholder for phase_train
         phase_train_placeholder = tf.placeholder(tf.bool, name='phase_train')
 
+        # Placeholder for the learning rate
+        learning_rate_placeholder = tf.placeholder(tf.float32, name='learing_rate')
+
         # Build the inference graph
         embeddings = network.inference(images_placeholder, args.pool_type, args.use_lrn, 
              args.keep_probability, phase_train=phase_train_placeholder, weight_decay=args.weight_decay)
@@ -74,7 +77,7 @@ def main(args):
         total_loss = tf.add_n([loss] + regularization_losses, name='total_loss')
 
         # Build a Graph that trains the model with one batch of examples and updates the model parameters
-        train_op, _ = facenet.train(total_loss, global_step, args.optimizer, args.learning_rate, 
+        train_op, _ = facenet.train(total_loss, global_step, args.optimizer, learning_rate_placeholder, 
             args.learning_rate_decay_epochs*args.epoch_size, args.learning_rate_decay_factor, args.moving_average_decay)
 
         # Create a saver
@@ -106,7 +109,7 @@ def main(args):
             for epoch in range(args.max_nrof_epochs):
                 # Train for one epoch
                 step = train(args, sess, train_set, epoch, images_placeholder, phase_train_placeholder,
-                             global_step, embeddings, loss, train_op, summary_op, summary_writer)
+                    learning_rate_placeholder, global_step, embeddings, loss, train_op, summary_op,summary_writer)
                
                 _, _, accuracy, val, val_std, far = lfw.validate(sess, 
                     paths, actual_issame, args.seed, args.batch_size,
@@ -129,8 +132,13 @@ def main(args):
 
 
 def train(args, sess, dataset, epoch, images_placeholder, phase_train_placeholder,
-          global_step, embeddings, loss, train_op, summary_op, summary_writer):
+          learning_rate_placeholder, global_step, embeddings, loss, train_op, summary_op, summary_writer):
     batch_number = 0
+    
+    if args.learning_rate>0.0:
+        lr = args.learning_rate
+    else:
+        lr = get_learning_rate_from_file('../data/learning_rate_schedule.txt', epoch)
     while batch_number < args.epoch_size:
         print('Loading training data')
         # Sample people and load new data
@@ -148,7 +156,7 @@ def train(args, sess, dataset, epoch, images_placeholder, phase_train_placeholde
         nrof_batches_per_epoch = int(np.floor(nrof_examples_per_epoch / args.batch_size))
         for i in xrange(nrof_batches_per_epoch):
             batch = facenet.get_batch(image_data, args.batch_size, i)
-            feed_dict = {images_placeholder: batch, phase_train_placeholder: True}
+            feed_dict = {images_placeholder: batch, phase_train_placeholder: True, learning_rate_placeholder: lr}
             emb_list += sess.run([embeddings], feed_dict=feed_dict)
         emb_array = np.vstack(emb_list)  # Stack the embeddings to a nrof_examples_per_epoch x 128 matrix
         # Select triplets based on the embeddings
@@ -164,7 +172,7 @@ def train(args, sess, dataset, epoch, images_placeholder, phase_train_placeholde
         while i * args.batch_size < nrof_triplets * 3 and batch_number < args.epoch_size:
             start_time = time.time()
             batch = facenet.get_triplet_batch(triplets, i, args.batch_size)
-            feed_dict = {images_placeholder: batch, phase_train_placeholder: True}
+            feed_dict = {images_placeholder: batch, phase_train_placeholder: True, learning_rate_placeholder: lr}
             err, _, step = sess.run([loss, train_op, global_step], feed_dict=feed_dict)
             if (batch_number % 20 == 0):
                 summary_str, step = sess.run([summary_op, global_step], feed_dict=feed_dict)
@@ -184,6 +192,20 @@ def train(args, sess, dataset, epoch, images_placeholder, phase_train_placeholde
         summary.value.add(tag='time/total', simple_value=load_time+selection_time+train_time)
         summary_writer.add_summary(summary, step)
     return step
+
+def get_learning_rate_from_file(filename, epoch):
+    with open(filename, 'r') as f:
+        for line in f.readlines():
+            line = line.split('#', 1)[0]
+            if line:
+                par = line.strip().split(':')
+                e = int(par[0])
+                lr = float(par[1])
+                if e <= epoch:
+                    learning_rate = lr
+                else:
+                    return learning_rate
+    
 
 def parse_arguments(argv):
     parser = argparse.ArgumentParser()
@@ -231,7 +253,8 @@ def parse_arguments(argv):
     parser.add_argument('--optimizer', type=str, choices=['ADAGRAD', 'ADADELTA', 'ADAM', 'RMSPROP'],
         help='The optimization algorithm to use', default='ADAGRAD')
     parser.add_argument('--learning_rate', type=float,
-        help='Initial learning rate.', default=0.1)
+        help='Initial learning rate. If set to a negative value a learning rate ' +
+        'schedule can be specified in the file "learning_rate_schedule.txt"', default=0.1)
     parser.add_argument('--learning_rate_decay_epochs', type=int,
         help='Number of epochs between learning rate decay.', default=100)
     parser.add_argument('--learning_rate_decay_factor', type=float,
