@@ -52,7 +52,7 @@ def l2_loss(tensor, weight=1.0, scope=None):
     Returns:
       the L2 loss op.
     """
-    with tf.op_scope([tensor], scope, 'l2_loss'):
+    with tf.name_scope(scope):
         weight = tf.convert_to_tensor(weight,
                                       dtype=tensor.dtype.base_dtype,
                                       name='loss_weight')
