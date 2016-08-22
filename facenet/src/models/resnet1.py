@@ -11,9 +11,11 @@ from config import Config
 MOVING_AVERAGE_DECAY = 0.9997
 BN_DECAY = MOVING_AVERAGE_DECAY
 BN_EPSILON = 0.001
-CONV_WEIGHT_DECAY = 0.00004
+#CONV_WEIGHT_DECAY = 0.00004
+CONV_WEIGHT_DECAY = 0.0
 CONV_WEIGHT_STDDEV = 0.1
-FC_WEIGHT_DECAY = 0.00004
+#FC_WEIGHT_DECAY = 0.00004
+FC_WEIGHT_DECAY = 0.0
 FC_WEIGHT_STDDEV = 0.01
 RESNET_VARIABLES = 'resnet_variables'
 UPDATE_OPS_COLLECTION = 'resnet_update_ops'  # must be grouped with training op
@@ -23,7 +25,7 @@ activation = tf.nn.relu
 
 #pylint: disable=unused-argument
 def inference(images, pool_type, use_lrn, keep_probability, phase_train=True, weight_decay=0.0):
-    x = inference_resnet(images, phase_train, bottleneck=False, num_blocks=[3, 4, 6, 3], num_classes=128)
+    x = inference_resnet(images, phase_train, bottleneck=True, num_blocks=[2, 2, 2, 2], num_classes=128)
     norm = tf.nn.l2_normalize(x, 1, 1e-10, name='embeddings')
     return norm
 
