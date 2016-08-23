@@ -24,8 +24,7 @@ from collections import namedtuple
 
 import numpy as np
 import tensorflow as tf
-
-from tensorflow.python.training import moving_averages
+import models.network as network
 
 
 HParams = namedtuple('HParams',
@@ -44,7 +43,7 @@ def inference(images, keep_probability, phase_train=True, weight_decay=0.0):
                              weight_decay_rate=0.0002,
                              relu_leakiness=0.1,
                              optimizer='mom')
-    model = ResNet(hps, images, None, 'train')
+    model = ResNet(hps, images, None, phase_train)
     logits = model.build_model()
     norm = tf.nn.l2_normalize(logits, 1, 1e-10, name='embeddings')
 
@@ -54,7 +53,7 @@ def inference(images, keep_probability, phase_train=True, weight_decay=0.0):
 class ResNet(object):
     """ResNet model."""
   
-    def __init__(self, hps, images, labels, mode):
+    def __init__(self, hps, images, labels, phase_train):
         """ResNet constructor.
     
         Args:
@@ -66,7 +65,7 @@ class ResNet(object):
         self.hps = hps
         self._images = images
         self.labels = labels
-        self.mode = mode
+        self.phase_train = phase_train
     
         self._extra_train_ops = []
         self.lrn_rate = None
@@ -80,8 +79,6 @@ class ResNet(object):
         """Build a whole graph for the model."""
         self.global_step = tf.Variable(0, name='global_step', trainable=False)
         self.build_model()
-        if self.mode == 'train':
-            self._build_train_op()
         self.summaries = tf.merge_all_summaries()
     
     def _stride_arr(self, stride):
@@ -131,7 +128,9 @@ class ResNet(object):
                 x = res_func(x, filters[3], filters[3], self._stride_arr(1), False)
       
         with tf.variable_scope('unit_last'):
-            x = self._batch_norm('final_bn', x)
+            #pylint: disable=no-member
+            x = network.batch_norm(x, int(x.get_shape()[3]), self.phase_train, 'final_bn')
+            #x = self._batch_norm('final_bn', x)
             x = self._relu(x, self.hps.relu_leakiness)
             x = self._global_avg_pool(x)
       
@@ -171,71 +170,29 @@ class ResNet(object):
         train_ops = [apply_op] + self._extra_train_ops
         self.train_op = tf.group(*train_ops)
 
-    def _batch_norm(self, name, x):
-        """Batch normalization."""
-        with tf.variable_scope(name):
-            params_shape = [x.get_shape()[-1]]
-      
-            beta = tf.get_variable(
-                'beta', params_shape, tf.float32,
-                initializer=tf.constant_initializer(0.0, tf.float32))
-            gamma = tf.get_variable(
-                'gamma', params_shape, tf.float32,
-                initializer=tf.constant_initializer(1.0, tf.float32))
-      
-            if self.mode == 'train':
-                mean, variance = tf.nn.moments(x, [0, 1, 2], name='moments')
-        
-                moving_mean = tf.get_variable(
-                    'moving_mean', params_shape, tf.float32,
-                    initializer=tf.constant_initializer(0.0, tf.float32),
-                    trainable=False)
-                moving_variance = tf.get_variable(
-                    'moving_variance', params_shape, tf.float32,
-                    initializer=tf.constant_initializer(1.0, tf.float32),
-                    trainable=False)
-        
-                self._extra_train_ops.append(moving_averages.assign_moving_average(
-                    moving_mean, mean, 0.9))
-                self._extra_train_ops.append(moving_averages.assign_moving_average(
-                    moving_variance, variance, 0.9))
-            else:
-                mean = tf.get_variable(
-                    'moving_mean', params_shape, tf.float32,
-                    initializer=tf.constant_initializer(0.0, tf.float32),
-                    trainable=False)
-                variance = tf.get_variable(
-                    'moving_variance', params_shape, tf.float32,
-                    initializer=tf.constant_initializer(1.0, tf.float32),
-                    trainable=False)
-                #pylint: disable=maybe-no-member
-                tf.histogram_summary(mean.op.name, mean)
-                tf.histogram_summary(variance.op.name, variance)
-            # elipson used to be 1e-5. Maybe 0.001 solves NaN problem in deeper net.
-            y = tf.nn.batch_normalization(
-                x, mean, variance, beta, gamma, 0.001)
-            y.set_shape(x.get_shape())
-            return y
-
     def _residual(self, x, in_filter, out_filter, stride,
                   activate_before_residual=False):
         """Residual unit with 2 sub layers."""
         if activate_before_residual:
             with tf.variable_scope('shared_activation'):
-                x = self._batch_norm('init_bn', x)
+                x = network.batch_norm(x, int(x.get_shape()[3]), self.phase_train, 'init_bn')
+                #x = self._batch_norm('init_bn', x)
                 x = self._relu(x, self.hps.relu_leakiness)
                 orig_x = x
         else:
             with tf.variable_scope('residual_only_activation'):
                 orig_x = x
-                x = self._batch_norm('init_bn', x)
+                x = network.batch_norm(x, int(x.get_shape()[3]), self.phase_train, 'init_bn')
+                #x = self._batch_norm('init_bn', x)
                 x = self._relu(x, self.hps.relu_leakiness)
     
         with tf.variable_scope('sub1'):
             x = self._conv('conv1', x, 3, in_filter, out_filter, stride)
     
         with tf.variable_scope('sub2'):
-            x = self._batch_norm('bn2', x)
+            #pylint: disable=no-member
+            x = network.batch_norm(x, int(x.get_shape()[3]), self.phase_train, 'bn2')
+            #x = self._batch_norm('bn2', x)
             x = self._relu(x, self.hps.relu_leakiness)
             x = self._conv('conv2', x, 3, out_filter, out_filter, [1, 1, 1, 1])
     
@@ -256,25 +213,31 @@ class ResNet(object):
         """Bottleneck resisual unit with 3 sub layers."""
         if activate_before_residual:
             with tf.variable_scope('common_bn_relu'):
-                x = self._batch_norm('init_bn', x)
+                x = network.batch_norm(x, int(x.get_shape()[3]), self.phase_train, 'init_bn')
+                #x = self._batch_norm('init_bn', x)
                 x = self._relu(x, self.hps.relu_leakiness)
                 orig_x = x
         else:
             with tf.variable_scope('residual_bn_relu'):
                 orig_x = x
-                x = self._batch_norm('init_bn', x)
+                x = network.batch_norm(x, int(x.get_shape()[3]), self.phase_train, 'init_bn')
+                #x = self._batch_norm('init_bn', x)
                 x = self._relu(x, self.hps.relu_leakiness)
     
         with tf.variable_scope('sub1'):
             x = self._conv('conv1', x, 1, in_filter, out_filter/4, stride)
     
         with tf.variable_scope('sub2'):
-            x = self._batch_norm('bn2', x)
+            #pylint: disable=no-member
+            x = network.batch_norm(x, int(x.get_shape()[3]), self.phase_train, 'bn2')
+            #x = self._batch_norm('bn2', x)
             x = self._relu(x, self.hps.relu_leakiness)
             x = self._conv('conv2', x, 3, out_filter/4, out_filter/4, [1, 1, 1, 1])
     
         with tf.variable_scope('sub3'):
-            x = self._batch_norm('bn3', x)
+            #pylint: disable=no-member
+            x = network.batch_norm(x, int(x.get_shape()[3]), self.phase_train, 'bn3')
+            #x = self._batch_norm('bn3', x)
             x = self._relu(x, self.hps.relu_leakiness)
             x = self._conv('conv3', x, 1, out_filter/4, out_filter, [1, 1, 1, 1])
     
