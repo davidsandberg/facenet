@@ -250,24 +250,16 @@ class ResNet(object):
         tf.logging.info('image after unit %s', x.get_shape())
         return x
 
-    def _decay(self):
-        """L2 weight decay loss."""
-        costs = []
-        for var in tf.trainable_variables():
-            if var.op.name.find(r'DW') > 0:
-                costs.append(tf.nn.l2_loss(var))
-                # tf.histogram_summary(var.op.name, var)
-    
-        return tf.mul(self.hps.weight_decay_rate, tf.add_n(costs))
-
     def _conv(self, name, x, filter_size, in_filters, out_filters, strides):
         """Convolution."""
         with tf.variable_scope(name):
             n = filter_size * filter_size * out_filters
+            l2_regularizer = lambda t: network.l2_loss(t, weight=self.hps.weight_decay_rate)
             kernel = tf.get_variable(
                 'DW', [filter_size, filter_size, in_filters, out_filters],
                 tf.float32, initializer=tf.random_normal_initializer(
-                    stddev=np.sqrt(2.0/n)))
+                    stddev=np.sqrt(2.0/n)),
+                regularizer=l2_regularizer)
             return tf.nn.conv2d(x, kernel, strides, padding='SAME')
 
     def _relu(self, x, leakiness=0.0):
@@ -277,9 +269,11 @@ class ResNet(object):
     def _fully_connected(self, x, out_dim):
         """FullyConnected layer for final output."""
 #    x = tf.reshape(x, [self.hps.batch_size, -1])
+        l2_regularizer = lambda t: network.l2_loss(t, weight=self.hps.weight_decay_rate)
         w = tf.get_variable(
             'DW', [x.get_shape()[1], out_dim],
-            initializer=tf.uniform_unit_scaling_initializer(factor=1.0))
+            initializer=tf.uniform_unit_scaling_initializer(factor=1.0),
+            regularizer=l2_regularizer)
         b = tf.get_variable('biases', [out_dim],
                             initializer=tf.constant_initializer())
         return tf.nn.xw_plus_b(x, w, b)
