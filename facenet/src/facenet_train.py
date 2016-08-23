@@ -63,8 +63,7 @@ def main(args):
         learning_rate_placeholder = tf.placeholder(tf.float32, name='learing_rate')
 
         # Build the inference graph
-        embeddings = network.inference(images_placeholder, args.pool_type, args.use_lrn, 
-             args.keep_probability, phase_train=phase_train_placeholder, weight_decay=args.weight_decay)
+        embeddings = network.inference(images_placeholder, args.keep_probability, phase_train=phase_train_placeholder, weight_decay=args.weight_decay)
 
         # Split example embeddings into anchor, positive and negative
         anchor, positive, negative = tf.split(0, 3, embeddings)
