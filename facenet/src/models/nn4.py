@@ -6,7 +6,7 @@ from __future__ import print_function
 import tensorflow as tf
 import models.network as network
 
-def inference(images, keep_probability, phase_train=True, weight_decay=0.0):
+def inference(images, output_dims, keep_probability, phase_train=True, weight_decay=0.0):
     """ Define an inference network for face recognition based 
            on inception modules using batch normalization
     
@@ -33,10 +33,12 @@ def inference(images, keep_probability, phase_train=True, weight_decay=0.0):
     incept5a = network.inception(incept4e,    1024, 1, 384, 192, 384, 0, 0, 3, 128, 1, 'MAX', 'incept5a', phase_train=phase_train, use_batch_norm=True, weight_decay=weight_decay)
     incept5b = network.inception(incept5a, 896, 1, 384, 192, 384, 0, 0, 3, 128, 1, 'MAX', 'incept5b', phase_train=phase_train, use_batch_norm=True, weight_decay=weight_decay)
     pool6 = network.apool(incept5b,  3, 3, 1, 1, 'VALID', 'pool6')
-  
     resh1 = tf.reshape(pool6, [-1, 896])
-    affn1 = network.affine(resh1, 896, 128, 'fc7', weight_decay=weight_decay)
-    dropout = tf.nn.dropout(affn1, keep_probability)
-    norm = tf.nn.l2_normalize(dropout, 1, 1e-10, name='embeddings')
+    
+    fc7a = network.affine(resh1, 896, output_dims[0], 'fc7a', weight_decay=0.0)
+    logits1 = tf.nn.dropout(fc7a, keep_probability)
+    
+    fc7b = network.affine(resh1, 896, output_dims[1], 'fc7b', weight_decay=weight_decay)
+    logits2 = tf.nn.dropout(fc7b, keep_probability)
   
-    return norm
+    return logits1, logits2

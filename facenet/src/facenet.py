@@ -35,7 +35,7 @@ def triplet_loss(anchor, positive, negative, alpha):
       
     return loss
 
-def _add_loss_summaries(total_loss):
+def _add_loss_summaries(prefix, total_loss):
     """Add summaries for losses in CIFAR-10 model.
   
     Generates moving average for all losses and associated summaries for
@@ -56,31 +56,14 @@ def _add_loss_summaries(total_loss):
     for l in losses + [total_loss]:
         # Name each loss as '(raw)' and name the moving average version of the loss
         # as the original loss name.
-        tf.scalar_summary(l.op.name +' (raw)', l)
-        tf.scalar_summary(l.op.name, loss_averages.average(l))
+        tf.scalar_summary(prefix + l.op.name +' (raw)', l)
+        tf.scalar_summary(prefix + l.op.name, loss_averages.average(l))
   
     return loss_averages_op
 
-def train(total_loss, global_step, optimizer, initial_learning_rate, 
-    learning_rate_decay_steps, learning_rate_decay_factor, moving_average_decay):
-    """Setup training for the FaceNet model.
-  
-    Create an optimizer and apply to all trainable variables. Add moving
-    average for all trainable variables.
-  
-    Args:
-      total_loss: Total loss from loss().
-      global_step: Integer Variable counting the number of training steps
-        processed.
-    Returns:
-      train_op: op for training.
-    """
+def train(prefix, total_loss, global_step, optimizer, learning_rate, moving_average_decay):
     # Generate moving averages of all losses and associated summaries.
-    loss_averages_op = _add_loss_summaries(total_loss)
-    
-    learning_rate = tf.train.exponential_decay(initial_learning_rate, global_step,
-        learning_rate_decay_steps, learning_rate_decay_factor, staircase=True)
-    tf.scalar_summary('learning_rate', learning_rate)
+    loss_averages_op = _add_loss_summaries(prefix, total_loss)
 
     # Compute gradients.
     with tf.control_dependencies([loss_averages_op]):
@@ -102,12 +85,12 @@ def train(total_loss, global_step, optimizer, initial_learning_rate,
   
     # Add histograms for trainable variables.
     for var in tf.trainable_variables():
-        tf.histogram_summary(var.op.name, var)
-  
+        tf.histogram_summary(prefix + var.op.name, var)
+   
     # Add histograms for gradients.
     for grad, var in grads:
         if grad is not None:
-            tf.histogram_summary(var.op.name + '/gradients', grad)
+            tf.histogram_summary(prefix + var.op.name + '/gradients', grad)
   
     # Track the moving averages of all trainable variables.
     variable_averages = tf.train.ExponentialMovingAverage(
@@ -115,9 +98,9 @@ def train(total_loss, global_step, optimizer, initial_learning_rate,
     variables_averages_op = variable_averages.apply(tf.trainable_variables())
   
     with tf.control_dependencies([apply_gradient_op, variables_averages_op]):
-        train_op = tf.no_op(name='train')
+        train_op = tf.no_op(name=prefix + 'train')
   
-    return train_op, grads
+    return train_op
 
 def prewhiten(x):
     mean = np.mean(x)
@@ -163,6 +146,18 @@ def load_data(image_paths, do_random_crop, do_random_flip, image_size, do_prewhi
         img_list[i] = img
     images = np.stack(img_list)
     return images
+
+def get_label_batch(label_data, batch_size, batch_index):
+    nrof_examples = np.size(label_data, 0)
+    j = batch_index*batch_size % nrof_examples
+    if j+batch_size<=nrof_examples:
+        batch = label_data[j:j+batch_size]
+    else:
+        x1 = label_data[j:nrof_examples]
+        x2 = label_data[0:nrof_examples-j]
+        batch = np.vstack([x1,x2])
+    batch_int = batch.astype(np.int64)
+    return batch_int
 
 def get_batch(image_data, batch_size, batch_index):
     nrof_examples = np.size(image_data, 0)
@@ -215,7 +210,7 @@ def select_triplets(embeddings, num_per_class, image_data, people_per_batch, alp
             pos_dist = dist(embeddings[a_idx][:], embeddings[p_idx][:])
             sel_neg_idx = emb_start_idx
             while sel_neg_idx>=emb_start_idx and sel_neg_idx<=emb_start_idx+n-1:
-                sel_neg_idx = (np.random.randint(1, 2**32) % nrof_images) -1  # Seems to give the same result as the lua implementation
+                sel_neg_idx = (np.random.randint(1, 2**32) % nrof_images) - 1
                 #sel_neg_idx = np.random.random_integers(0, nrof_images-1)
             sel_neg_dist = dist(embeddings[a_idx][:], embeddings[sel_neg_idx][:])
       
@@ -299,6 +294,24 @@ def sample_people(dataset, people_per_batch, images_per_person):
         i+=1
   
     return image_paths, num_per_class
+  
+def sample_random_people(dataset, nrof_images):
+    # Create flattened dataset with image paths and labels
+    image_paths_flat = []
+    labels_flat = []
+    for i in range(len(dataset)):
+        image_paths_flat += dataset[i].image_paths
+        labels_flat += [i] * len(dataset[i].image_paths)
+        
+    # Take nrof_images samples from the flattened dataset
+    image_paths = []
+    labels = []
+    for i in range(nrof_images):
+        x = np.random.randint(0, len(image_paths_flat))
+        image_paths.append(image_paths_flat[x])
+        labels.append(labels_flat[x])
+  
+    return image_paths, labels
 
 def load_model(model_file):
     tf.train.import_meta_graph(os.path.expanduser(model_file+'.meta'))

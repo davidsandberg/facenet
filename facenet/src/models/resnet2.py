@@ -33,7 +33,7 @@ HParams = namedtuple('HParams',
                      'relu_leakiness, optimizer')
 
 #pylint: disable=unused-argument
-def inference(images, keep_probability, phase_train=True, weight_decay=0.0):
+def inference(images, output_dims, keep_probability, phase_train=True, weight_decay=0.0):
     hps = HParams(batch_size=None,
                              num_classes=128,
                              min_lrn_rate=0.0001,
@@ -44,10 +44,9 @@ def inference(images, keep_probability, phase_train=True, weight_decay=0.0):
                              relu_leakiness=0.1,
                              optimizer='mom')
     model = ResNet(hps, images, None, phase_train)
-    logits = model.build_model()
-    norm = tf.nn.l2_normalize(logits, 1, 1e-10, name='embeddings')
+    logits1, logits2 = model.build_model(output_dims)
 
-    return norm
+    return logits1, logits2
 
 
 class ResNet(object):
@@ -78,14 +77,14 @@ class ResNet(object):
     def build_graph(self):
         """Build a whole graph for the model."""
         self.global_step = tf.Variable(0, name='global_step', trainable=False)
-        self.build_model()
+        self.build_model([0, 0])
         self.summaries = tf.merge_all_summaries()
     
     def _stride_arr(self, stride):
         """Map a stride scalar to the stride array for tf.nn.conv2d."""
         return [1, stride, stride, 1]
     
-    def build_model(self):
+    def build_model(self, output_dims):
         """Build the core model within the graph."""
         with tf.variable_scope('init'):
             x = self._images
@@ -99,12 +98,12 @@ class ResNet(object):
         else:
             res_func = self._residual
             filters = [16, 16, 32, 64]
-          # Uncomment the following codes to use w28-10 wide residual network.
-          # It is more memory efficient than very deep residual network and has
-          # comparably good performance.
-          # https://arxiv.org/pdf/1605.07146v1.pdf
-          # filters = [16, 160, 320, 640]
-          # Update hps.num_residual_units to 9
+        # Uncomment the following codes to use w28-10 wide residual network.
+        # It is more memory efficient than very deep residual network and has
+        # comparably good performance.
+        # https://arxiv.org/pdf/1605.07146v1.pdf
+        # filters = [16, 160, 320, 640]
+        # Update hps.num_residual_units to 9
       
         with tf.variable_scope('unit_1_0'):
             x = res_func(x, filters[0], filters[1], self._stride_arr(strides[0]),
@@ -134,8 +133,11 @@ class ResNet(object):
             x = self._relu(x, self.hps.relu_leakiness)
             x = self._global_avg_pool(x)
       
-        with tf.variable_scope('logit'):
-            logits = self._fully_connected(x, self.hps.num_classes)
+        with tf.variable_scope('logits1'):
+            logits1 = self._fully_connected(x, output_dims[0])
+
+        with tf.variable_scope('logits2'):
+            logits2 = self._fully_connected(x, output_dims[1])
 #      self.predictions = tf.nn.softmax(logits)
 
 #     with tf.variable_scope('costs'):
@@ -148,7 +150,7 @@ class ResNet(object):
 #           0.99, num_updates=self.global_step, name='moving_avg')
 #       self._extra_train_ops.append(moving_avg.apply([self.cost]))
 #       tf.scalar_summary('cost', moving_avg.average(self.cost))
-        return logits
+        return logits1, logits2
 
     def _build_train_op(self):
         """Build training specific ops for the graph."""
