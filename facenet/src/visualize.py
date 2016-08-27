@@ -32,12 +32,11 @@ def main(args):
     phase_train_placeholder = tf.constant(False, name='phase_train')
   
     # Build the inference graph
-    _ = network.inference(t_preprocessed, 'MAX', False, 1.0, phase_train=phase_train_placeholder)
+    network.inference(t_preprocessed, [ 128, 128 ], 1.0, 
+            phase_train=phase_train_placeholder, weight_decay=0.0)
       
-    # Create a saver for restoring variable averages
-    ema = tf.train.ExponentialMovingAverage(1.0)
-    restore_vars = ema.variables_to_restore()
-    saver = tf.train.Saver(restore_vars)
+    # Create a saver for restoring variables
+    saver = tf.train.Saver(tf.trainable_variables())
   
     # Restore the parameters
     ckpt = tf.train.get_checkpoint_state(os.path.expanduser(args.model_dir))

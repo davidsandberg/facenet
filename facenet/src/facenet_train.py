@@ -123,8 +123,9 @@ def main(args):
                     raise ValueError('Checkpoint not found')
 
             # Training and validation loop
-            epoch = sess.run(global_step, feed_dict=None) // args.epoch_size
+            epoch = 0
             while epoch < args.max_nrof_epochs:
+                epoch = sess.run(global_step, feed_dict=None) // args.epoch_size
                 # Train for one epoch
                 if args.loss_type=='CLASSIFIER':
                     step = train_classifier(args, sess, train_set, epoch, images_placeholder, labels_placeholder, phase_train_placeholder,

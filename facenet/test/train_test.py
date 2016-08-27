@@ -4,6 +4,7 @@ import numpy as np
 import cv2
 import os
 import shutil
+import tensorflow as tf
 import facenet_train
 import validate_on_lfw
 import compare
@@ -40,8 +41,11 @@ class TrainTest(unittest.TestCase):
                 '--lfw_nrof_folds', '2' ]
         args = facenet_train.parse_arguments(argv)
         model_dir = facenet_train.main(args)
+        
+        
         model_file = os.path.join(model_dir, 'model.ckpt-1')
         # Check that the trained model can be loaded
+        tf.reset_default_graph()
         argv = ['--model_file', model_file,
                 '--lfw_pairs', self.lfw_pairs_file,
                 '--lfw_dir', self.dataset_dir,
