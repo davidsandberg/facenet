@@ -75,6 +75,8 @@ def train(prefix, total_loss, global_step, optimizer, learning_rate, moving_aver
             opt = tf.train.AdamOptimizer(learning_rate, beta1=0.9, beta2=0.999, epsilon=0.1)
         elif optimizer=='RMSPROP':
             opt = tf.train.RMSPropOptimizer(learning_rate, decay=0.9, momentum=0.9, epsilon=1.0)
+        elif optimizer=='MOM':
+            opt = tf.train.MomentumOptimizer(learning_rate, 0.9, use_nesterov=True)
         else:
             raise ValueError('Invalid optimization algorithm')
     

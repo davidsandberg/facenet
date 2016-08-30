@@ -66,7 +66,7 @@ def main(args):
         learning_rate_placeholder = tf.placeholder(tf.float32, name='learing_rate')
 
         # Build the inference graph
-        logits1, logits2 = network.inference(images_placeholder, [ 128, len(train_set) ], args.keep_probability, 
+        logits1 = network.inference(images_placeholder, [ 128, len(train_set) ], args.keep_probability, 
             phase_train=phase_train_placeholder, weight_decay=args.weight_decay)
 
         # Split example embeddings into anchor, positive and negative and calculate triplet loss
@@ -78,24 +78,14 @@ def main(args):
             args.learning_rate_decay_epochs*args.epoch_size, args.learning_rate_decay_factor, staircase=True)
         tf.scalar_summary('learning_rate', learning_rate)
 
-        # Calculate the average cross entropy loss across the batch.
-        cross_entropy = tf.nn.sparse_softmax_cross_entropy_with_logits(
-            logits2, labels_placeholder, name='cross_entropy_per_example')
-        cross_entropy_mean = tf.reduce_mean(cross_entropy, name='cross_entropy')
-        tf.add_to_collection('losses', cross_entropy_mean)
-        
         # Calculate the total losses
         regularization_losses = tf.get_collection(tf.GraphKeys.REGULARIZATION_LOSSES)
         total_triplet_loss = tf.add_n([triplet_loss] + regularization_losses, name='total_triplet_loss')
-        total_xent_loss = tf.add_n([cross_entropy_mean] + regularization_losses, name='total_xent_loss')
 
         # Build a Graph that trains the model with one batch of examples and updates the model parameters
         triplet_loss_train_op = facenet.train('tripletloss_', total_triplet_loss, global_step, args.optimizer, 
             learning_rate, args.moving_average_decay)
         
-        xent_loss_train_op = facenet.train('xent_', total_xent_loss, global_step, args.optimizer, 
-            learning_rate, args.moving_average_decay)
-
         # Create a saver
         saver = tf.train.Saver(tf.all_variables(), max_to_keep=0)
 
@@ -127,14 +117,8 @@ def main(args):
             while epoch < args.max_nrof_epochs:
                 epoch = sess.run(global_step, feed_dict=None) // args.epoch_size
                 # Train for one epoch
-                if args.loss_type=='CLASSIFIER':
-                    step = train_classifier(args, sess, train_set, epoch, images_placeholder, labels_placeholder, phase_train_placeholder,
-                        learning_rate_placeholder, global_step, total_xent_loss, xent_loss_train_op, summary_op, summary_writer, regularization_losses)
-                elif args.loss_type=='TRIPLETLOSS':
-                    step = train_triplet_loss(args, sess, train_set, epoch, images_placeholder, labels_placeholder, phase_train_placeholder,
-                        learning_rate_placeholder, global_step, embeddings, total_triplet_loss, triplet_loss_train_op, summary_op, summary_writer)
-                else:
-                    pass
+                step = train_triplet_loss(args, sess, train_set, epoch, images_placeholder, labels_placeholder, phase_train_placeholder,
+                    learning_rate_placeholder, global_step, embeddings, total_triplet_loss, triplet_loss_train_op, summary_op, summary_writer)
                 if args.lfw_dir:
                     _, _, accuracy, val, val_std, far = lfw.validate(sess, 
                         paths, actual_issame, args.seed, args.batch_size,
@@ -325,7 +309,7 @@ def parse_arguments(argv):
         help='Keep probability of dropout for the fully connected layer(s).', default=1.0)
     parser.add_argument('--weight_decay', type=float,
         help='L2 weight regularization.', default=0.0)
-    parser.add_argument('--optimizer', type=str, choices=['ADAGRAD', 'ADADELTA', 'ADAM', 'RMSPROP'],
+    parser.add_argument('--optimizer', type=str, choices=['ADAGRAD', 'ADADELTA', 'ADAM', 'RMSPROP', 'MOM'],
         help='The optimization algorithm to use', default='ADAGRAD')
     parser.add_argument('--learning_rate', type=float,
         help='Initial learning rate. If set to a negative value a learning rate ' +
