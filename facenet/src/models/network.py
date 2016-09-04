@@ -15,14 +15,14 @@ def conv(inpOp, nIn, nOut, kH, kW, dH, dW, padType, name, phase_train=True, use_
         l2_regularizer = lambda t: l2_loss(t, weight=weight_decay)
         kernel = tf.get_variable("weights", [kH, kW, nIn, nOut],
             initializer=tf.truncated_normal_initializer(stddev=1e-1),
-            regularizer=l2_regularizer)
+            regularizer=l2_regularizer, dtype=inpOp.dtype)
         cnv = tf.nn.conv2d(inpOp, kernel, [1, dH, dW, 1], padding=padType)
         
         if use_batch_norm:
             conv_bn = batch_norm(cnv, nOut, phase_train, 'batch_norm')
         else:
             conv_bn = cnv
-        biases = tf.get_variable("biases", [nOut], initializer=tf.constant_initializer())
+        biases = tf.get_variable("biases", [nOut], initializer=tf.constant_initializer(), dtype=inpOp.dtype)
         bias = tf.nn.bias_add(conv_bn, biases)
         conv1 = tf.nn.relu(bias)
     return conv1
@@ -32,8 +32,8 @@ def affine(inpOp, nIn, nOut, name, weight_decay=0.0):
         l2_regularizer = lambda t: l2_loss(t, weight=weight_decay)
         weights = tf.get_variable("weights", [nIn, nOut],
             initializer=tf.truncated_normal_initializer(stddev=1e-1),
-            regularizer=l2_regularizer)
-        biases = tf.get_variable("biases", [nOut], initializer=tf.constant_initializer())
+            regularizer=l2_regularizer, dtype=inpOp.dtype)
+        biases = tf.get_variable("biases", [nOut], initializer=tf.constant_initializer(), dtype=inpOp.dtype)
         affine1 = tf.nn.relu_layer(inpOp, weights, biases)
     return affine1
 
@@ -104,10 +104,10 @@ def batch_norm(x, n_out, phase_train, name, affn=True):
     """
     with tf.variable_scope(name):
   
-        beta = tf.Variable(tf.constant(0.0, shape=[n_out]),
-                           name=name+'/beta', trainable=True)
-        gamma = tf.Variable(tf.constant(1.0, shape=[n_out]),
-                            name=name+'/gamma', trainable=affn)
+        beta = tf.Variable(tf.constant(0.0, shape=[n_out], dtype=x.dtype),
+                           name=name+'/beta', trainable=True, dtype=x.dtype)
+        gamma = tf.Variable(tf.constant(1.0, shape=[n_out], dtype=x.dtype),
+                            name=name+'/gamma', trainable=affn, dtype=x.dtype)
       
         batch_mean, batch_var = tf.nn.moments(x, [0,1,2], name='moments')
         ema = tf.train.ExponentialMovingAverage(decay=0.9)
@@ -118,8 +118,7 @@ def batch_norm(x, n_out, phase_train, name, affn=True):
         mean, var = control_flow_ops.cond(phase_train,
                                           mean_var_with_update,
                                           lambda: (ema.average(batch_mean), ema.average(batch_var)))
-        normed = tf.nn.batch_norm_with_global_normalization(x, mean, var,
-                                                            beta, gamma, 1e-3, affn, name=name)
+        normed = tf.nn.batch_normalization(x, mean, var, beta, gamma, 1e-3)
     return normed
 
 def inception(inp, inSize, ks, o1s, o2s1, o2s2, o3s1, o3s2, o4s1, o4s2, o4s3, poolType, name, 
