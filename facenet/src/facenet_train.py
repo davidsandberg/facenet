@@ -66,7 +66,7 @@ def main(args):
         learning_rate_placeholder = tf.placeholder(tf.float32, name='learing_rate')
 
         # Build the inference graph
-        logits1 = network.inference(images_placeholder, [ 128, len(train_set) ], args.keep_probability, 
+        logits1, _ = network.inference(images_placeholder, [ 128, len(train_set) ], args.keep_probability, 
             phase_train=phase_train_placeholder, weight_decay=args.weight_decay)
 
         # Split example embeddings into anchor, positive and negative and calculate triplet loss
