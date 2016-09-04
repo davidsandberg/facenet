@@ -97,7 +97,7 @@ class AlignDlib:
         """
         assert facePredictor is not None
 
-        #pylint: disable=maybe-no-member
+        #pylint: disable=no-member
         self.detector = dlib.get_frontal_face_detector()
         self.predictor = dlib.shape_predictor(facePredictor)
 
