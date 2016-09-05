@@ -32,7 +32,7 @@ def inference(images, output_dims, keep_probability, phase_train=True, weight_de
     
     incept5a = network.inception(incept4e, 1024, 1, 384, 192, 384, 48, 128, 3, 128, 1, 'MAX', 'incept5a', phase_train=phase_train, use_batch_norm=True, weight_decay=weight_decay)
     incept5b = network.inception(incept5a, 1024, 1, 384, 192, 384, 48, 128, 3, 128, 1, 'MAX', 'incept5b', phase_train=phase_train, use_batch_norm=True, weight_decay=weight_decay)
-    pool6 = network.apool(incept5b,  3, 3, 1, 1, 'VALID', 'pool6')
+    pool6 = network.apool(incept5b,  7, 7, 1, 1, 'VALID', 'pool6')
     resh1 = tf.reshape(pool6, [-1, 1024])
     
     fc7a = network.affine(resh1, 1024, output_dims[0], 'fc7a', weight_decay=0.0)
