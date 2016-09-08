@@ -131,8 +131,19 @@ def reduction_b(net):
   
 #pylint: disable=unused-argument
 def inference(images, output_dims, keep_probability, phase_train=True, weight_decay=0.0):
-    return inception_resnet_v1(images, num_classes=128, is_training=phase_train,
-          dropout_keep_prob=keep_probability)
+    batch_norm_params = {
+        # Decay for the moving averages.
+        'decay': 0.9997,
+        # epsilon to prevent 0s in variance.
+        'epsilon': 0.001,
+    }
+    with slim.arg_scope([slim.conv2d],
+                        weights_initializer=tf.truncated_normal_initializer(stddev=0.1),
+                        weights_regularizer=slim.l2_regularizer(weight_decay),
+                        normalizer_fn=slim.batch_norm,
+                        normalizer_params=batch_norm_params):
+        return inception_resnet_v1(images, num_classes=128, is_training=phase_train,
+              dropout_keep_prob=keep_probability)
 
 
 def inception_resnet_v1(inputs, num_classes=1001, is_training=True,
@@ -226,30 +237,3 @@ def inception_resnet_v1(inputs, num_classes=1001, is_training=True,
         #           end_points['Predictions'] = tf.nn.softmax(logits, name='Predictions')
   
     return logits, None #, end_points
-
-
-def inception_resnet_v1_arg_scope(weight_decay=0.00004,
-                                  batch_norm_decay=0.9997,
-                                  batch_norm_epsilon=0.001):
-    """Yields the scope with the default parameters for inception_resnet_v1.
-    Args:
-      weight_decay: the weight decay for weights variables.
-      batch_norm_decay: decay for the moving average of batch_norm momentums.
-      batch_norm_epsilon: small float added to variance to avoid dividing by zero.
-    Returns:
-      a arg_scope with the parameters needed for inception_resnet_v1.
-    """
-    # Set weight_decay for weights in conv2d and fully_connected layers.
-    with slim.arg_scope([slim.conv2d, slim.fully_connected],
-                        weights_regularizer=slim.l2_regularizer(weight_decay),
-                        biases_regularizer=slim.l2_regularizer(weight_decay)):
-  
-        batch_norm_params = {
-            'decay': batch_norm_decay,
-            'epsilon': batch_norm_epsilon,
-        }
-        # Set activation_fn and parameters for batch_norm.
-        with slim.arg_scope([slim.conv2d], activation_fn=tf.nn.relu,
-                            normalizer_fn=slim.batch_norm,
-                            normalizer_params=batch_norm_params) as scope:
-            return scope
