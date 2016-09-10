@@ -66,26 +66,27 @@ def main(args):
         learning_rate_placeholder = tf.placeholder(tf.float32, name='learing_rate')
 
         # Build the inference graph
-        logits1, _ = network.inference(images_placeholder, [ 128, len(train_set) ], args.keep_probability, 
+        logits = network.inference(images_placeholder, len(train_set), args.keep_probability, 
             phase_train=phase_train_placeholder, weight_decay=args.weight_decay)
 
-        # Split example embeddings into anchor, positive and negative and calculate triplet loss
-        embeddings = tf.nn.l2_normalize(logits1, 1, 1e-10, name='embeddings')
-        anchor, positive, negative = tf.split(0, 3, embeddings)
-        triplet_loss = facenet.triplet_loss(anchor, positive, negative, args.alpha)
-        
         learning_rate = tf.train.exponential_decay(learning_rate_placeholder, global_step,
             args.learning_rate_decay_epochs*args.epoch_size, args.learning_rate_decay_factor, staircase=True)
         tf.scalar_summary('learning_rate', learning_rate)
 
+        # Calculate the average cross entropy loss across the batch
+        cross_entropy = tf.nn.sparse_softmax_cross_entropy_with_logits(
+            logits, labels_placeholder, name='cross_entropy_per_example')
+        cross_entropy_mean = tf.reduce_mean(cross_entropy, name='cross_entropy')
+        tf.add_to_collection('losses', cross_entropy_mean)
+        
         # Calculate the total losses
         regularization_losses = tf.get_collection(tf.GraphKeys.REGULARIZATION_LOSSES)
-        total_loss = tf.add_n([triplet_loss] + regularization_losses, name='total_loss')
+        total_loss = tf.add_n([cross_entropy_mean] + regularization_losses, name='total_loss')
 
         # Build a Graph that trains the model with one batch of examples and updates the model parameters
-        triplet_loss_train_op = facenet.train(total_loss, global_step, args.optimizer, 
+        train_op = facenet.train(total_loss, global_step, args.optimizer, 
             learning_rate, args.moving_average_decay)
-        
+
         # Create a saver
         saver = tf.train.Saver(tf.all_variables(), max_to_keep=0)
 
@@ -117,12 +118,12 @@ def main(args):
             while epoch < args.max_nrof_epochs:
                 epoch = sess.run(global_step, feed_dict=None) // args.epoch_size
                 # Train for one epoch
-                step = train_triplet_loss(args, sess, train_set, epoch, images_placeholder, labels_placeholder, phase_train_placeholder,
-                    learning_rate_placeholder, global_step, embeddings, total_loss, triplet_loss_train_op, summary_op, summary_writer)
+                step = train_classifier(args, sess, train_set, epoch, images_placeholder, labels_placeholder, phase_train_placeholder,
+                    learning_rate_placeholder, global_step, total_loss, train_op, summary_op, summary_writer, regularization_losses)
                 if args.lfw_dir:
                     _, _, accuracy, val, val_std, far = lfw.validate(sess, 
                         paths, actual_issame, args.seed, args.batch_size,
-                        images_placeholder, phase_train_placeholder, embeddings, nrof_folds=args.lfw_nrof_folds)
+                        images_placeholder, phase_train_placeholder, logits, nrof_folds=args.lfw_nrof_folds)
                     print('Accuracy: %1.3f+-%1.3f' % (np.mean(accuracy), np.std(accuracy)))
                     print('Validation rate: %2.5f+-%2.5f @ FAR=%2.5f' % (val, val_std, far))
                     # Add validation loss and accuracy to summary
@@ -140,8 +141,8 @@ def main(args):
     return model_dir
 
 
-def train_triplet_loss(args, sess, dataset, epoch, images_placeholder, labels_placeholder, phase_train_placeholder,
-          learning_rate_placeholder, global_step, embeddings, loss, train_op, summary_op, summary_writer):
+def train_classifier(args, sess, dataset, epoch, images_placeholder, labels_placeholder, phase_train_placeholder,
+          learning_rate_placeholder, global_step, loss, train_op, summary_op, summary_writer, regularization_losses):
     batch_number = 0
     
     if args.learning_rate>0.0:
@@ -152,43 +153,27 @@ def train_triplet_loss(args, sess, dataset, epoch, images_placeholder, labels_pl
         print('Loading training data')
         # Sample people and load new data
         start_time = time.time()
-        image_paths, num_per_class = facenet.sample_people(dataset, args.people_per_batch, args.images_per_person)
+        image_paths, labels = facenet.sample_random_people(dataset, args.people_per_batch * args.images_per_person)
         image_data = facenet.load_data(image_paths, args.random_crop, args.random_flip, args.image_size)
         load_time = time.time() - start_time
         print('Loaded %d images in %.2f seconds' % (image_data.shape[0], load_time))
 
-        print('Selecting suitable triplets for training')
-        start_time = time.time()
-        emb_list = []
-        # Run a forward pass for the sampled images
-        nrof_examples_per_epoch = args.people_per_batch * args.images_per_person
-        nrof_batches_per_epoch = int(np.floor(nrof_examples_per_epoch / args.batch_size))
-        for i in xrange(nrof_batches_per_epoch):
-            batch = facenet.get_batch(image_data, args.batch_size, i)
-            feed_dict = {images_placeholder: batch, labels_placeholder: np.zeros(batch.shape[0]), phase_train_placeholder: True, learning_rate_placeholder: lr}
-            emb_list += sess.run([embeddings], feed_dict=feed_dict)
-        emb_array = np.vstack(emb_list)  # Stack the embeddings to a nrof_examples_per_epoch x 128 matrix
-        # Select triplets based on the embeddings
-        triplets, nrof_random_negs, nrof_triplets = facenet.select_triplets(
-            emb_array, num_per_class, image_data, args.people_per_batch, args.alpha)
-        selection_time = time.time() - start_time
-        print('(nrof_random_negs, nrof_triplets) = (%d, %d): time=%.3f seconds' % (
-        nrof_random_negs, nrof_triplets, selection_time))
-
         # Perform training on the selected triplets
         train_time = 0
         i = 0
-        while i * args.batch_size < nrof_triplets * 3 and batch_number < args.epoch_size:
+        while i * args.batch_size < image_data.shape[0] and batch_number < args.epoch_size:
             start_time = time.time()
-            batch = facenet.get_triplet_batch(triplets, i, args.batch_size)
-            feed_dict = {images_placeholder: batch, labels_placeholder: np.zeros(batch.shape[0]), phase_train_placeholder: True, learning_rate_placeholder: lr}
-            err, _, step = sess.run([loss, train_op, global_step], feed_dict=feed_dict)
+            batch = facenet.get_batch(image_data, args.batch_size, i)
+            label_batch = facenet.get_label_batch(np.asarray(labels, np.int64), args.batch_size, i)
+            feed_dict = {images_placeholder: batch, labels_placeholder: label_batch, 
+                phase_train_placeholder: True, learning_rate_placeholder: lr}
+            err, _, step, reg_loss = sess.run([loss, train_op, global_step, regularization_losses], feed_dict=feed_dict)
             if (batch_number % 20 == 0):
                 summary_str, step = sess.run([summary_op, global_step], feed_dict=feed_dict)
                 summary_writer.add_summary(summary_str, global_step=step)
             duration = time.time() - start_time
-            print('Epoch: [%d][%d/%d]\tTime %.3f\tLoss %2.3f' %
-                  (epoch, batch_number, args.epoch_size, duration, err))
+            print('Epoch: [%d][%d/%d]\tTime %.3f\tLoss %2.3f\tRegLoss %2.3f' %
+                  (epoch, batch_number, args.epoch_size, duration, err, np.sum(reg_loss)))
             batch_number += 1
             i += 1
             train_time += duration
@@ -196,25 +181,11 @@ def train_triplet_loss(args, sess, dataset, epoch, images_placeholder, labels_pl
         summary = tf.Summary()
         #pylint: disable=maybe-no-member
         summary.value.add(tag='time/load', simple_value=load_time)
-        summary.value.add(tag='time/selection', simple_value=selection_time)
+        summary.value.add(tag='time/selection', simple_value=0.0)
         summary.value.add(tag='time/train', simple_value=train_time)
-        summary.value.add(tag='time/total', simple_value=load_time+selection_time+train_time)
+        summary.value.add(tag='time/total', simple_value=load_time+0.0+train_time)
         summary_writer.add_summary(summary, step)
     return step
-
-def get_learning_rate_from_file(filename, epoch):
-    with open(filename, 'r') as f:
-        for line in f.readlines():
-            line = line.split('#', 1)[0]
-            if line:
-                par = line.strip().split(':')
-                e = int(par[0])
-                lr = float(par[1])
-                if e <= epoch:
-                    learning_rate = lr
-                else:
-                    return learning_rate
-    
 
 def parse_arguments(argv):
     parser = argparse.ArgumentParser()

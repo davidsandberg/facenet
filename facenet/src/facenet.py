@@ -35,8 +35,8 @@ def triplet_loss(anchor, positive, negative, alpha):
       
     return loss
 
-def _add_loss_summaries(prefix, total_loss):
-    """Add summaries for losses in CIFAR-10 model.
+def _add_loss_summaries(total_loss):
+    """Add summaries for losses.
   
     Generates moving average for all losses and associated summaries for
     visualizing the performance of the network.
@@ -56,14 +56,14 @@ def _add_loss_summaries(prefix, total_loss):
     for l in losses + [total_loss]:
         # Name each loss as '(raw)' and name the moving average version of the loss
         # as the original loss name.
-        tf.scalar_summary(prefix + l.op.name +' (raw)', l)
-        tf.scalar_summary(prefix + l.op.name, loss_averages.average(l))
+        tf.scalar_summary(l.op.name +' (raw)', l)
+        tf.scalar_summary(l.op.name, loss_averages.average(l))
   
     return loss_averages_op
 
-def train(prefix, total_loss, global_step, optimizer, learning_rate, moving_average_decay):
+def train(total_loss, global_step, optimizer, learning_rate, moving_average_decay):
     # Generate moving averages of all losses and associated summaries.
-    loss_averages_op = _add_loss_summaries(prefix, total_loss)
+    loss_averages_op = _add_loss_summaries(total_loss)
 
     # Compute gradients.
     with tf.control_dependencies([loss_averages_op]):
@@ -87,12 +87,12 @@ def train(prefix, total_loss, global_step, optimizer, learning_rate, moving_aver
   
     # Add histograms for trainable variables.
     for var in tf.trainable_variables():
-        tf.histogram_summary(prefix + var.op.name, var)
+        tf.histogram_summary(var.op.name, var)
    
     # Add histograms for gradients.
     for grad, var in grads:
         if grad is not None:
-            tf.histogram_summary(prefix + var.op.name + '/gradients', grad)
+            tf.histogram_summary(var.op.name + '/gradients', grad)
   
     # Track the moving averages of all trainable variables.
     variable_averages = tf.train.ExponentialMovingAverage(
@@ -100,7 +100,7 @@ def train(prefix, total_loss, global_step, optimizer, learning_rate, moving_aver
     variables_averages_op = variable_averages.apply(tf.trainable_variables())
   
     with tf.control_dependencies([apply_gradient_op, variables_averages_op]):
-        train_op = tf.no_op(name=prefix + 'train')
+        train_op = tf.no_op(name='train')
   
     return train_op
 
@@ -238,7 +238,18 @@ def select_triplets(embeddings, num_per_class, image_data, people_per_batch, alp
     
     return triplets, nrof_random_negs, nrof_triplets
 
-  
+def get_learning_rate_from_file(filename, epoch):
+    with open(filename, 'r') as f:
+        for line in f.readlines():
+            line = line.split('#', 1)[0]
+            if line:
+                par = line.strip().split(':')
+                e = int(par[0])
+                lr = float(par[1])
+                if e <= epoch:
+                    learning_rate = lr
+                else:
+                    return learning_rate
 
 class ImageClass():
     "Stores the paths to images for a given class"
