@@ -136,7 +136,7 @@ def to_rgb(img):
   
 def load_data(image_paths, do_random_crop, do_random_flip, image_size, do_prewhiten=True):
     nrof_samples = len(image_paths)
-    img_list = [None] * nrof_samples
+    images = np.zeros((nrof_samples, image_size, image_size, 3))
     for i in range(nrof_samples):
         img = misc.imread(image_paths[i])
         if img.ndim == 2:
@@ -145,9 +145,7 @@ def load_data(image_paths, do_random_crop, do_random_flip, image_size, do_prewhi
             img = prewhiten(img)
         img = crop(img, do_random_crop, image_size)
         img = flip(img, do_random_flip)
-        img_list[i] = img
-    print('Stacking')
-    images = np.stack(img_list)
+        images[i,:,:,:] = img
     return images
 
 def get_label_batch(label_data, batch_size, batch_index):
