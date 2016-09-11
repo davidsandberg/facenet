@@ -23,7 +23,7 @@ def validate(sess, paths, actual_issame, seed, batch_size, images_placeholder, p
         images = facenet.load_data(paths_batch, False, False, image_size)
         feed_dict = { images_placeholder: images, phase_train_placeholder: False }
         emb_list += sess.run([embeddings], feed_dict=feed_dict)
-    emb_array = np.vstack(emb_list)  # Stack the embeddings to a nrof_examples_per_epoch x 128 matrix
+    emb_array = np.vstack(emb_list)
 
     # Calculate evaluation metrics
     thresholds = np.arange(0, 4, 0.01)

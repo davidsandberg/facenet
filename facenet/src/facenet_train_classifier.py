@@ -66,7 +66,7 @@ def main(args):
         learning_rate_placeholder = tf.placeholder(tf.float32, name='learing_rate')
 
         # Build the inference graph
-        logits = network.inference(images_placeholder, len(train_set), args.keep_probability, 
+        logits, endpoints = network.inference(images_placeholder, len(train_set), args.keep_probability, 
             phase_train=phase_train_placeholder, weight_decay=args.weight_decay)
 
         learning_rate = tf.train.exponential_decay(learning_rate_placeholder, global_step,
@@ -121,9 +121,10 @@ def main(args):
                 step = train_classifier(args, sess, train_set, epoch, images_placeholder, labels_placeholder, phase_train_placeholder,
                     learning_rate_placeholder, global_step, total_loss, train_op, summary_op, summary_writer, regularization_losses)
                 if args.lfw_dir:
+                    embeddings = endpoints['prelogits']
                     _, _, accuracy, val, val_std, far = lfw.validate(sess, 
                         paths, actual_issame, args.seed, args.batch_size,
-                        images_placeholder, phase_train_placeholder, logits, nrof_folds=args.lfw_nrof_folds)
+                        images_placeholder, phase_train_placeholder, embeddings, nrof_folds=args.lfw_nrof_folds)
                     print('Accuracy: %1.3f+-%1.3f' % (np.mean(accuracy), np.std(accuracy)))
                     print('Validation rate: %2.5f+-%2.5f @ FAR=%2.5f' % (val, val_std, far))
                     # Add validation loss and accuracy to summary
