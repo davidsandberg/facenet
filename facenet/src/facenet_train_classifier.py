@@ -15,6 +15,9 @@ import importlib
 import argparse
 import facenet
 import lfw
+from tensorflow.python.framework import ops
+from scipy import misc
+
 
 def main(args):
   
@@ -47,17 +50,40 @@ def main(args):
     pairs = lfw.read_pairs(os.path.expanduser(args.lfw_pairs))
 
     # Get the paths for the corresponding images
-    paths, actual_issame = lfw.get_paths(os.path.expanduser(args.lfw_dir), pairs, args.lfw_file_ext)
+    if args.lfw_dir:
+        paths, actual_issame = lfw.get_paths(os.path.expanduser(args.lfw_dir), pairs, args.lfw_file_ext)
     
     with tf.Graph().as_default():
         tf.set_random_seed(args.seed)
         global_step = tf.Variable(0, trainable=False)
+        
+        # Get a list of image paths and their labels
+        image_list, label_list = get_image_paths_and_labels(train_set)
+        
+        images = ops.convert_to_tensor(image_list, dtype=tf.string)
+        labels = ops.convert_to_tensor(label_list, dtype=tf.int32)
+        
+        # Makes an input queue
+        input_queue = tf.train.slice_input_producer([images, labels],
+            num_epochs=args.max_nrof_epochs, shuffle=True)
 
+        num_preprocess_threads = 4
+        images_and_labels = []
+        for _ in range(num_preprocess_threads):
+            image, label = read_images_from_disk(input_queue)
+            image = tf.image.resize_image_with_crop_or_pad(image, args.image_size, args.image_size)
+            #pylint: disable=no-member
+            image.set_shape((args.image_size,args.image_size,3))
+            image = tf.image.per_image_whitening(image)
+            images_and_labels.append([image, label])
+
+        image_batch, label_batch = tf.train.batch_join(
+            images_and_labels,
+            batch_size=args.batch_size,
+            capacity=4 * num_preprocess_threads * args.batch_size)
+        
         # Placeholder for input images
         images_placeholder = tf.placeholder(tf.float32, shape=(None, args.image_size, args.image_size, 3), name='input')
-
-        # Placeholder for the learning rate
-        labels_placeholder = tf.placeholder(tf.int64, name='labels')
 
         # Placeholder for phase_train
         phase_train_placeholder = tf.placeholder(tf.bool, name='phase_train')
@@ -66,16 +92,16 @@ def main(args):
         learning_rate_placeholder = tf.placeholder(tf.float32, name='learing_rate')
 
         # Build the inference graph
-        logits, endpoints = network.inference(images_placeholder, len(train_set), args.keep_probability, 
+        logits, endpoints = network.inference(image_batch, len(train_set), args.keep_probability, 
             phase_train=phase_train_placeholder, weight_decay=args.weight_decay)
-
+        
         learning_rate = tf.train.exponential_decay(learning_rate_placeholder, global_step,
             args.learning_rate_decay_epochs*args.epoch_size, args.learning_rate_decay_factor, staircase=True)
         tf.scalar_summary('learning_rate', learning_rate)
 
         # Calculate the average cross entropy loss across the batch
         cross_entropy = tf.nn.sparse_softmax_cross_entropy_with_logits(
-            logits, labels_placeholder, name='cross_entropy_per_example')
+            logits, label_batch, name='cross_entropy_per_example')
         cross_entropy_mean = tf.reduce_mean(cross_entropy, name='cross_entropy')
         tf.add_to_collection('losses', cross_entropy_mean)
         
@@ -88,20 +114,18 @@ def main(args):
             learning_rate, args.moving_average_decay)
 
         # Create a saver
-        saver = tf.train.Saver(tf.all_variables(), max_to_keep=0)
+        saver = tf.train.Saver(tf.all_variables(), max_to_keep=3)
 
         # Build the summary operation based on the TF collection of Summaries.
         summary_op = tf.merge_all_summaries()
 
-        # Build an initialization operation to run below.
-        init = tf.initialize_all_variables()
-
         # Start running operations on the Graph.
         gpu_options = tf.GPUOptions(per_process_gpu_memory_fraction=args.gpu_memory_fraction)
-        sess = tf.Session(config=tf.ConfigProto(gpu_options=gpu_options))        
-        sess.run(init)
-
+        sess = tf.Session(config=tf.ConfigProto(gpu_options=gpu_options))
+        sess.run(tf.initialize_all_variables())
+        sess.run(tf.initialize_local_variables())
         summary_writer = tf.train.SummaryWriter(log_dir, sess.graph)
+        tf.train.start_queue_runners(sess=sess)
 
         with sess.as_default():
 
@@ -118,8 +142,25 @@ def main(args):
             while epoch < args.max_nrof_epochs:
                 epoch = sess.run(global_step, feed_dict=None) // args.epoch_size
                 # Train for one epoch
-                step = train_classifier(args, sess, train_set, epoch, images_placeholder, labels_placeholder, phase_train_placeholder,
+                step = train_classifier(args, sess, epoch, phase_train_placeholder,
                     learning_rate_placeholder, global_step, total_loss, train_op, summary_op, summary_writer, regularization_losses)
+                
+                # Visualize conv1 features
+                w = sess.run('conv1_7x7/weights:0')
+                nrof_rows = 8
+                nrof_cols = 8
+                features = np.zeros((1+(7+1)*nrof_rows,1+(7+1)*nrof_cols,3),dtype=np.float32)
+                d = 7+1
+                for i in range(nrof_rows):
+                    for j in range(nrof_cols):
+                        filt = w[:,:,:,i*nrof_cols+j]
+                        x_min = np.min(filt)
+                        x_max = np.max(filt)
+                        filt_norm =(filt - x_min) / (x_max - x_min)
+                        features[d*i+1:d*(i+1), d*j+1:d*(j+1), :] = filt_norm
+                features_resize = misc.imresize(features, 8, 'nearest')
+                misc.imsave(os.path.join(log_dir, 'features_epoch%d.png' % epoch), features_resize)
+
                 if args.lfw_dir:
                     embeddings = endpoints['prelogits']
                     _, _, accuracy, val, val_std, far = lfw.validate(sess, 
@@ -140,9 +181,29 @@ def main(args):
                     checkpoint_path = os.path.join(model_dir, 'model.ckpt')
                     saver.save(sess, checkpoint_path, global_step=step)
     return model_dir
+  
+def get_image_paths_and_labels(dataset):
+    image_paths_flat = []
+    labels_flat = []
+    for i in range(len(dataset)):
+        image_paths_flat += dataset[i].image_paths
+        labels_flat += [i] * len(dataset[i].image_paths)
+    return image_paths_flat, labels_flat
 
 
-def train_classifier(args, sess, dataset, epoch, images_placeholder, labels_placeholder, phase_train_placeholder,
+def read_images_from_disk(input_queue):
+    """Consumes a single filename and label as a ' '-delimited string.
+    Args:
+      filename_and_label_tensor: A scalar string tensor.
+    Returns:
+      Two tensors: the decoded image, and the string label.
+    """
+    label = input_queue[1]
+    file_contents = tf.read_file(input_queue[0])
+    example = tf.image.decode_png(file_contents, channels=3)
+    return example, label
+
+def train_classifier(args, sess, epoch, phase_train_placeholder,
           learning_rate_placeholder, global_step, loss, train_op, summary_op, summary_writer, regularization_losses):
     batch_number = 0
     
@@ -151,25 +212,14 @@ def train_classifier(args, sess, dataset, epoch, images_placeholder, labels_plac
     else:
         lr = facenet.get_learning_rate_from_file('../data/learning_rate_schedule.txt', epoch)
     while batch_number < args.epoch_size:
-        print('Loading training data')
-        # Sample people and load new data
-        start_time = time.time()
-        image_paths, labels = facenet.sample_random_people(dataset, args.people_per_batch * args.images_per_person)
-        image_data = facenet.load_data(image_paths, args.random_crop, args.random_flip, args.image_size)
-        load_time = time.time() - start_time
-        print('Loaded %d images in %.2f seconds' % (image_data.shape[0], load_time))
-
         # Perform training on the selected triplets
         train_time = 0
         i = 0
-        while i * args.batch_size < image_data.shape[0] and batch_number < args.epoch_size:
+        while batch_number < args.epoch_size:
             start_time = time.time()
-            batch = facenet.get_batch(image_data, args.batch_size, i)
-            label_batch = facenet.get_label_batch(np.asarray(labels, np.int64), args.batch_size, i)
-            feed_dict = {images_placeholder: batch, labels_placeholder: label_batch, 
-                phase_train_placeholder: True, learning_rate_placeholder: lr}
+            feed_dict = {phase_train_placeholder: True, learning_rate_placeholder: lr}
             err, _, step, reg_loss = sess.run([loss, train_op, global_step, regularization_losses], feed_dict=feed_dict)
-            if (batch_number % 20 == 0):
+            if (batch_number % 100 == 0):
                 summary_str, step = sess.run([summary_op, global_step], feed_dict=feed_dict)
                 summary_writer.add_summary(summary_str, global_step=step)
             duration = time.time() - start_time
@@ -181,10 +231,7 @@ def train_classifier(args, sess, dataset, epoch, images_placeholder, labels_plac
         # Add validation loss and accuracy to summary
         summary = tf.Summary()
         #pylint: disable=maybe-no-member
-        summary.value.add(tag='time/load', simple_value=load_time)
-        summary.value.add(tag='time/selection', simple_value=0.0)
-        summary.value.add(tag='time/train', simple_value=train_time)
-        summary.value.add(tag='time/total', simple_value=load_time+0.0+train_time)
+        summary.value.add(tag='time/total', simple_value=train_time)
         summary_writer.add_summary(summary, step)
     return step
 
@@ -255,7 +302,7 @@ def parse_arguments(argv):
     parser.add_argument('--lfw_file_ext', type=str,
         help='The file extension for the LFW dataset.', default='png', choices=['jpg', 'png'])
     parser.add_argument('--lfw_dir', type=str,
-        help='Path to the data directory containing aligned face patches.', default='~/datasets/lfw/lfw_realigned/')
+        help='Path to the data directory containing aligned face patches.', default='')
     parser.add_argument('--lfw_nrof_folds', type=int,
         help='Number of folds to use for cross validation. Mainly used for testing.', default=10)
     return parser.parse_args(argv)
