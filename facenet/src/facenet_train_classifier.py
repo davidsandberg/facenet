@@ -71,7 +71,12 @@ def main(args):
         images_and_labels = []
         for _ in range(num_preprocess_threads):
             image, label = read_images_from_disk(input_queue)
-            image = tf.image.resize_image_with_crop_or_pad(image, args.image_size, args.image_size)
+            if args.random_crop:
+                image = tf.random_crop(image, [args.image_size, args.image_size, 3])
+            else:
+                image = tf.image.resize_image_with_crop_or_pad(image, args.image_size, args.image_size)
+            if args.random_flip:
+                image = tf.image.random_flip_left_right(image)
             #pylint: disable=no-member
             image.set_shape((args.image_size,args.image_size,3))
             image = tf.image.per_image_whitening(image)
@@ -158,7 +163,7 @@ def main(args):
                         x_max = np.max(filt)
                         filt_norm =(filt - x_min) / (x_max - x_min)
                         features[d*i+1:d*(i+1), d*j+1:d*(j+1), :] = filt_norm
-                features_resize = misc.imresize(features, 8, 'nearest')
+                features_resize = misc.imresize(features, 8.0, 'nearest')
                 misc.imsave(os.path.join(log_dir, 'features_epoch%d.png' % epoch), features_resize)
 
                 if args.lfw_dir:
