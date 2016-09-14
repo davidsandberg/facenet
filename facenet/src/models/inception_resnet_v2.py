@@ -260,4 +260,4 @@ def inception_resnet_v2(inputs, num_classes=1001, is_training=True,
                     end_points['Logits'] = logits
         #           end_points['Predictions'] = tf.nn.softmax(logits, name='Predictions')
   
-    return logits, None #, end_points
+    return logits, end_points
