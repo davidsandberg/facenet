@@ -150,21 +150,21 @@ def main(args):
                 step = train_classifier(args, sess, epoch, phase_train_placeholder,
                     learning_rate_placeholder, global_step, total_loss, train_op, summary_op, summary_writer, regularization_losses)
                 
-                # Visualize conv1 features
-                w = sess.run('conv1_7x7/weights:0')
-                nrof_rows = 8
-                nrof_cols = 8
-                features = np.zeros((1+(7+1)*nrof_rows,1+(7+1)*nrof_cols,3),dtype=np.float32)
-                d = 7+1
-                for i in range(nrof_rows):
-                    for j in range(nrof_cols):
-                        filt = w[:,:,:,i*nrof_cols+j]
-                        x_min = np.min(filt)
-                        x_max = np.max(filt)
-                        filt_norm =(filt - x_min) / (x_max - x_min)
-                        features[d*i+1:d*(i+1), d*j+1:d*(j+1), :] = filt_norm
-                features_resize = misc.imresize(features, 8.0, 'nearest')
-                misc.imsave(os.path.join(log_dir, 'features_epoch%d.png' % epoch), features_resize)
+#                 # Visualize conv1 features
+#                 w = sess.run('conv1_7x7/weights:0')
+#                 nrof_rows = 8
+#                 nrof_cols = 8
+#                 features = np.zeros((1+(7+1)*nrof_rows,1+(7+1)*nrof_cols,3),dtype=np.float32)
+#                 d = 7+1
+#                 for i in range(nrof_rows):
+#                     for j in range(nrof_cols):
+#                         filt = w[:,:,:,i*nrof_cols+j]
+#                         x_min = np.min(filt)
+#                         x_max = np.max(filt)
+#                         filt_norm =(filt - x_min) / (x_max - x_min)
+#                         features[d*i+1:d*(i+1), d*j+1:d*(j+1), :] = filt_norm
+#                 features_resize = misc.imresize(features, 8.0, 'nearest')
+#                 misc.imsave(os.path.join(log_dir, 'features_epoch%d.png' % epoch), features_resize)
 
                 if args.lfw_dir:
                     embeddings = endpoints['prelogits']

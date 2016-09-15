@@ -6,7 +6,7 @@ from __future__ import print_function
 import tensorflow as tf
 import models.network as network
 
-def inference(images, output_dims, keep_probability, phase_train=True, weight_decay=0.0):
+def inference(images, output_dim, keep_probability, phase_train=True, weight_decay=0.0):
     """ Define an inference network for face recognition based 
            on inception modules using batch normalization
     
@@ -14,31 +14,49 @@ def inference(images, output_dims, keep_probability, phase_train=True, weight_de
       images: The images to run inference on, dimensions batch_size x height x width x channels
       phase_train: True if batch normalization should operate in training mode
     """
-    conv1 = network.conv(images, 3, 64, 7, 7, 2, 2, 'SAME', 'conv1_7x7', phase_train=phase_train, use_batch_norm=True, weight_decay=weight_decay)
-    pool1 = network.mpool(conv1,  3, 3, 2, 2, 'SAME', 'pool1')
-    conv2 = network.conv(pool1,  64, 64, 1, 1, 1, 1, 'SAME', 'conv2_1x1', phase_train=phase_train, use_batch_norm=True, weight_decay=weight_decay)
-    conv3 = network.conv(conv2,  64, 192, 3, 3, 1, 1, 'SAME', 'conv3_3x3', phase_train=phase_train, use_batch_norm=True, weight_decay=weight_decay)
-    pool3 = network.mpool(conv3,  3, 3, 2, 2, 'SAME', 'pool3')
+    endpoints = {}
+
+    net = network.conv(images, 3, 64, 7, 7, 2, 2, 'SAME', 'conv1_7x7', phase_train=phase_train, use_batch_norm=True, weight_decay=weight_decay)
+    endpoints['conv1'] = net
+    net = network.mpool(net,  3, 3, 2, 2, 'SAME', 'pool1')
+    endpoints['pool1'] = net
+    net = network.conv(net,  64, 64, 1, 1, 1, 1, 'SAME', 'conv2_1x1', phase_train=phase_train, use_batch_norm=True, weight_decay=weight_decay)
+    endpoints['conv2_1x1'] = net
+    net = network.conv(net,  64, 192, 3, 3, 1, 1, 'SAME', 'conv3_3x3', phase_train=phase_train, use_batch_norm=True, weight_decay=weight_decay)
+    endpoints['conv3_3x3'] = net
+    net = network.mpool(net,  3, 3, 2, 2, 'SAME', 'pool3')
+    endpoints['pool3'] = net
   
-    incept3a = network.inception(pool3,    192, 1, 64, 96, 128, 16, 32, 3, 32, 1, 'MAX', 'incept3a', phase_train=phase_train, use_batch_norm=True, weight_decay=weight_decay)
-    incept3b = network.inception(incept3a, 256, 1, 64, 96, 128, 32, 64, 3, 64, 1, 'MAX', 'incept3b', phase_train=phase_train, use_batch_norm=True, weight_decay=weight_decay)
-    incept3c = network.inception(incept3b, 320, 2, 0, 128, 256, 32, 64, 3, 0, 2, 'MAX', 'incept3c', phase_train=phase_train, use_batch_norm=True, weight_decay=weight_decay)
+    net = network.inception(net,    192, 1, 64, 96, 128, 16, 32, 3, 32, 1, 'MAX', 'incept3a', phase_train=phase_train, use_batch_norm=True, weight_decay=weight_decay)
+    endpoints['incept3a'] = net
+    net = network.inception(net, 256, 1, 64, 96, 128, 32, 64, 3, 64, 1, 'MAX', 'incept3b', phase_train=phase_train, use_batch_norm=True, weight_decay=weight_decay)
+    endpoints['incept3b'] = net
+    net = network.inception(net, 320, 2, 0, 128, 256, 32, 64, 3, 0, 2, 'MAX', 'incept3c', phase_train=phase_train, use_batch_norm=True, weight_decay=weight_decay)
+    endpoints['incept3c'] = net
     
-    incept4a = network.inception(incept3c, 640, 1, 256, 96, 192, 32, 64, 3, 128, 1, 'MAX', 'incept4a', phase_train=phase_train, use_batch_norm=True, weight_decay=weight_decay)
-    incept4b = network.inception(incept4a, 640, 1, 224, 112, 224, 32, 64, 3, 128, 1, 'MAX', 'incept4b', phase_train=phase_train, use_batch_norm=True, weight_decay=weight_decay)
-    incept4c = network.inception(incept4b, 640, 1, 192, 128, 256, 32, 64, 3, 128, 1, 'MAX', 'incept4c', phase_train=phase_train, use_batch_norm=True, weight_decay=weight_decay)
-    incept4d = network.inception(incept4c, 640, 1, 160, 144, 288, 32, 64, 3, 128, 1, 'MAX', 'incept4d', phase_train=phase_train, use_batch_norm=True, weight_decay=weight_decay)
-    incept4e = network.inception(incept4d, 640, 2, 0, 160, 256, 64, 128, 3, 0, 2, 'MAX', 'incept4e', phase_train=phase_train, use_batch_norm=True)
+    net = network.inception(net, 640, 1, 256, 96, 192, 32, 64, 3, 128, 1, 'MAX', 'incept4a', phase_train=phase_train, use_batch_norm=True, weight_decay=weight_decay)
+    endpoints['incept4a'] = net
+    net = network.inception(net, 640, 1, 224, 112, 224, 32, 64, 3, 128, 1, 'MAX', 'incept4b', phase_train=phase_train, use_batch_norm=True, weight_decay=weight_decay)
+    endpoints['incept4b'] = net
+    net = network.inception(net, 640, 1, 192, 128, 256, 32, 64, 3, 128, 1, 'MAX', 'incept4c', phase_train=phase_train, use_batch_norm=True, weight_decay=weight_decay)
+    endpoints['incept4c'] = net
+    net = network.inception(net, 640, 1, 160, 144, 288, 32, 64, 3, 128, 1, 'MAX', 'incept4d', phase_train=phase_train, use_batch_norm=True, weight_decay=weight_decay)
+    endpoints['incept4d'] = net
+    net = network.inception(net, 640, 2, 0, 160, 256, 64, 128, 3, 0, 2, 'MAX', 'incept4e', phase_train=phase_train, use_batch_norm=True)
+    endpoints['incept4e'] = net
     
-    incept5a = network.inception(incept4e, 1024, 1, 384, 192, 384, 48, 128, 3, 128, 1, 'MAX', 'incept5a', phase_train=phase_train, use_batch_norm=True, weight_decay=weight_decay)
-    incept5b = network.inception(incept5a, 1024, 1, 384, 192, 384, 48, 128, 3, 128, 1, 'MAX', 'incept5b', phase_train=phase_train, use_batch_norm=True, weight_decay=weight_decay)
-    pool6 = network.apool(incept5b,  7, 7, 1, 1, 'VALID', 'pool6')
-    resh1 = tf.reshape(pool6, [-1, 1024])
+    net = network.inception(net, 1024, 1, 384, 192, 384, 48, 128, 3, 128, 1, 'MAX', 'incept5a', phase_train=phase_train, use_batch_norm=True, weight_decay=weight_decay)
+    endpoints['incept5a'] = net
+    net = network.inception(net, 1024, 1, 384, 192, 384, 48, 128, 3, 128, 1, 'MAX', 'incept5b', phase_train=phase_train, use_batch_norm=True, weight_decay=weight_decay)
+    endpoints['incept5b'] = net
+    net = network.apool(net,  7, 7, 1, 1, 'VALID', 'pool6')
+    endpoints['pool6'] = net
+    net = tf.reshape(net, [-1, 1024])
+    endpoints['prelogits'] = net
     
-    fc7a = network.affine(resh1, 1024, output_dims[0], 'fc7a', weight_decay=0.0)
-    logits1 = tf.nn.dropout(fc7a, keep_probability)
-    
-    fc7b = network.affine(resh1, 1024, output_dims[1], 'fc7b', weight_decay=weight_decay)
-    logits2 = tf.nn.dropout(fc7b, keep_probability)
+    net = network.affine(net, 1024, output_dim, 'fc7', weight_decay=weight_decay)
+    endpoints['fc7'] = net
+    logits = tf.nn.dropout(net, keep_probability)
+    endpoints['dropout'] = net
   
-    return logits1, logits2
+    return logits, endpoints

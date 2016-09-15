@@ -89,7 +89,7 @@ def block8(net, scale=1.0, activation_fn=tf.nn.relu, scope=None, reuse=None):
     return net
   
 #pylint: disable=unused-argument
-def inference(images, output_dims, keep_probability, phase_train=True, weight_decay=0.0):
+def inference(images, output_dim, keep_probability, phase_train=True, weight_decay=0.0):
     batch_norm_params = {
         # Decay for the moving averages.
         'decay': 0.9997,
@@ -101,7 +101,7 @@ def inference(images, output_dims, keep_probability, phase_train=True, weight_de
                         weights_regularizer=slim.l2_regularizer(weight_decay),
                         normalizer_fn=slim.batch_norm,
                         normalizer_params=batch_norm_params):
-        return inception_resnet_v2(images, num_classes=128, is_training=phase_train,
+        return inception_resnet_v2(images, num_classes=output_dim, is_training=phase_train,
               dropout_keep_prob=keep_probability)
 
 

@@ -23,6 +23,7 @@ def inference(images, output_dim, keep_probability, phase_train=True, weight_dec
     net = network.conv(net,  64, 64, 1, 1, 1, 1, 'SAME', 'conv2_1x1', phase_train=phase_train, use_batch_norm=True, weight_decay=weight_decay)
     endpoints['conv2_1x1'] = net
     net = network.conv(net,  64, 192, 3, 3, 1, 1, 'SAME', 'conv3_3x3', phase_train=phase_train, use_batch_norm=True, weight_decay=weight_decay)
+    endpoints['conv3_3x3'] = net
     net = network.mpool(net,  3, 3, 2, 2, 'SAME', 'pool3')
     endpoints['pool3'] = net
   
