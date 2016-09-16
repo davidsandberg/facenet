@@ -8,6 +8,7 @@ from __future__ import print_function
 import os
 from subprocess import Popen, PIPE
 import tensorflow as tf
+from tensorflow.python.framework import ops
 import numpy as np
 from scipy import misc
 import matplotlib.pyplot as plt
@@ -34,7 +35,61 @@ def triplet_loss(anchor, positive, negative, alpha):
         loss = tf.reduce_mean(tf.maximum(basic_loss, 0.0), 0)
       
     return loss
+  
+def get_image_paths_and_labels(dataset):
+    image_paths_flat = []
+    labels_flat = []
+    for i in range(len(dataset)):
+        image_paths_flat += dataset[i].image_paths
+        labels_flat += [i] * len(dataset[i].image_paths)
+    return image_paths_flat, labels_flat
 
+
+def read_images_from_disk(input_queue):
+    """Consumes a single filename and label as a ' '-delimited string.
+    Args:
+      filename_and_label_tensor: A scalar string tensor.
+    Returns:
+      Two tensors: the decoded image, and the string label.
+    """
+    label = input_queue[1]
+    file_contents = tf.read_file(input_queue[0])
+    example = tf.image.decode_png(file_contents, channels=3)
+    return example, label
+  
+def read_and_augument_data(dataset, image_size, batch_size, max_nrof_epochs, random_crop, random_flip):
+    # Get a list of image paths and their labels
+    image_list, label_list = get_image_paths_and_labels(dataset)
+    
+    images = ops.convert_to_tensor(image_list, dtype=tf.string)
+    labels = ops.convert_to_tensor(label_list, dtype=tf.int32)
+    
+    # Makes an input queue
+    input_queue = tf.train.slice_input_producer([images, labels],
+        num_epochs=max_nrof_epochs, shuffle=True)
+
+    num_preprocess_threads = 4
+    images_and_labels = []
+    for _ in range(num_preprocess_threads):
+        image, label = read_images_from_disk(input_queue)
+        if random_crop:
+            image = tf.random_crop(image, [image_size, image_size, 3])
+        else:
+            image = tf.image.resize_image_with_crop_or_pad(image, image_size, image_size)
+        if random_flip:
+            image = tf.image.random_flip_left_right(image)
+        #pylint: disable=no-member
+        image.set_shape((image_size, image_size, 3))
+        image = tf.image.per_image_whitening(image)
+        images_and_labels.append([image, label])
+
+    image_batch, label_batch = tf.train.batch_join(
+        images_and_labels, batch_size=batch_size,
+        capacity=4 * num_preprocess_threads * batch_size)#,
+        #allow_smaller_final_batch=True)
+  
+    return image_batch, label_batch, len(label_list)
+  
 def _add_loss_summaries(total_loss):
     """Add summaries for losses.
   
@@ -278,6 +333,30 @@ def get_dataset(paths):
                 dataset.append(ImageClass(class_name, image_paths))
   
     return dataset
+
+def split_dataset(dataset, split_ratio, mode):
+    if mode=='SPLIT_CLASSES':
+        nrof_classes = len(dataset)
+        class_indices = np.arange(nrof_classes)
+        np.random.shuffle(class_indices)
+        split = int(round(nrof_classes*split_ratio))
+        train_set = [dataset[i] for i in class_indices[0:split]]
+        test_set = [dataset[i] for i in class_indices[split:-1]]
+    elif mode=='SPLIT_IMAGES':
+        train_set = []
+        test_set = []
+        min_nrof_images = 2
+        for cls in dataset:
+            paths = cls.image_paths
+            np.random.shuffle(paths)
+            split = int(round(len(paths)*split_ratio))
+            if split<min_nrof_images:
+                continue  # Not enough images for test set. Skip class...
+            train_set.append(ImageClass(cls.name, paths[0:split]))
+            test_set.append(ImageClass(cls.name, paths[split:-1]))
+    else:
+        raise ValueError('Invalid train/test split mode "%s"' % mode)
+    return train_set, test_set
 
 def sample_people(dataset, people_per_batch, images_per_person):
     nrof_images = people_per_batch * images_per_person

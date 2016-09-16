@@ -15,9 +15,7 @@ import importlib
 import argparse
 import facenet
 import lfw
-from tensorflow.python.framework import ops
 from scipy import misc
-
 
 def main(args):
   
@@ -41,13 +39,16 @@ def main(args):
     facenet.store_revision_info(src_path, log_dir, ' '.join(sys.argv))
 
     np.random.seed(seed=args.seed)
-    train_set = facenet.get_dataset(args.data_dir)
+    dataset = facenet.get_dataset(args.data_dir)
+    train_set, test_set = facenet.split_dataset(dataset, 0.95, 'SPLIT_IMAGES')
+    assert(len(train_set)==len(test_set))
     
     print('Model directory: %s' % model_dir)
     print('Log directory: %s' % log_dir)
     
     # Read the file containing the pairs used for testing
-    pairs = lfw.read_pairs(os.path.expanduser(args.lfw_pairs))
+    if args.lfw_dir:
+        pairs = lfw.read_pairs(os.path.expanduser(args.lfw_pairs))
 
     # Get the paths for the corresponding images
     if args.lfw_dir:
@@ -57,35 +58,11 @@ def main(args):
         tf.set_random_seed(args.seed)
         global_step = tf.Variable(0, trainable=False)
         
-        # Get a list of image paths and their labels
-        image_list, label_list = get_image_paths_and_labels(train_set)
-        
-        images = ops.convert_to_tensor(image_list, dtype=tf.string)
-        labels = ops.convert_to_tensor(label_list, dtype=tf.int32)
-        
-        # Makes an input queue
-        input_queue = tf.train.slice_input_producer([images, labels],
-            num_epochs=args.max_nrof_epochs, shuffle=True)
-
-        num_preprocess_threads = 4
-        images_and_labels = []
-        for _ in range(num_preprocess_threads):
-            image, label = read_images_from_disk(input_queue)
-            if args.random_crop:
-                image = tf.random_crop(image, [args.image_size, args.image_size, 3])
-            else:
-                image = tf.image.resize_image_with_crop_or_pad(image, args.image_size, args.image_size)
-            if args.random_flip:
-                image = tf.image.random_flip_left_right(image)
-            #pylint: disable=no-member
-            image.set_shape((args.image_size,args.image_size,3))
-            image = tf.image.per_image_whitening(image)
-            images_and_labels.append([image, label])
-
-        image_batch, label_batch = tf.train.batch_join(
-            images_and_labels,
-            batch_size=args.batch_size,
-            capacity=4 * num_preprocess_threads * args.batch_size)
+        # Read data and apply label preserving distortions
+        image_batch, label_batch, total_nrof_examples = facenet.read_and_augument_data(train_set, args.image_size, 
+            args.batch_size, args.max_nrof_epochs, args.random_crop, args.random_flip)
+        print('Total number of classes: %d' % len(train_set))
+        print('Total number of examples: %d' % total_nrof_examples)
         
         # Placeholder for input images
         images_placeholder = tf.placeholder(tf.float32, shape=(None, args.image_size, args.image_size, 3), name='input')
@@ -147,8 +124,8 @@ def main(args):
             while epoch < args.max_nrof_epochs:
                 epoch = sess.run(global_step, feed_dict=None) // args.epoch_size
                 # Train for one epoch
-                step = train_classifier(args, sess, epoch, phase_train_placeholder,
-                    learning_rate_placeholder, global_step, total_loss, train_op, summary_op, summary_writer, regularization_losses)
+                step = train(args, sess, epoch, phase_train_placeholder, learning_rate_placeholder, global_step, 
+                    total_loss, train_op, summary_op, summary_writer, regularization_losses)
                 
 #                 # Visualize conv1 features
 #                 w = sess.run('conv1_7x7/weights:0')
@@ -185,31 +162,17 @@ def main(args):
                     print('Saving checkpoint')
                     checkpoint_path = os.path.join(model_dir, 'model.ckpt')
                     saver.save(sess, checkpoint_path, global_step=step)
+
+                    precision = evaluate(network, test_set, model_dir, args.image_size, args.batch_size, args.moving_average_decay)
+                    summary = tf.Summary()
+                    #pylint: disable=maybe-no-member
+                    summary.value.add(tag='precision', simple_value=precision)
+                    summary_writer.add_summary(summary, step)
+                
     return model_dir
   
-def get_image_paths_and_labels(dataset):
-    image_paths_flat = []
-    labels_flat = []
-    for i in range(len(dataset)):
-        image_paths_flat += dataset[i].image_paths
-        labels_flat += [i] * len(dataset[i].image_paths)
-    return image_paths_flat, labels_flat
-
-
-def read_images_from_disk(input_queue):
-    """Consumes a single filename and label as a ' '-delimited string.
-    Args:
-      filename_and_label_tensor: A scalar string tensor.
-    Returns:
-      Two tensors: the decoded image, and the string label.
-    """
-    label = input_queue[1]
-    file_contents = tf.read_file(input_queue[0])
-    example = tf.image.decode_png(file_contents, channels=3)
-    return example, label
-
-def train_classifier(args, sess, epoch, phase_train_placeholder,
-          learning_rate_placeholder, global_step, loss, train_op, summary_op, summary_writer, regularization_losses):
+def train(args, sess, epoch, phase_train_placeholder, learning_rate_placeholder, global_step, 
+      loss, train_op, summary_op, summary_writer, regularization_losses):
     batch_number = 0
     
     if args.learning_rate>0.0:
@@ -239,6 +202,66 @@ def train_classifier(args, sess, epoch, phase_train_placeholder,
         summary.value.add(tag='time/total', simple_value=train_time)
         summary_writer.add_summary(summary, step)
     return step
+  
+def evaluate(network, test_set, model_dir, image_size,  batch_size, moving_average_decay):
+  
+    with tf.Graph().as_default():
+  
+        # Read data without augumentation
+        image_batch, label_batch, total_nrof_examples = facenet.read_and_augument_data(test_set, image_size, 
+            batch_size, 1, False, False)
+        
+        # Build the inference graph
+        logits, _ = network.inference(image_batch, len(test_set), 1.0, 
+            phase_train=False, weight_decay=0.0)
+        
+        # Calculate predictions.
+        top_k_op = tf.nn.in_top_k(logits, label_batch, 1)
+    
+        # Restore the moving average version of the learned variables
+        variable_averages = tf.train.ExponentialMovingAverage(moving_average_decay)
+        variables_to_restore = variable_averages.variables_to_restore()
+        saver = tf.train.Saver(variables_to_restore)
+        
+        with tf.Session() as sess:
+            sess.run(tf.initialize_local_variables())
+            ckpt = tf.train.get_checkpoint_state(model_dir)
+            if ckpt and ckpt.model_checkpoint_path: #pylint: disable=maybe-no-member
+                # Restores from checkpoint
+                saver.restore(sess, ckpt.model_checkpoint_path)  #pylint: disable=maybe-no-member
+            else:
+                print('No checkpoint file found')
+                return -1.0
+        
+            # Start the queue runners
+            coord = tf.train.Coordinator()
+            precision = -1.0
+            try:
+                threads = []
+                for qr in tf.get_collection(tf.GraphKeys.QUEUE_RUNNERS):
+                    threads.extend(qr.create_threads(sess, coord=coord, daemon=True, start=True))
+          
+                true_count = 0
+                nrof_samples = 0
+                print('Running forward pass on test dataset')
+                while nrof_samples+batch_size<total_nrof_examples and not coord.should_stop():
+                    predictions = sess.run([top_k_op])
+                    nrof_samples += np.size(predictions)
+                    true_count += np.sum(predictions)
+          
+                # Compute precision @ 1.
+                precision = true_count / nrof_samples
+                print('%s: precision @ 1 = %.3f' % (datetime.now(), precision))
+          
+            except Exception as e:  # pylint: disable=broad-except
+                print(e)
+                coord.request_stop(e)
+        
+            coord.request_stop()
+            coord.join(threads, stop_grace_period_secs=10)
+    
+        return precision
+    
 
 def parse_arguments(argv):
     parser = argparse.ArgumentParser()
