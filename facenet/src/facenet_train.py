@@ -47,7 +47,9 @@ def main(args):
     pairs = lfw.read_pairs(os.path.expanduser(args.lfw_pairs))
 
     # Get the paths for the corresponding images
-    paths, actual_issame = lfw.get_paths(os.path.expanduser(args.lfw_dir), pairs, args.lfw_file_ext)
+    if args.lfw_dir:
+        print('LFW directory: %s' % args.lfw_dir)
+        paths, actual_issame = lfw.get_paths(os.path.expanduser(args.lfw_dir), pairs, args.lfw_file_ext)
     
     with tf.Graph().as_default():
         tf.set_random_seed(args.seed)
@@ -56,9 +58,6 @@ def main(args):
         # Placeholder for input images
         images_placeholder = tf.placeholder(tf.float32, shape=(None, args.image_size, args.image_size, 3), name='input')
 
-        # Placeholder for the learning rate
-        labels_placeholder = tf.placeholder(tf.int64, name='labels')
-
         # Placeholder for phase_train
         phase_train_placeholder = tf.placeholder(tf.bool, name='phase_train')
 
@@ -66,11 +65,11 @@ def main(args):
         learning_rate_placeholder = tf.placeholder(tf.float32, name='learing_rate')
 
         # Build the inference graph
-        logits1, _ = network.inference(images_placeholder, [ 128, len(train_set) ], args.keep_probability, 
+        logits, _ = network.inference(images_placeholder, 128, args.keep_probability, 
             phase_train=phase_train_placeholder, weight_decay=args.weight_decay)
 
         # Split example embeddings into anchor, positive and negative and calculate triplet loss
-        embeddings = tf.nn.l2_normalize(logits1, 1, 1e-10, name='embeddings')
+        embeddings = tf.nn.l2_normalize(logits, 1, 1e-10, name='embeddings')
         anchor, positive, negative = tf.split(0, 3, embeddings)
         triplet_loss = facenet.triplet_loss(anchor, positive, negative, args.alpha)
         
@@ -83,11 +82,11 @@ def main(args):
         total_loss = tf.add_n([triplet_loss] + regularization_losses, name='total_loss')
 
         # Build a Graph that trains the model with one batch of examples and updates the model parameters
-        triplet_loss_train_op = facenet.train(total_loss, global_step, args.optimizer, 
+        train_op = facenet.train(total_loss, global_step, args.optimizer, 
             learning_rate, args.moving_average_decay)
         
         # Create a saver
-        saver = tf.train.Saver(tf.all_variables(), max_to_keep=0)
+        saver = tf.train.Saver(tf.all_variables(), max_to_keep=3)
 
         # Build the summary operation based on the TF collection of Summaries.
         summary_op = tf.merge_all_summaries()
@@ -117,12 +116,12 @@ def main(args):
             while epoch < args.max_nrof_epochs:
                 epoch = sess.run(global_step, feed_dict=None) // args.epoch_size
                 # Train for one epoch
-                step = train_triplet_loss(args, sess, train_set, epoch, images_placeholder, labels_placeholder, phase_train_placeholder,
-                    learning_rate_placeholder, global_step, embeddings, total_loss, triplet_loss_train_op, summary_op, summary_writer)
+                step = train(args, sess, train_set, epoch, images_placeholder, phase_train_placeholder,
+                    learning_rate_placeholder, global_step, embeddings, total_loss, train_op, summary_op, summary_writer)
                 if args.lfw_dir:
                     _, _, accuracy, val, val_std, far = lfw.validate(sess, 
                         paths, actual_issame, args.seed, args.batch_size,
-                        images_placeholder, phase_train_placeholder, embeddings, nrof_folds=args.lfw_nrof_folds)
+                        images_placeholder, phase_train_placeholder, embeddings, -1, nrof_folds=args.lfw_nrof_folds)
                     print('Accuracy: %1.3f+-%1.3f' % (np.mean(accuracy), np.std(accuracy)))
                     print('Validation rate: %2.5f+-%2.5f @ FAR=%2.5f' % (val, val_std, far))
                     # Add validation loss and accuracy to summary
@@ -140,7 +139,7 @@ def main(args):
     return model_dir
 
 
-def train_triplet_loss(args, sess, dataset, epoch, images_placeholder, labels_placeholder, phase_train_placeholder,
+def train(args, sess, dataset, epoch, images_placeholder, phase_train_placeholder,
           learning_rate_placeholder, global_step, embeddings, loss, train_op, summary_op, summary_writer):
     batch_number = 0
     
@@ -165,7 +164,7 @@ def train_triplet_loss(args, sess, dataset, epoch, images_placeholder, labels_pl
         nrof_batches_per_epoch = int(np.floor(nrof_examples_per_epoch / args.batch_size))
         for i in xrange(nrof_batches_per_epoch):
             batch = facenet.get_batch(image_data, args.batch_size, i)
-            feed_dict = {images_placeholder: batch, labels_placeholder: np.zeros(batch.shape[0]), phase_train_placeholder: True, learning_rate_placeholder: lr}
+            feed_dict = {images_placeholder: batch, phase_train_placeholder: True, learning_rate_placeholder: lr}
             emb_list += sess.run([embeddings], feed_dict=feed_dict)
         emb_array = np.vstack(emb_list)  # Stack the embeddings to a nrof_examples_per_epoch x 128 matrix
         # Select triplets based on the embeddings
@@ -181,14 +180,14 @@ def train_triplet_loss(args, sess, dataset, epoch, images_placeholder, labels_pl
         while i * args.batch_size < nrof_triplets * 3 and batch_number < args.epoch_size:
             start_time = time.time()
             batch = facenet.get_triplet_batch(triplets, i, args.batch_size)
-            feed_dict = {images_placeholder: batch, labels_placeholder: np.zeros(batch.shape[0]), phase_train_placeholder: True, learning_rate_placeholder: lr}
+            feed_dict = {images_placeholder: batch, phase_train_placeholder: True, learning_rate_placeholder: lr}
             err, _, step = sess.run([loss, train_op, global_step], feed_dict=feed_dict)
-            if (batch_number % 20 == 0):
+            if (batch_number % 100 == 0):
                 summary_str, step = sess.run([summary_op, global_step], feed_dict=feed_dict)
                 summary_writer.add_summary(summary_str, global_step=step)
             duration = time.time() - start_time
             print('Epoch: [%d][%d/%d]\tTime %.3f\tLoss %2.3f' %
-                  (epoch, batch_number, args.epoch_size, duration, err))
+                  (epoch, batch_number+1, args.epoch_size, duration, err))
             batch_number += 1
             i += 1
             train_time += duration
@@ -232,8 +231,6 @@ def parse_arguments(argv):
         default='~/datasets/facescrub/fs_aligned:~/datasets/casia/casia-webface-aligned')
     parser.add_argument('--model_def', type=str,
         help='Model definition. Points to a module containing the definition of the inference graph.', default='models.nn4')
-    parser.add_argument('--loss_type', type=str,
-        help='Type of loss function to use', default='TRIPLETLOSS', choices=['TRIPLETLOSS', 'CLASSIFIER'])
     parser.add_argument('--max_nrof_epochs', type=int,
         help='Number of epochs to run.', default=500)
     parser.add_argument('--checkpoint_period', type=int,

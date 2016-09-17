@@ -15,7 +15,6 @@ import importlib
 import argparse
 import facenet
 import lfw
-from scipy import misc
 
 def main(args):
   

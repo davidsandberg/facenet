@@ -32,7 +32,7 @@ def main(args):
     phase_train_placeholder = tf.constant(False, name='phase_train')
   
     # Build the inference graph
-    network.inference(t_preprocessed, [ 128, 128 ], 1.0, 
+    network.inference(t_preprocessed, 128, 1.0, 
             phase_train=phase_train_placeholder, weight_decay=0.0)
       
     # Create a saver for restoring variables

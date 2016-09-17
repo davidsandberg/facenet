@@ -6,8 +6,10 @@ import os
 import numpy as np
 import facenet
 import math
+#import matplotlib.pyplot as plt
 
-def validate(sess, paths, actual_issame, seed, batch_size, images_placeholder, phase_train_placeholder, embeddings, nrof_folds=10):
+#pylint: disable=unused-argument
+def validate(sess, paths, actual_issame, seed, batch_size, images_placeholder, phase_train_placeholder, embeddings, endpoints, nrof_folds=10):
 
     image_size = images_placeholder.get_shape()[1]
     

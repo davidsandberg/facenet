@@ -218,6 +218,7 @@ def inception_resnet_v1(inputs, num_classes=1001, is_training=True,
                 # 5 x Inception-Resnet-C
                 net = slim.repeat(net, 5, block8, scale=0.20)
                 net = block8(net, activation_fn=None)
+                #net = slim.batch_norm(net)
         
                 with tf.variable_scope('Logits'):
                     end_points['PrePool'] = net
@@ -228,10 +229,11 @@ def inception_resnet_v1(inputs, num_classes=1001, is_training=True,
           
                     net = slim.dropout(net, dropout_keep_prob, is_training=is_training,
                                        scope='Dropout')
-          
                     end_points['PreLogitsFlatten'] = net
-                    logits = slim.fully_connected(net, num_classes, activation_fn=None,
-                                                  scope='Logits')
+
+                    logits = slim.fully_connected(net, num_classes, activation_fn=None, scope='Logits')
+                    #logits = slim.batch_norm(logits)
+                    #logits = slim.fully_connected(net, num_classes, scope='Logits')
                     end_points['Logits'] = logits
 
         #           end_points['Predictions'] = tf.nn.softmax(logits, name='Predictions')
