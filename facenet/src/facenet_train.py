@@ -15,7 +15,6 @@ import importlib
 import argparse
 import facenet
 import lfw
-import matplotlib.pyplot as plt
 
 def main(args):
   
@@ -62,15 +61,13 @@ def main(args):
         learning_rate_placeholder = tf.placeholder(tf.float32, name='learing_rate')
 
         # Build the inference graph
-        logits, endpoints = network.inference(images_placeholder, 128, args.keep_probability, 
+        logits, _ = network.inference(images_placeholder, 128, args.keep_probability, 
             phase_train=phase_train_placeholder, weight_decay=args.weight_decay)
 
         # Split example embeddings into anchor, positive and negative and calculate triplet loss
         embeddings = tf.nn.l2_normalize(logits, 1, 1e-10, name='embeddings')
-        endpoints['NormalizedEmbeddings'] = embeddings
         anchor, positive, negative = tf.split(0, 3, embeddings)
         triplet_loss = facenet.triplet_loss(anchor, positive, negative, args.alpha)
-        endpoints['TripletLoss'] = triplet_loss
         
         learning_rate = tf.train.exponential_decay(learning_rate_placeholder, global_step,
             args.learning_rate_decay_epochs*args.epoch_size, args.learning_rate_decay_factor, staircase=True)
@@ -81,7 +78,7 @@ def main(args):
         total_loss = tf.add_n([triplet_loss] + regularization_losses, name='total_loss')
 
         
-        # Create list with variables to restore        
+        # Create list with variables to restore
         restore_vars = []
         update_gradient_vars = []
         if args.pretrained_model:
@@ -125,11 +122,11 @@ def main(args):
                 epoch = sess.run(global_step, feed_dict=None) // args.epoch_size
                 # Train for one epoch
                 step = train(args, sess, train_set, epoch, images_placeholder, phase_train_placeholder,
-                    learning_rate_placeholder, global_step, embeddings, total_loss, train_op, summary_op, summary_writer, endpoints)
+                    learning_rate_placeholder, global_step, embeddings, total_loss, train_op, summary_op, summary_writer)
                 if args.lfw_dir:
                     _, _, accuracy, val, val_std, far = lfw.validate(sess, 
                         paths, actual_issame, args.seed, args.batch_size,
-                        images_placeholder, phase_train_placeholder, embeddings, endpoints, nrof_folds=args.lfw_nrof_folds)
+                        images_placeholder, phase_train_placeholder, embeddings, nrof_folds=args.lfw_nrof_folds)
                     print('Accuracy: %1.3f+-%1.3f' % (np.mean(accuracy), np.std(accuracy)))
                     print('Validation rate: %2.5f+-%2.5f @ FAR=%2.5f' % (val, val_std, far))
                     # Add validation loss and accuracy to summary
@@ -147,7 +144,7 @@ def main(args):
 
 
 def train(args, sess, dataset, epoch, images_placeholder, phase_train_placeholder,
-          learning_rate_placeholder, global_step, embeddings, loss, train_op, summary_op, summary_writer, endpoints):
+          learning_rate_placeholder, global_step, embeddings, loss, train_op, summary_op, summary_writer):
     batch_number = 0
     
     if args.learning_rate>0.0:
@@ -166,26 +163,6 @@ def train(args, sess, dataset, epoch, images_placeholder, phase_train_placeholde
         print('Selecting suitable triplets for training')
         start_time = time.time()
         emb_list = []
-        
-        if True:
-            i = 0
-            batch = facenet.get_batch(image_data, args.batch_size, i)
-            feed_dict = {images_placeholder: batch, phase_train_placeholder: True, learning_rate_placeholder: lr}
-            res = sess.run(endpoints, feed_dict=feed_dict)
-            
-            plt.figure(1)
-            plt.hold(True)
-            for j in range(0,20):
-                plt.plot(res['PrePool'][:,0,0,j])
-            plt.show()
-                
-            plt.figure(2)
-            plt.hold(True)
-            for j in range(0,20):
-                plt.plot(res['NormalizedEmbeddings'][:,j])
-            plt.show()
-
-            xxx = 1
         
         # Run a forward pass for the sampled images
         nrof_examples_per_epoch = args.people_per_batch * args.images_per_person
