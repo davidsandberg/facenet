@@ -91,7 +91,7 @@ def main(args):
         total_loss = tf.add_n([cross_entropy_mean] + regularization_losses, name='total_loss')
 
         # Build a Graph that trains the model with one batch of examples and updates the model parameters
-        train_op = facenet.train(total_loss, global_step, args.optimizer, 
+        train_op = facenet.train(total_loss, tf.all_variables(), global_step, args.optimizer, 
             learning_rate, args.moving_average_decay)
 
         # Create a saver
@@ -146,7 +146,7 @@ def main(args):
                     embeddings = endpoints['prelogits']
                     _, _, accuracy, val, val_std, far = lfw.validate(sess, 
                         paths, actual_issame, args.seed, args.batch_size,
-                        images_placeholder, phase_train_placeholder, embeddings, nrof_folds=args.lfw_nrof_folds)
+                        images_placeholder, phase_train_placeholder, embeddings, -1, nrof_folds=args.lfw_nrof_folds)
                     print('Accuracy: %1.3f+-%1.3f' % (np.mean(accuracy), np.std(accuracy)))
                     print('Validation rate: %2.5f+-%2.5f @ FAR=%2.5f' % (val, val_std, far))
                     # Add validation loss and accuracy to summary
@@ -156,12 +156,12 @@ def main(args):
                     summary.value.add(tag='lfw/val_rate', simple_value=val)
                     summary_writer.add_summary(summary, step)
 
-                if (epoch % args.checkpoint_period == 0) or (epoch==args.max_nrof_epochs-1):
-                    # Save the model checkpoint
-                    print('Saving checkpoint')
-                    checkpoint_path = os.path.join(model_dir, 'model.ckpt')
-                    saver.save(sess, checkpoint_path, global_step=step)
+                # Save the model checkpoint
+                print('Saving checkpoint')
+                checkpoint_path = os.path.join(model_dir, 'model.ckpt')
+                saver.save(sess, checkpoint_path, global_step=step)
 
+                if (epoch % args.checkpoint_period == 0) or (epoch==args.max_nrof_epochs-1):
                     precision = evaluate(network, test_set, model_dir, args.image_size, args.batch_size, args.moving_average_decay)
                     summary = tf.Summary()
                     #pylint: disable=maybe-no-member

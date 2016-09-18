@@ -15,17 +15,13 @@ import importlib
 import argparse
 import facenet
 import lfw
+import matplotlib.pyplot as plt
 
 def main(args):
   
     network = importlib.import_module(args.model_def, 'inference')
 
-    if args.model_name:
-        subdir = args.model_name
-        preload_model = True
-    else:
-        subdir = datetime.strftime(datetime.now(), '%Y%m%d-%H%M%S')
-        preload_model = False
+    subdir = datetime.strftime(datetime.now(), '%Y%m%d-%H%M%S')
     log_dir = os.path.join(os.path.expanduser(args.logs_base_dir), subdir)
     if not os.path.isdir(log_dir):  # Create the log directory if it doesn't exist
         os.makedirs(log_dir)
@@ -42,6 +38,7 @@ def main(args):
     
     print('Model directory: %s' % model_dir)
     print('Log directory: %s' % log_dir)
+    print('Pre-trained model: %s' % os.path.expanduser(args.pretrained_model))
     
     # Read the file containing the pairs used for testing
     pairs = lfw.read_pairs(os.path.expanduser(args.lfw_pairs))
@@ -65,13 +62,15 @@ def main(args):
         learning_rate_placeholder = tf.placeholder(tf.float32, name='learing_rate')
 
         # Build the inference graph
-        logits, _ = network.inference(images_placeholder, 128, args.keep_probability, 
+        logits, endpoints = network.inference(images_placeholder, 128, args.keep_probability, 
             phase_train=phase_train_placeholder, weight_decay=args.weight_decay)
 
         # Split example embeddings into anchor, positive and negative and calculate triplet loss
         embeddings = tf.nn.l2_normalize(logits, 1, 1e-10, name='embeddings')
+        endpoints['NormalizedEmbeddings'] = embeddings
         anchor, positive, negative = tf.split(0, 3, embeddings)
         triplet_loss = facenet.triplet_loss(anchor, positive, negative, args.alpha)
+        endpoints['TripletLoss'] = triplet_loss
         
         learning_rate = tf.train.exponential_decay(learning_rate_placeholder, global_step,
             args.learning_rate_decay_epochs*args.epoch_size, args.learning_rate_decay_factor, staircase=True)
@@ -81,11 +80,25 @@ def main(args):
         regularization_losses = tf.get_collection(tf.GraphKeys.REGULARIZATION_LOSSES)
         total_loss = tf.add_n([triplet_loss] + regularization_losses, name='total_loss')
 
+        
+        # Create list with variables to restore        
+        restore_vars = []
+        update_gradient_vars = []
+        if args.pretrained_model:
+            for var in tf.all_variables():
+                if not 'InceptionResnetV1/Embeddings/' in var.op.name:
+                    restore_vars.append(var)
+                else:
+                    update_gradient_vars.append(var)
+        else:
+            restore_vars = tf.all_variables()
+
         # Build a Graph that trains the model with one batch of examples and updates the model parameters
         train_op = facenet.train(total_loss, global_step, args.optimizer, 
-            learning_rate, args.moving_average_decay)
+            learning_rate, args.moving_average_decay, update_gradient_vars)
         
         # Create a saver
+        restore_saver = tf.train.Saver(restore_vars)
         saver = tf.train.Saver(tf.all_variables(), max_to_keep=3)
 
         # Build the summary operation based on the TF collection of Summaries.
@@ -103,13 +116,8 @@ def main(args):
 
         with sess.as_default():
 
-            if preload_model:
-                ckpt = tf.train.get_checkpoint_state(model_dir)
-                #pylint: disable=maybe-no-member
-                if ckpt and ckpt.model_checkpoint_path:
-                    saver.restore(sess, ckpt.model_checkpoint_path)
-                else:
-                    raise ValueError('Checkpoint not found')
+            if args.pretrained_model:
+                restore_saver.restore(sess, os.path.expanduser(args.pretrained_model))
 
             # Training and validation loop
             epoch = 0
@@ -117,11 +125,11 @@ def main(args):
                 epoch = sess.run(global_step, feed_dict=None) // args.epoch_size
                 # Train for one epoch
                 step = train(args, sess, train_set, epoch, images_placeholder, phase_train_placeholder,
-                    learning_rate_placeholder, global_step, embeddings, total_loss, train_op, summary_op, summary_writer)
+                    learning_rate_placeholder, global_step, embeddings, total_loss, train_op, summary_op, summary_writer, endpoints)
                 if args.lfw_dir:
                     _, _, accuracy, val, val_std, far = lfw.validate(sess, 
                         paths, actual_issame, args.seed, args.batch_size,
-                        images_placeholder, phase_train_placeholder, embeddings, -1, nrof_folds=args.lfw_nrof_folds)
+                        images_placeholder, phase_train_placeholder, embeddings, endpoints, nrof_folds=args.lfw_nrof_folds)
                     print('Accuracy: %1.3f+-%1.3f' % (np.mean(accuracy), np.std(accuracy)))
                     print('Validation rate: %2.5f+-%2.5f @ FAR=%2.5f' % (val, val_std, far))
                     # Add validation loss and accuracy to summary
@@ -131,16 +139,15 @@ def main(args):
                     summary.value.add(tag='lfw/val_rate', simple_value=val)
                     summary_writer.add_summary(summary, step)
 
-                if (epoch % args.checkpoint_period == 0) or (epoch==args.max_nrof_epochs-1):
-                    # Save the model checkpoint
-                    print('Saving checkpoint')
-                    checkpoint_path = os.path.join(model_dir, 'model.ckpt')
-                    saver.save(sess, checkpoint_path, global_step=step)
+                # Save the model checkpoint
+                print('Saving checkpoint')
+                checkpoint_path = os.path.join(model_dir, 'model.ckpt')
+                saver.save(sess, checkpoint_path, global_step=step)
     return model_dir
 
 
 def train(args, sess, dataset, epoch, images_placeholder, phase_train_placeholder,
-          learning_rate_placeholder, global_step, embeddings, loss, train_op, summary_op, summary_writer):
+          learning_rate_placeholder, global_step, embeddings, loss, train_op, summary_op, summary_writer, endpoints):
     batch_number = 0
     
     if args.learning_rate>0.0:
@@ -159,6 +166,27 @@ def train(args, sess, dataset, epoch, images_placeholder, phase_train_placeholde
         print('Selecting suitable triplets for training')
         start_time = time.time()
         emb_list = []
+        
+        if False:
+            i = 0        
+            batch = facenet.get_batch(image_data, args.batch_size, i)
+            feed_dict = {images_placeholder: batch, phase_train_placeholder: True, learning_rate_placeholder: lr}
+            res = sess.run(endpoints, feed_dict=feed_dict)
+            
+            plt.figure(1)
+            plt.hold(True)
+            for j in range(0,20):
+                plt.plot(res['PrePool'][:,0,0,j])
+            plt.show()
+                
+            plt.figure(2)
+            plt.hold(True)
+            for j in range(0,20):
+                plt.plot(res['NormalizedEmbeddings'][:,j])
+            plt.show()
+
+            xxx = 1
+        
         # Run a forward pass for the sampled images
         nrof_examples_per_epoch = args.people_per_batch * args.images_per_person
         nrof_batches_per_epoch = int(np.floor(nrof_examples_per_epoch / args.batch_size))
@@ -224,8 +252,8 @@ def parse_arguments(argv):
         help='Directory where to write trained models and checkpoints.', default='~/models/facenet')
     parser.add_argument('--gpu_memory_fraction', type=float,
         help='Upper bound on the amount of GPU memory that will be used by the process.', default=1.0)
-    parser.add_argument('--model_name', type=str,
-        help='Model directory name. Used when continuing training of an existing model. Leave empty to train new model.')
+    parser.add_argument('--pretrained_model', type=str,
+        help='Load a pretrained model before training starts.')
     parser.add_argument('--data_dir', type=str,
         help='Path to the data directory containing aligned face patches. Multiple directories are separated with colon.',
         default='~/datasets/facescrub/fs_aligned:~/datasets/casia/casia-webface-aligned')

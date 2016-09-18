@@ -220,7 +220,7 @@ def inception_resnet_v1(inputs, num_classes=1001, is_training=True,
                 net = block8(net, activation_fn=None)
                 #net = slim.batch_norm(net)
         
-                with tf.variable_scope('Logits'):
+                with tf.variable_scope('Embeddings'):
                     end_points['PrePool'] = net
                     #pylint: disable=no-member
                     net = slim.avg_pool2d(net, net.get_shape()[1:3], padding='VALID',

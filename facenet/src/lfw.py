@@ -6,13 +6,39 @@ import os
 import numpy as np
 import facenet
 import math
-#import matplotlib.pyplot as plt
+import matplotlib.pyplot as plt
 
 #pylint: disable=unused-argument
 def validate(sess, paths, actual_issame, seed, batch_size, images_placeholder, phase_train_placeholder, embeddings, endpoints, nrof_folds=10):
 
     image_size = images_placeholder.get_shape()[1]
     
+    
+    
+    if False:
+        i = 0
+        start_index = i*batch_size
+        end_index = min((i+1)*batch_size, 10000)
+        paths_batch = paths[start_index:end_index]
+        images = facenet.load_data(paths_batch, False, False, image_size)
+        feed_dict = { images_placeholder: images, phase_train_placeholder: False }
+        res = sess.run(endpoints, feed_dict=feed_dict)
+
+        
+        plt.figure(1)
+        plt.hold(True)
+        for j in range(0,20):
+            plt.plot(res['PrePool'][:,0,0,j])
+        plt.show()
+            
+        plt.figure(2)
+        plt.hold(True)
+        for j in range(0,20):
+            plt.plot(res['NormalizedEmbeddings'][:,j])
+        plt.show()
+        
+        xxx = 1
+
     # Run forward pass to calculate embeddings
     print('Runnning forward pass on LFW images')
     nrof_images = len(paths)

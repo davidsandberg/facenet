@@ -23,19 +23,20 @@ def main(args):
     with tf.Graph().as_default():
       
         image_size = 160
-      
+       
         # Placeholder for input images
         images_placeholder = tf.placeholder(tf.float32, shape=(None, image_size, image_size, 3), name='input')
-
+ 
         # Placeholder for phase_train
         phase_train_placeholder = tf.placeholder(tf.bool, name='phase_train')
-
+ 
         # Build the inference graph
         logits, endpoints = network.inference(images_placeholder, 128, 1.0, 
             phase_train=False, weight_decay=0.0)
-
+ 
         # Split example embeddings into anchor, positive and negative and calculate triplet loss
         embeddings = tf.nn.l2_normalize(logits, 1, 1e-10, name='embeddings')
+        endpoints['NormalizedEmbeddings'] = embeddings
       
 
         with tf.Session() as sess:
@@ -48,18 +49,19 @@ def main(args):
             
             sess.run(tf.initialize_all_variables())
             
-            
             saver = tf.train.Saver(tf.trainable_variables())
             saver.restore(sess, os.path.expanduser(args.model_file))
 
             # Load the model
-            #print('Loading model "%s"' % args.model_file)
-            #facenet.load_model(args.model_file)
+#             print('Loading model "%s"' % args.model_file)
+#             facenet.load_model(args.model_file)
             
             # Get input and output tensors
 #             images_placeholder = tf.get_default_graph().get_tensor_by_name("input:0")
 #             phase_train_placeholder = tf.get_default_graph().get_tensor_by_name("phase_train:0")
 #             embeddings = tf.get_default_graph().get_tensor_by_name("embeddings:0")
+#             endpoints = {}
+#             endpoints['Embeddings'] = embeddings
 
             tpr, fpr, accuracy, val, val_std, far = lfw.validate(sess, 
                 paths, actual_issame, args.seed, 60, 

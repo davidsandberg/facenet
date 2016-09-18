@@ -116,7 +116,7 @@ def _add_loss_summaries(total_loss):
   
     return loss_averages_op
 
-def train(total_loss, global_step, optimizer, learning_rate, moving_average_decay):
+def train(total_loss, global_step, optimizer, learning_rate, moving_average_decay, update_gradient_vars):
     # Generate moving averages of all losses and associated summaries.
     loss_averages_op = _add_loss_summaries(total_loss)
 
@@ -135,8 +135,8 @@ def train(total_loss, global_step, optimizer, learning_rate, moving_average_deca
         else:
             raise ValueError('Invalid optimization algorithm')
     
-        grads = opt.compute_gradients(total_loss)
-      
+        grads = opt.compute_gradients(total_loss, update_gradient_vars)
+        
     # Apply gradients.
     apply_gradient_op = opt.apply_gradients(grads, global_step=global_step)
   
