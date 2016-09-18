@@ -167,8 +167,8 @@ def train(args, sess, dataset, epoch, images_placeholder, phase_train_placeholde
         start_time = time.time()
         emb_list = []
         
-        if False:
-            i = 0        
+        if True:
+            i = 0
             batch = facenet.get_batch(image_data, args.batch_size, i)
             feed_dict = {images_placeholder: batch, phase_train_placeholder: True, learning_rate_placeholder: lr}
             res = sess.run(endpoints, feed_dict=feed_dict)

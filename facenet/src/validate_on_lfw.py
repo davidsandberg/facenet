@@ -32,7 +32,7 @@ def main(args):
  
         # Build the inference graph
         logits, endpoints = network.inference(images_placeholder, 128, 1.0, 
-            phase_train=False, weight_decay=0.0)
+            phase_train=phase_train_placeholder, weight_decay=0.0)
  
         # Split example embeddings into anchor, positive and negative and calculate triplet loss
         embeddings = tf.nn.l2_normalize(logits, 1, 1e-10, name='embeddings')

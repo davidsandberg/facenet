@@ -11,17 +11,33 @@ import matplotlib.pyplot as plt
 #pylint: disable=unused-argument
 def validate(sess, paths, actual_issame, seed, batch_size, images_placeholder, phase_train_placeholder, embeddings, endpoints, nrof_folds=10):
 
-    image_size = images_placeholder.get_shape()[1]
+    image_size = int(images_placeholder.get_shape()[1])
     
+    debug_set = facenet.get_dataset('~/datasets/casia/casia_maxpy_182_160')
+    debug_paths, _ = facenet.get_image_paths_and_labels(debug_set)
     
+    if True:
+        np.random.seed(seed=666)
+        train_set = facenet.get_dataset('~/datasets/facescrub/facescrub_182_160:~/datasets/casia/casia_maxpy_182_160')
+        image_paths, _ = facenet.sample_people(train_set, 45, 40)
+        image_data = facenet.load_data(image_paths, True, True, 160)
+        feed_dict = { images_placeholder: image_data[0:60,:,:,:], phase_train_placeholder: True }
+        res = sess.run(endpoints, feed_dict=feed_dict)
+        plt.figure(1)
+        plt.hold(True)
+        for j in range(0,20):
+            plt.plot(res['PrePool'][:,0,0,j])
+        plt.show()
     
+    dp = debug_paths[0:30] + paths[0:30]
+    dp = debug_paths[0:60]
     if False:
         i = 0
         start_index = i*batch_size
         end_index = min((i+1)*batch_size, 10000)
-        paths_batch = paths[start_index:end_index]
+        paths_batch = dp[start_index:end_index]
         images = facenet.load_data(paths_batch, False, False, image_size)
-        feed_dict = { images_placeholder: images, phase_train_placeholder: False }
+        feed_dict = { images_placeholder: images, phase_train_placeholder: True }
         res = sess.run(endpoints, feed_dict=feed_dict)
 
         
