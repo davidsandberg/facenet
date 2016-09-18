@@ -91,8 +91,10 @@ def main(args):
         total_loss = tf.add_n([cross_entropy_mean] + regularization_losses, name='total_loss')
 
         # Build a Graph that trains the model with one batch of examples and updates the model parameters
-        train_op = facenet.train(total_loss, tf.all_variables(), global_step, args.optimizer, 
-            learning_rate, args.moving_average_decay)
+        train_op = facenet.train(total_loss, global_step, args.optimizer, 
+            learning_rate, args.moving_average_decay, tf.all_variables())
+
+        embeddings = tf.nn.l2_normalize(endpoints['PreLogitsFlatten'], 1, 1e-10, name='embeddings')
 
         # Create a saver
         saver = tf.train.Saver(tf.all_variables(), max_to_keep=3)
@@ -143,10 +145,9 @@ def main(args):
 #                 misc.imsave(os.path.join(log_dir, 'features_epoch%d.png' % epoch), features_resize)
 
                 if args.lfw_dir:
-                    embeddings = endpoints['prelogits']
                     _, _, accuracy, val, val_std, far = lfw.validate(sess, 
                         paths, actual_issame, args.seed, args.batch_size,
-                        images_placeholder, phase_train_placeholder, embeddings, -1, nrof_folds=args.lfw_nrof_folds)
+                        images_placeholder, phase_train_placeholder, embeddings, nrof_folds=args.lfw_nrof_folds)
                     print('Accuracy: %1.3f+-%1.3f' % (np.mean(accuracy), np.std(accuracy)))
                     print('Validation rate: %2.5f+-%2.5f @ FAR=%2.5f' % (val, val_std, far))
                     # Add validation loss and accuracy to summary
@@ -161,12 +162,12 @@ def main(args):
                 checkpoint_path = os.path.join(model_dir, 'model.ckpt')
                 saver.save(sess, checkpoint_path, global_step=step)
 
-                if (epoch % args.checkpoint_period == 0) or (epoch==args.max_nrof_epochs-1):
-                    precision = evaluate(network, test_set, model_dir, args.image_size, args.batch_size, args.moving_average_decay)
-                    summary = tf.Summary()
-                    #pylint: disable=maybe-no-member
-                    summary.value.add(tag='precision', simple_value=precision)
-                    summary_writer.add_summary(summary, step)
+#                 if (epoch % args.checkpoint_period == 0) or (epoch==args.max_nrof_epochs-1):
+#                     precision = evaluate(network, test_set, model_dir, args.image_size, args.batch_size, args.moving_average_decay)
+#                     summary = tf.Summary()
+#                     #pylint: disable=maybe-no-member
+#                     summary.value.add(tag='precision', simple_value=precision)
+#                     summary_writer.add_summary(summary, step)
                 
     return model_dir
   
@@ -191,7 +192,7 @@ def train(args, sess, epoch, phase_train_placeholder, learning_rate_placeholder,
                 summary_writer.add_summary(summary_str, global_step=step)
             duration = time.time() - start_time
             print('Epoch: [%d][%d/%d]\tTime %.3f\tLoss %2.3f\tRegLoss %2.3f' %
-                  (epoch, batch_number, args.epoch_size, duration, err, np.sum(reg_loss)))
+                  (epoch, batch_number+1, args.epoch_size, duration, err, np.sum(reg_loss)))
             batch_number += 1
             i += 1
             train_time += duration
