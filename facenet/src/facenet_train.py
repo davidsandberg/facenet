@@ -37,7 +37,8 @@ def main(args):
     
     print('Model directory: %s' % model_dir)
     print('Log directory: %s' % log_dir)
-    print('Pre-trained model: %s' % os.path.expanduser(args.pretrained_model))
+    if args.pretrained_model:
+        print('Pre-trained model: %s' % os.path.expanduser(args.pretrained_model))
     
     # Read the file containing the pairs used for testing
     pairs = lfw.read_pairs(os.path.expanduser(args.lfw_pairs))
@@ -77,7 +78,6 @@ def main(args):
         regularization_losses = tf.get_collection(tf.GraphKeys.REGULARIZATION_LOSSES)
         total_loss = tf.add_n([triplet_loss] + regularization_losses, name='total_loss')
 
-        
         # Create list with variables to restore
         restore_vars = []
         update_gradient_vars = []
@@ -89,6 +89,7 @@ def main(args):
                     update_gradient_vars.append(var)
         else:
             restore_vars = tf.all_variables()
+            update_gradient_vars = tf.all_variables()
 
         # Build a Graph that trains the model with one batch of examples and updates the model parameters
         train_op = facenet.train(total_loss, global_step, args.optimizer, 
