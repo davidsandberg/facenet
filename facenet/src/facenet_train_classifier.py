@@ -40,6 +40,7 @@ def main(args):
     
     print('Model directory: %s' % model_dir)
     print('Log directory: %s' % log_dir)
+    pretrained_model = None
     if args.pretrained_model:
         pretrained_model = os.path.expanduser(args.pretrained_model)
         print('Pre-trained model: %s' % pretrained_model)
@@ -64,7 +65,7 @@ def main(args):
         print('Total number of examples: %d' % len(label_list))
         
         # Placeholder for the learning rate
-        learning_rate_placeholder = tf.placeholder(tf.float32, name='learing_rate')
+        learning_rate_placeholder = tf.placeholder(tf.float32, name='learning_rate')
 
         # Build the inference graph
         prelogits, _ = network.inference(image_batch, args.keep_probability, 
