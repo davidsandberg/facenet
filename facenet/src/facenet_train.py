@@ -16,6 +16,8 @@ import argparse
 import facenet
 import lfw
 
+slim = tf.contrib.slim
+
 def main(args):
   
     network = importlib.import_module(args.model_def, 'inference')
@@ -40,13 +42,12 @@ def main(args):
     if args.pretrained_model:
         print('Pre-trained model: %s' % os.path.expanduser(args.pretrained_model))
     
-    # Read the file containing the pairs used for testing
-    pairs = lfw.read_pairs(os.path.expanduser(args.lfw_pairs))
-
-    # Get the paths for the corresponding images
     if args.lfw_dir:
-        print('LFW directory: %s' % args.lfw_dir)
-        paths, actual_issame = lfw.get_paths(os.path.expanduser(args.lfw_dir), pairs, args.lfw_file_ext)
+        # Read the file containing the pairs used for testing
+        pairs = lfw.read_pairs(os.path.expanduser(args.lfw_pairs))
+        # Get the paths for the corresponding images
+        lfw_paths, actual_issame = lfw.get_paths(os.path.expanduser(args.lfw_dir), pairs, args.lfw_file_ext)
+        
     
     with tf.Graph().as_default():
         tf.set_random_seed(args.seed)
@@ -55,18 +56,16 @@ def main(args):
         # Placeholder for input images
         images_placeholder = tf.placeholder(tf.float32, shape=(None, args.image_size, args.image_size, 3), name='input')
 
-        # Placeholder for phase_train
-        phase_train_placeholder = tf.placeholder(tf.bool, name='phase_train')
-
         # Placeholder for the learning rate
-        learning_rate_placeholder = tf.placeholder(tf.float32, name='learing_rate')
+        learning_rate_placeholder = tf.placeholder(tf.float32, name='learning_rate')
 
         # Build the inference graph
-        logits, _ = network.inference(images_placeholder, 128, args.keep_probability, 
-            phase_train=phase_train_placeholder, weight_decay=args.weight_decay)
+        prelogits, _ = network.inference(images_placeholder, args.keep_probability, 
+            phase_train=True, weight_decay=args.weight_decay)
+        pre_embeddings = slim.fully_connected(prelogits, 128, activation_fn=None, scope='Embeddings', reuse=False)
 
         # Split example embeddings into anchor, positive and negative and calculate triplet loss
-        embeddings = tf.nn.l2_normalize(logits, 1, 1e-10, name='embeddings')
+        embeddings = tf.nn.l2_normalize(pre_embeddings, 1, 1e-10, name='embeddings')
         anchor, positive, negative = tf.split(0, 3, embeddings)
         triplet_loss = facenet.triplet_loss(anchor, positive, negative, args.alpha)
         
@@ -83,7 +82,7 @@ def main(args):
         update_gradient_vars = []
         if args.pretrained_model:
             for var in tf.all_variables():
-                if not 'InceptionResnetV1/Embeddings/' in var.op.name:
+                if not 'Embeddings/' in var.op.name:
                     restore_vars.append(var)
                 else:
                     update_gradient_vars.append(var)
@@ -95,6 +94,13 @@ def main(args):
         train_op = facenet.train(total_loss, global_step, args.optimizer, 
             learning_rate, args.moving_average_decay, update_gradient_vars)
         
+        image_batch_eval, label_batch_eval = facenet.read_and_augument_data(lfw_paths, range(len(lfw_paths)), args.image_size, 
+            60, None, random_crop=False, random_flip=False, shuffle=False)
+        prelogits_eval, _ = network.inference(image_batch_eval, 1.0, 
+            phase_train=False, weight_decay=0.0, reuse=True)
+        pre_embeddings_eval = slim.fully_connected(prelogits_eval, 128, activation_fn=None, scope='Embeddings', reuse=True)
+        embeddings_eval = tf.nn.l2_normalize(pre_embeddings_eval, 1, 1e-10, name='embeddings')
+
         # Create a saver
         restore_saver = tf.train.Saver(restore_vars)
         saver = tf.train.Saver(tf.all_variables(), max_to_keep=3)
@@ -102,15 +108,16 @@ def main(args):
         # Build the summary operation based on the TF collection of Summaries.
         summary_op = tf.merge_all_summaries()
 
-        # Build an initialization operation to run below.
-        init = tf.initialize_all_variables()
-
         # Start running operations on the Graph.
         gpu_options = tf.GPUOptions(per_process_gpu_memory_fraction=args.gpu_memory_fraction)
         sess = tf.Session(config=tf.ConfigProto(gpu_options=gpu_options))        
-        sess.run(init)
+
+        # Initialize variables
+        sess.run(tf.initialize_all_variables())
+        sess.run(tf.initialize_local_variables())
 
         summary_writer = tf.train.SummaryWriter(log_dir, sess.graph)
+        tf.train.start_queue_runners(sess=sess)
 
         with sess.as_default():
 
@@ -120,14 +127,15 @@ def main(args):
             # Training and validation loop
             epoch = 0
             while epoch < args.max_nrof_epochs:
-                epoch = sess.run(global_step, feed_dict=None) // args.epoch_size
+                step = sess.run(global_step, feed_dict=None)
+                epoch = step // args.epoch_size
                 # Train for one epoch
-                step = train(args, sess, train_set, epoch, images_placeholder, phase_train_placeholder,
+                step = train(args, sess, train_set, epoch, images_placeholder, 
                     learning_rate_placeholder, global_step, embeddings, total_loss, train_op, summary_op, summary_writer)
                 if args.lfw_dir:
                     _, _, accuracy, val, val_std, far = lfw.validate(sess, 
-                        paths, actual_issame, args.seed, args.batch_size,
-                        images_placeholder, phase_train_placeholder, embeddings, nrof_folds=args.lfw_nrof_folds)
+                        actual_issame, args.seed, 60,
+                        embeddings_eval, label_batch_eval, nrof_folds=args.lfw_nrof_folds)
                     print('Accuracy: %1.3f+-%1.3f' % (np.mean(accuracy), np.std(accuracy)))
                     print('Validation rate: %2.5f+-%2.5f @ FAR=%2.5f' % (val, val_std, far))
                     # Add validation loss and accuracy to summary
@@ -144,7 +152,7 @@ def main(args):
     return model_dir
 
 
-def train(args, sess, dataset, epoch, images_placeholder, phase_train_placeholder,
+def train(args, sess, dataset, epoch, images_placeholder, 
           learning_rate_placeholder, global_step, embeddings, loss, train_op, summary_op, summary_writer):
     batch_number = 0
     
@@ -170,7 +178,7 @@ def train(args, sess, dataset, epoch, images_placeholder, phase_train_placeholde
         nrof_batches_per_epoch = int(np.floor(nrof_examples_per_epoch / args.batch_size))
         for i in xrange(nrof_batches_per_epoch):
             batch = facenet.get_batch(image_data, args.batch_size, i)
-            feed_dict = {images_placeholder: batch, phase_train_placeholder: True, learning_rate_placeholder: lr}
+            feed_dict = {images_placeholder: batch, learning_rate_placeholder: lr}
             emb_list += sess.run([embeddings], feed_dict=feed_dict)
         emb_array = np.vstack(emb_list)  # Stack the embeddings to a nrof_examples_per_epoch x 128 matrix
         # Select triplets based on the embeddings
@@ -186,7 +194,7 @@ def train(args, sess, dataset, epoch, images_placeholder, phase_train_placeholde
         while i * args.batch_size < nrof_triplets * 3 and batch_number < args.epoch_size:
             start_time = time.time()
             batch = facenet.get_triplet_batch(triplets, i, args.batch_size)
-            feed_dict = {images_placeholder: batch, phase_train_placeholder: True, learning_rate_placeholder: lr}
+            feed_dict = {images_placeholder: batch, learning_rate_placeholder: lr}
             err, _, step = sess.run([loss, train_op, global_step], feed_dict=feed_dict)
             if (batch_number % 100 == 0):
                 summary_str, step = sess.run([summary_op, global_step], feed_dict=feed_dict)
@@ -239,8 +247,6 @@ def parse_arguments(argv):
         help='Model definition. Points to a module containing the definition of the inference graph.', default='models.nn4')
     parser.add_argument('--max_nrof_epochs', type=int,
         help='Number of epochs to run.', default=500)
-    parser.add_argument('--checkpoint_period', type=int,
-        help='The number of epochs between checkpoints', default=10)
     parser.add_argument('--batch_size', type=int,
         help='Number of images to process in a batch.', default=90)
     parser.add_argument('--image_size', type=int,

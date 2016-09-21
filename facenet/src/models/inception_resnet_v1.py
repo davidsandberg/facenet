@@ -130,7 +130,7 @@ def reduction_b(net):
     return net
   
 #pylint: disable=unused-argument
-def inference(images, output_dim, keep_probability, phase_train=True, weight_decay=0.0):
+def inference(images, keep_probability, phase_train=True, weight_decay=0.0, reuse=None):
     batch_norm_params = {
         # Decay for the moving averages.
         'decay': 0.9997,
@@ -142,11 +142,11 @@ def inference(images, output_dim, keep_probability, phase_train=True, weight_dec
                         weights_regularizer=slim.l2_regularizer(weight_decay),
                         normalizer_fn=slim.batch_norm,
                         normalizer_params=batch_norm_params):
-        return inception_resnet_v1(images, num_classes=output_dim, is_training=phase_train,
-              dropout_keep_prob=keep_probability)
+        return inception_resnet_v1(images, is_training=phase_train,
+              dropout_keep_prob=keep_probability, reuse=reuse)
 
 
-def inception_resnet_v1(inputs, num_classes=1001, is_training=True,
+def inception_resnet_v1(inputs, is_training=True,
                         dropout_keep_prob=0.8,
                         reuse=None,
                         scope='InceptionResnetV1'):
@@ -219,8 +219,10 @@ def inception_resnet_v1(inputs, num_classes=1001, is_training=True,
                 net = slim.repeat(net, 5, block8, scale=0.20)
                 net = block8(net, activation_fn=None)
                 #net = slim.batch_norm(net)
-        
-                with tf.variable_scope('Embeddings'):
+                
+                
+                
+                with tf.variable_scope('Logits'):
                     end_points['PrePool'] = net
                     #pylint: disable=no-member
                     net = slim.avg_pool2d(net, net.get_shape()[1:3], padding='VALID',
@@ -229,13 +231,12 @@ def inception_resnet_v1(inputs, num_classes=1001, is_training=True,
           
                     net = slim.dropout(net, dropout_keep_prob, is_training=is_training,
                                        scope='Dropout')
+          
                     end_points['PreLogitsFlatten'] = net
-
-                    logits = slim.fully_connected(net, num_classes, activation_fn=None, scope='Logits')
-                    #logits = slim.batch_norm(logits)
-                    #logits = slim.fully_connected(net, num_classes, scope='Logits')
-                    end_points['Logits'] = logits
-
+                    #logits = slim.fully_connected(net, num_classes, activation_fn=None,
+                    #                              scope='Logits')
+                    #end_points['Logits'] = logits
+                
         #           end_points['Predictions'] = tf.nn.softmax(logits, name='Predictions')
   
-    return logits, end_points
+    return net, end_points

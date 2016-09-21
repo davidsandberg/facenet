@@ -15,17 +15,15 @@ import importlib
 import argparse
 import facenet
 import lfw
+from tensorflow.python.training import training
+
+slim = tf.contrib.slim
 
 def main(args):
   
     network = importlib.import_module(args.model_def, 'inference')
 
-    if args.model_name:
-        subdir = args.model_name
-        preload_model = True
-    else:
-        subdir = datetime.strftime(datetime.now(), '%Y%m%d-%H%M%S')
-        preload_model = False
+    subdir = datetime.strftime(datetime.now(), '%Y%m%d-%H%M%S')
     log_dir = os.path.join(os.path.expanduser(args.logs_base_dir), subdir)
     if not os.path.isdir(log_dir):  # Create the log directory if it doesn't exist
         os.makedirs(log_dir)
@@ -38,43 +36,40 @@ def main(args):
     facenet.store_revision_info(src_path, log_dir, ' '.join(sys.argv))
 
     np.random.seed(seed=args.seed)
-    dataset = facenet.get_dataset(args.data_dir)
-    train_set, test_set = facenet.split_dataset(dataset, 0.95, 'SPLIT_IMAGES')
-    assert(len(train_set)==len(test_set))
+    train_set = facenet.get_dataset(args.data_dir)
     
     print('Model directory: %s' % model_dir)
     print('Log directory: %s' % log_dir)
+    if args.pretrained_model:
+        pretrained_model = os.path.expanduser(args.pretrained_model)
+        print('Pre-trained model: %s' % pretrained_model)
     
-    # Read the file containing the pairs used for testing
     if args.lfw_dir:
+        # Read the file containing the pairs used for testing
         pairs = lfw.read_pairs(os.path.expanduser(args.lfw_pairs))
-
-    # Get the paths for the corresponding images
-    if args.lfw_dir:
-        paths, actual_issame = lfw.get_paths(os.path.expanduser(args.lfw_dir), pairs, args.lfw_file_ext)
+        # Get the paths for the corresponding images
+        lfw_paths, actual_issame = lfw.get_paths(os.path.expanduser(args.lfw_dir), pairs, args.lfw_file_ext)
     
     with tf.Graph().as_default():
         tf.set_random_seed(args.seed)
         global_step = tf.Variable(0, trainable=False)
         
+        # Get a list of image paths and their labels
+        image_list, label_list = facenet.get_image_paths_and_labels(train_set)
+
         # Read data and apply label preserving distortions
-        image_batch, label_batch, total_nrof_examples = facenet.read_and_augument_data(train_set, args.image_size, 
+        image_batch, label_batch = facenet.read_and_augument_data(image_list, label_list, args.image_size, 
             args.batch_size, args.max_nrof_epochs, args.random_crop, args.random_flip)
         print('Total number of classes: %d' % len(train_set))
-        print('Total number of examples: %d' % total_nrof_examples)
+        print('Total number of examples: %d' % len(label_list))
         
-        # Placeholder for input images
-        images_placeholder = tf.placeholder(tf.float32, shape=(None, args.image_size, args.image_size, 3), name='input')
-
-        # Placeholder for phase_train
-        phase_train_placeholder = tf.placeholder(tf.bool, name='phase_train')
-
         # Placeholder for the learning rate
         learning_rate_placeholder = tf.placeholder(tf.float32, name='learing_rate')
 
         # Build the inference graph
-        logits, endpoints = network.inference(image_batch, len(train_set), args.keep_probability, 
-            phase_train=phase_train_placeholder, weight_decay=args.weight_decay)
+        prelogits, _ = network.inference(image_batch, args.keep_probability, 
+            phase_train=True, weight_decay=args.weight_decay)
+        logits = slim.fully_connected(prelogits, len(train_set), activation_fn=None, scope='Logits', reuse=False)
         
         learning_rate = tf.train.exponential_decay(learning_rate_placeholder, global_step,
             args.learning_rate_decay_epochs*args.epoch_size, args.learning_rate_decay_factor, staircase=True)
@@ -94,7 +89,13 @@ def main(args):
         train_op = facenet.train(total_loss, global_step, args.optimizer, 
             learning_rate, args.moving_average_decay, tf.all_variables())
 
-        embeddings = tf.nn.l2_normalize(endpoints['PreLogitsFlatten'], 1, 1e-10, name='embeddings')
+        # Create an instance of the model for LFW evaluation using prelogits
+        image_batch_eval, label_batch_eval = facenet.read_and_augument_data(lfw_paths, range(len(lfw_paths)), args.image_size, 
+            args.batch_size, args.max_nrof_epochs, random_crop=False, random_flip=False, shuffle=False)
+        prelogits_eval, _ = network.inference(image_batch_eval, 1.0, 
+            phase_train=False, weight_decay=0.0, reuse=True)
+        #pre_embeddings = slim.fully_connected(prelogits_eval, 128, activation_fn=None, scope='Embeddings', reuse=False)
+        embeddings_eval = tf.nn.l2_normalize(prelogits_eval, 1, 1e-10, name='embeddings')
 
         # Create a saver
         saver = tf.train.Saver(tf.all_variables(), max_to_keep=3)
@@ -112,20 +113,16 @@ def main(args):
 
         with sess.as_default():
 
-            if preload_model:
-                ckpt = tf.train.get_checkpoint_state(model_dir)
-                #pylint: disable=maybe-no-member
-                if ckpt and ckpt.model_checkpoint_path:
-                    saver.restore(sess, ckpt.model_checkpoint_path)
-                else:
-                    raise ValueError('Checkpoint not found')
+            if pretrained_model:
+                saver.restore(sess, pretrained_model)
 
             # Training and validation loop
             epoch = 0
             while epoch < args.max_nrof_epochs:
-                epoch = sess.run(global_step, feed_dict=None) // args.epoch_size
+                step = sess.run(global_step, feed_dict=None)
+                epoch = step // args.epoch_size
                 # Train for one epoch
-                step = train(args, sess, epoch, phase_train_placeholder, learning_rate_placeholder, global_step, 
+                step = train(args, sess, epoch, learning_rate_placeholder, global_step, 
                     total_loss, train_op, summary_op, summary_writer, regularization_losses)
                 
 #                 # Visualize conv1 features
@@ -145,9 +142,8 @@ def main(args):
 #                 misc.imsave(os.path.join(log_dir, 'features_epoch%d.png' % epoch), features_resize)
 
                 if args.lfw_dir:
-                    _, _, accuracy, val, val_std, far = lfw.validate(sess, 
-                        paths, actual_issame, args.seed, args.batch_size,
-                        images_placeholder, phase_train_placeholder, embeddings, nrof_folds=args.lfw_nrof_folds)
+                    _, _, accuracy, val, val_std, far = lfw.validate(sess, actual_issame, args.seed, 
+                        args.batch_size, embeddings_eval, label_batch_eval, nrof_folds=args.lfw_nrof_folds)
                     print('Accuracy: %1.3f+-%1.3f' % (np.mean(accuracy), np.std(accuracy)))
                     print('Validation rate: %2.5f+-%2.5f @ FAR=%2.5f' % (val, val_std, far))
                     # Add validation loss and accuracy to summary
@@ -161,17 +157,10 @@ def main(args):
                 print('Saving checkpoint')
                 checkpoint_path = os.path.join(model_dir, 'model.ckpt')
                 saver.save(sess, checkpoint_path, global_step=step)
-
-#                 if (epoch % args.checkpoint_period == 0) or (epoch==args.max_nrof_epochs-1):
-#                     precision = evaluate(network, test_set, model_dir, args.image_size, args.batch_size, args.moving_average_decay)
-#                     summary = tf.Summary()
-#                     #pylint: disable=maybe-no-member
-#                     summary.value.add(tag='precision', simple_value=precision)
-#                     summary_writer.add_summary(summary, step)
                 
     return model_dir
   
-def train(args, sess, epoch, phase_train_placeholder, learning_rate_placeholder, global_step, 
+def train(args, sess, epoch, learning_rate_placeholder, global_step, 
       loss, train_op, summary_op, summary_writer, regularization_losses):
     batch_number = 0
     
@@ -185,7 +174,7 @@ def train(args, sess, epoch, phase_train_placeholder, learning_rate_placeholder,
         i = 0
         while batch_number < args.epoch_size:
             start_time = time.time()
-            feed_dict = {phase_train_placeholder: True, learning_rate_placeholder: lr}
+            feed_dict = {learning_rate_placeholder: lr}
             err, _, step, reg_loss = sess.run([loss, train_op, global_step, regularization_losses], feed_dict=feed_dict)
             if (batch_number % 100 == 0):
                 summary_str, step = sess.run([summary_op, global_step], feed_dict=feed_dict)
@@ -202,66 +191,12 @@ def train(args, sess, epoch, phase_train_placeholder, learning_rate_placeholder,
         summary.value.add(tag='time/total', simple_value=train_time)
         summary_writer.add_summary(summary, step)
     return step
-  
-def evaluate(network, test_set, model_dir, image_size,  batch_size, moving_average_decay):
-  
-    with tf.Graph().as_default():
-  
-        # Read data without augumentation
-        image_batch, label_batch, total_nrof_examples = facenet.read_and_augument_data(test_set, image_size, 
-            batch_size, 1, False, False)
-        
-        # Build the inference graph
-        logits, _ = network.inference(image_batch, len(test_set), 1.0, 
-            phase_train=False, weight_decay=0.0)
-        
-        # Calculate predictions.
-        top_k_op = tf.nn.in_top_k(logits, label_batch, 1)
-    
-        # Restore the moving average version of the learned variables
-        variable_averages = tf.train.ExponentialMovingAverage(moving_average_decay)
-        variables_to_restore = variable_averages.variables_to_restore()
-        saver = tf.train.Saver(variables_to_restore)
-        
-        with tf.Session() as sess:
-            sess.run(tf.initialize_local_variables())
-            ckpt = tf.train.get_checkpoint_state(model_dir)
-            if ckpt and ckpt.model_checkpoint_path: #pylint: disable=maybe-no-member
-                # Restores from checkpoint
-                saver.restore(sess, ckpt.model_checkpoint_path)  #pylint: disable=maybe-no-member
-            else:
-                print('No checkpoint file found')
-                return -1.0
-        
-            # Start the queue runners
-            coord = tf.train.Coordinator()
-            precision = -1.0
-            try:
-                threads = []
-                for qr in tf.get_collection(tf.GraphKeys.QUEUE_RUNNERS):
-                    threads.extend(qr.create_threads(sess, coord=coord, daemon=True, start=True))
-          
-                true_count = 0
-                nrof_samples = 0
-                print('Running forward pass on test dataset')
-                while nrof_samples+batch_size<total_nrof_examples and not coord.should_stop():
-                    predictions = sess.run([top_k_op])
-                    nrof_samples += np.size(predictions)
-                    true_count += np.sum(predictions)
-          
-                # Compute precision @ 1.
-                precision = true_count / nrof_samples
-                print('%s: precision @ 1 = %.3f' % (datetime.now(), precision))
-          
-            except Exception as e:  # pylint: disable=broad-except
-                print(e)
-                coord.request_stop(e)
-        
-            coord.request_stop()
-            coord.join(threads, stop_grace_period_secs=10)
-    
-        return precision
-    
+
+def list_variables(filename):
+    reader = training.NewCheckpointReader(filename)
+    variable_map = reader.get_variable_to_shape_map()
+    names = sorted(variable_map.keys())
+    return names
 
 def parse_arguments(argv):
     parser = argparse.ArgumentParser()
@@ -272,40 +207,26 @@ def parse_arguments(argv):
         help='Directory where to write trained models and checkpoints.', default='~/models/facenet')
     parser.add_argument('--gpu_memory_fraction', type=float,
         help='Upper bound on the amount of GPU memory that will be used by the process.', default=1.0)
-    parser.add_argument('--model_name', type=str,
-        help='Model directory name. Used when continuing training of an existing model. Leave empty to train new model.')
+    parser.add_argument('--pretrained_model', type=str,
+        help='Load a pretrained model before training starts.')
     parser.add_argument('--data_dir', type=str,
         help='Path to the data directory containing aligned face patches. Multiple directories are separated with colon.',
         default='~/datasets/facescrub/fs_aligned:~/datasets/casia/casia-webface-aligned')
     parser.add_argument('--model_def', type=str,
         help='Model definition. Points to a module containing the definition of the inference graph.', default='models.nn4')
-    parser.add_argument('--loss_type', type=str,
-        help='Type of loss function to use', default='TRIPLETLOSS', choices=['TRIPLETLOSS', 'CLASSIFIER'])
     parser.add_argument('--max_nrof_epochs', type=int,
         help='Number of epochs to run.', default=500)
-    parser.add_argument('--checkpoint_period', type=int,
-        help='The number of epochs between checkpoints', default=10)
     parser.add_argument('--batch_size', type=int,
         help='Number of images to process in a batch.', default=90)
     parser.add_argument('--image_size', type=int,
         help='Image size (height, width) in pixels.', default=96)
-    parser.add_argument('--people_per_batch', type=int,
-        help='Number of people per batch.', default=45)
-    parser.add_argument('--images_per_person', type=int,
-        help='Number of images per person.', default=40)
     parser.add_argument('--epoch_size', type=int,
         help='Number of batches per epoch.', default=1000)
-    parser.add_argument('--alpha', type=float,
-        help='Positive to negative triplet distance margin.', default=0.2)
     parser.add_argument('--random_crop', 
         help='Performs random cropping of training images. If false, the center image_size pixels from the training images are used. ' +
          'If the size of the images in the data directory is equal to image_size no cropping is performed', action='store_true')
     parser.add_argument('--random_flip', 
         help='Performs random horizontal flipping of training images.', action='store_true')
-    parser.add_argument('--pool_type', type=str,
-        help='The type of pooling to use for some of the inception layers', default='MAX', choices=['MAX', 'L2'])
-    parser.add_argument('--use_lrn', 
-        help='Enables Local Response Normalization after the first layers of the inception network.', action='store_true')
     parser.add_argument('--keep_probability', type=float,
         help='Keep probability of dropout for the fully connected layer(s).', default=1.0)
     parser.add_argument('--weight_decay', type=float,
