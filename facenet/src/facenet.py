@@ -14,6 +14,7 @@ from scipy import misc
 import matplotlib.pyplot as plt
 from sklearn.cross_validation import KFold
 from scipy import interpolate
+from tensorflow.python.training import training
 
 
 def triplet_loss(anchor, positive, negative, alpha):
@@ -517,3 +518,9 @@ def store_revision_info(src_path, output_dir, arg_string):
         text_file.write('arguments: %s\n--------------------\n' % arg_string)
         text_file.write('git hash: %s\n--------------------\n' % git_hash)
         text_file.write('%s' % git_diff)
+
+def list_variables(filename):
+    reader = training.NewCheckpointReader(filename)
+    variable_map = reader.get_variable_to_shape_map()
+    names = sorted(variable_map.keys())
+    return names

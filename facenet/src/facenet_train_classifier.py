@@ -15,7 +15,6 @@ import importlib
 import argparse
 import facenet
 import lfw
-from tensorflow.python.training import training
 
 slim = tf.contrib.slim
 
@@ -192,12 +191,6 @@ def train(args, sess, epoch, learning_rate_placeholder, global_step,
         summary.value.add(tag='time/total', simple_value=train_time)
         summary_writer.add_summary(summary, step)
     return step
-
-def list_variables(filename):
-    reader = training.NewCheckpointReader(filename)
-    variable_map = reader.get_variable_to_shape_map()
-    names = sorted(variable_map.keys())
-    return names
 
 def parse_arguments(argv):
     parser = argparse.ArgumentParser()
