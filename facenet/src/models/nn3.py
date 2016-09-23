@@ -6,7 +6,7 @@ from __future__ import print_function
 import tensorflow as tf
 import models.network as network
 
-def inference(images, output_dim, keep_probability, phase_train=True, weight_decay=0.0):
+def inference(images, keep_probability, phase_train=True, weight_decay=0.0):
     """ Define an inference network for face recognition based 
            on inception modules using batch normalization
     
@@ -52,9 +52,6 @@ def inference(images, output_dim, keep_probability, phase_train=True, weight_dec
     endpoints['pool6'] = net
     net = tf.reshape(net, [-1, 1024])
     endpoints['prelogits'] = net
-    
-    net = network.affine(net, 1024, output_dim, 'fc7', weight_decay=weight_decay)
-    endpoints['fc7'] = net
     net = tf.nn.dropout(net, keep_probability)
     endpoints['dropout'] = net
     

@@ -56,6 +56,9 @@ def main(args):
         # Placeholder for input images
         images_placeholder = tf.placeholder(tf.float32, shape=(None, args.image_size, args.image_size, 3), name='input')
 
+        # Placeholder for phase_train
+        phase_train_placeholder = tf.placeholder(tf.bool, name='phase_train')
+
         # Placeholder for the learning rate
         learning_rate_placeholder = tf.placeholder(tf.float32, name='learning_rate')
 
@@ -94,12 +97,6 @@ def main(args):
         train_op = facenet.train(total_loss, global_step, args.optimizer, 
             learning_rate, args.moving_average_decay, update_gradient_vars)
         
-#         images_placeholder_eval = tf.placeholder(tf.float32, shape=(None, args.image_size, args.image_size, 3), name='input_eval')
-#         prelogits_eval, _ = network.inference(images_placeholder_eval, 1.0, 
-#             phase_train=False, weight_decay=0.0, reuse=True)
-#         pre_embeddings_eval = slim.fully_connected(prelogits_eval, 128, activation_fn=None, scope='Embeddings', reuse=True)
-#         embeddings_eval = tf.nn.l2_normalize(pre_embeddings_eval, 1, 1e-10, name='embeddings_eval')
-
         # Create a saver
         restore_saver = tf.train.Saver(restore_vars)
         saver = tf.train.Saver(tf.all_variables(), max_to_keep=3)
@@ -133,7 +130,7 @@ def main(args):
                     learning_rate_placeholder, global_step, embeddings, total_loss, train_op, summary_op, summary_writer)
                 if args.lfw_dir:
                     _, _, accuracy, val, val_std, far = lfw.validate(sess, lfw_paths,
-                        actual_issame, args.seed, 60, images_placeholder, embeddings, nrof_folds=args.lfw_nrof_folds)
+                        actual_issame, args.seed, 60, images_placeholder, phase_train_placeholder, embeddings, nrof_folds=args.lfw_nrof_folds)
                     print('Accuracy: %1.3f+-%1.3f' % (np.mean(accuracy), np.std(accuracy)))
                     print('Validation rate: %2.5f+-%2.5f @ FAR=%2.5f' % (val, val_std, far))
                     # Add validation loss and accuracy to summary

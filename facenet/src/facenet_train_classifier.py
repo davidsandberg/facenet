@@ -65,11 +65,15 @@ def main(args):
         
         # Placeholder for the learning rate
         learning_rate_placeholder = tf.placeholder(tf.float32, name='learning_rate')
+        
+        # Placeholder for phase_train
+        phase_train_placeholder = tf.placeholder(tf.bool, name='phase_train')
 
         # Build the inference graph
         prelogits, _ = network.inference(image_batch, args.keep_probability, 
             phase_train=True, weight_decay=args.weight_decay)
         logits = slim.fully_connected(prelogits, len(train_set), activation_fn=None, scope='Logits', reuse=False)
+        embeddings = tf.nn.l2_normalize(prelogits, 1, 1e-10, name='embeddings')
         
         learning_rate = tf.train.exponential_decay(learning_rate_placeholder, global_step,
             args.learning_rate_decay_epochs*args.epoch_size, args.learning_rate_decay_factor, staircase=True)
@@ -88,14 +92,6 @@ def main(args):
         # Build a Graph that trains the model with one batch of examples and updates the model parameters
         train_op = facenet.train(total_loss, global_step, args.optimizer, 
             learning_rate, args.moving_average_decay, tf.all_variables())
-
-        # Create an instance of the model for LFW evaluation using prelogits
-        image_batch_eval, label_batch_eval = facenet.read_and_augument_data(lfw_paths, range(len(lfw_paths)), args.image_size, 
-            args.batch_size, args.max_nrof_epochs, random_crop=False, random_flip=False, shuffle=False)
-        prelogits_eval, _ = network.inference(image_batch_eval, 1.0, 
-            phase_train=False, weight_decay=0.0, reuse=True)
-        #pre_embeddings = slim.fully_connected(prelogits_eval, 128, activation_fn=None, scope='Embeddings', reuse=False)
-        embeddings_eval = tf.nn.l2_normalize(prelogits_eval, 1, 1e-10, name='embeddings')
 
         # Create a saver
         saver = tf.train.Saver(tf.all_variables(), max_to_keep=3)
@@ -122,28 +118,12 @@ def main(args):
                 step = sess.run(global_step, feed_dict=None)
                 epoch = step // args.epoch_size
                 # Train for one epoch
-                step = train(args, sess, epoch, learning_rate_placeholder, global_step, 
+                step = train(args, sess, epoch, phase_train_placeholder, learning_rate_placeholder, global_step, 
                     total_loss, train_op, summary_op, summary_writer, regularization_losses)
-                
-#                 # Visualize conv1 features
-#                 w = sess.run('conv1_7x7/weights:0')
-#                 nrof_rows = 8
-#                 nrof_cols = 8
-#                 features = np.zeros((1+(7+1)*nrof_rows,1+(7+1)*nrof_cols,3),dtype=np.float32)
-#                 d = 7+1
-#                 for i in range(nrof_rows):
-#                     for j in range(nrof_cols):
-#                         filt = w[:,:,:,i*nrof_cols+j]
-#                         x_min = np.min(filt)
-#                         x_max = np.max(filt)
-#                         filt_norm =(filt - x_min) / (x_max - x_min)
-#                         features[d*i+1:d*(i+1), d*j+1:d*(j+1), :] = filt_norm
-#                 features_resize = misc.imresize(features, 8.0, 'nearest')
-#                 misc.imsave(os.path.join(log_dir, 'features_epoch%d.png' % epoch), features_resize)
 
                 if args.lfw_dir:
-                    _, _, accuracy, val, val_std, far = lfw.validate(sess, actual_issame, args.seed, 
-                        args.batch_size, embeddings_eval, label_batch_eval, nrof_folds=args.lfw_nrof_folds)
+                    _, _, accuracy, val, val_std, far = lfw.validate(sess, lfw_paths, actual_issame, args.seed, 
+                        args.batch_size, image_batch, phase_train_placeholder, embeddings, nrof_folds=args.lfw_nrof_folds)
                     print('Accuracy: %1.3f+-%1.3f' % (np.mean(accuracy), np.std(accuracy)))
                     print('Validation rate: %2.5f+-%2.5f @ FAR=%2.5f' % (val, val_std, far))
                     # Add validation loss and accuracy to summary
@@ -160,7 +140,7 @@ def main(args):
                 
     return model_dir
   
-def train(args, sess, epoch, learning_rate_placeholder, global_step, 
+def train(args, sess, epoch, phase_train_placeholder, learning_rate_placeholder, global_step, 
       loss, train_op, summary_op, summary_writer, regularization_losses):
     batch_number = 0
     
@@ -174,7 +154,7 @@ def train(args, sess, epoch, learning_rate_placeholder, global_step,
         i = 0
         while batch_number < args.epoch_size:
             start_time = time.time()
-            feed_dict = {learning_rate_placeholder: lr}
+            feed_dict = {phase_train_placeholder: True, learning_rate_placeholder: lr}
             err, _, step, reg_loss = sess.run([loss, train_op, global_step, regularization_losses], feed_dict=feed_dict)
             if (batch_number % 100 == 0):
                 summary_str, step = sess.run([summary_op, global_step], feed_dict=feed_dict)

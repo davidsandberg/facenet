@@ -19,7 +19,7 @@ def conv(inpOp, nIn, nOut, kH, kW, dH, dW, padType, name, phase_train=True, use_
         cnv = tf.nn.conv2d(inpOp, kernel, [1, dH, dW, 1], padding=padType)
         
         if use_batch_norm:
-            conv_bn = batch_norm(cnv, nOut, phase_train, 'batch_norm')
+            conv_bn = batch_norm(cnv, phase_train)
         else:
             conv_bn = cnv
         biases = tf.get_variable("biases", [nOut], initializer=tf.constant_initializer(), dtype=inpOp.dtype)
@@ -89,7 +89,7 @@ def apool(inpOp, kH, kW, dH, dW, padding, name):
                               padding=padding)
     return avgpool
 
-def batch_norm(x, n_out, phase_train, name, affn=True):
+def batch_norm(x, phase_train):
     """
     Batch normalization on convolutional maps.
     Args:
@@ -102,12 +102,14 @@ def batch_norm(x, n_out, phase_train, name, affn=True):
         normed:      batch-normalized maps
     Ref: http://stackoverflow.com/questions/33949786/how-could-i-use-batch-normalization-in-tensorflow/33950177
     """
+    name = 'batch_norm'
     with tf.variable_scope(name):
-  
+        phase_train = tf.convert_to_tensor(phase_train, dtype=tf.bool)
+        n_out = int(x.get_shape()[3])
         beta = tf.Variable(tf.constant(0.0, shape=[n_out], dtype=x.dtype),
                            name=name+'/beta', trainable=True, dtype=x.dtype)
         gamma = tf.Variable(tf.constant(1.0, shape=[n_out], dtype=x.dtype),
-                            name=name+'/gamma', trainable=affn, dtype=x.dtype)
+                            name=name+'/gamma', trainable=True, dtype=x.dtype)
       
         batch_mean, batch_var = tf.nn.moments(x, [0,1,2], name='moments')
         ema = tf.train.ExponentialMovingAverage(decay=0.9)

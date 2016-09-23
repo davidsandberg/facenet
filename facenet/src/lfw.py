@@ -7,7 +7,7 @@ import numpy as np
 import facenet
 import math
 
-def validate(sess, paths, actual_issame, seed, batch_size, images_placeholder, embeddings, nrof_folds=10):
+def validate(sess, paths, actual_issame, seed, batch_size, images_placeholder, phase_train_placeholder, embeddings, nrof_folds=10):
 
     image_size = images_placeholder.get_shape()[1]
     embedding_size = embeddings.get_shape()[1]
@@ -22,7 +22,7 @@ def validate(sess, paths, actual_issame, seed, batch_size, images_placeholder, e
         end_index = min((i+1)*batch_size, nrof_images)
         paths_batch = paths[start_index:end_index]
         images = facenet.load_data(paths_batch, False, False, image_size)
-        feed_dict = { images_placeholder: images }
+        feed_dict = { images_placeholder:images, phase_train_placeholder:False }
         emb_array[start_index:end_index,:] = sess.run(embeddings, feed_dict=feed_dict)
 
     # Calculate evaluation metrics
