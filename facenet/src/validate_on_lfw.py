@@ -33,12 +33,10 @@ def main(args):
             
             # Get input and output tensors
             images_placeholder = tf.get_default_graph().get_tensor_by_name("input:0")
-            phase_train_placeholder = tf.get_default_graph().get_tensor_by_name("phase_train:0")
             embeddings = tf.get_default_graph().get_tensor_by_name("embeddings:0")
-
-            tpr, fpr, accuracy, val, val_std, far = lfw.validate(sess, 
-                paths, actual_issame, args.seed, 60, 
-                images_placeholder, phase_train_placeholder, embeddings, nrof_folds=args.lfw_nrof_folds)
+            tpr, fpr, accuracy, val, val_std, far = lfw.validate(sess, paths, 
+                actual_issame, args.seed, 60, 
+                images_placeholder, embeddings, nrof_folds=args.lfw_nrof_folds)
             print('Accuracy: %1.3f+-%1.3f' % (np.mean(accuracy), np.std(accuracy)))
             print('Validation rate: %2.5f+-%2.5f @ FAR=%2.5f' % (val, val_std, far))
             

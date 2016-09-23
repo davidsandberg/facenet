@@ -94,12 +94,11 @@ def main(args):
         train_op = facenet.train(total_loss, global_step, args.optimizer, 
             learning_rate, args.moving_average_decay, update_gradient_vars)
         
-        image_batch_eval, label_batch_eval = facenet.read_and_augument_data(lfw_paths, range(len(lfw_paths)), args.image_size, 
-            60, None, random_crop=False, random_flip=False, shuffle=False)
-        prelogits_eval, _ = network.inference(image_batch_eval, 1.0, 
-            phase_train=False, weight_decay=0.0, reuse=True)
-        pre_embeddings_eval = slim.fully_connected(prelogits_eval, 128, activation_fn=None, scope='Embeddings', reuse=True)
-        embeddings_eval = tf.nn.l2_normalize(pre_embeddings_eval, 1, 1e-10, name='embeddings')
+#         images_placeholder_eval = tf.placeholder(tf.float32, shape=(None, args.image_size, args.image_size, 3), name='input_eval')
+#         prelogits_eval, _ = network.inference(images_placeholder_eval, 1.0, 
+#             phase_train=False, weight_decay=0.0, reuse=True)
+#         pre_embeddings_eval = slim.fully_connected(prelogits_eval, 128, activation_fn=None, scope='Embeddings', reuse=True)
+#         embeddings_eval = tf.nn.l2_normalize(pre_embeddings_eval, 1, 1e-10, name='embeddings_eval')
 
         # Create a saver
         restore_saver = tf.train.Saver(restore_vars)
@@ -133,9 +132,8 @@ def main(args):
                 step = train(args, sess, train_set, epoch, images_placeholder, 
                     learning_rate_placeholder, global_step, embeddings, total_loss, train_op, summary_op, summary_writer)
                 if args.lfw_dir:
-                    _, _, accuracy, val, val_std, far = lfw.validate(sess, 
-                        actual_issame, args.seed, 60,
-                        embeddings_eval, label_batch_eval, nrof_folds=args.lfw_nrof_folds)
+                    _, _, accuracy, val, val_std, far = lfw.validate(sess, lfw_paths,
+                        actual_issame, args.seed, 60, images_placeholder, embeddings, nrof_folds=args.lfw_nrof_folds)
                     print('Accuracy: %1.3f+-%1.3f' % (np.mean(accuracy), np.std(accuracy)))
                     print('Validation rate: %2.5f+-%2.5f @ FAR=%2.5f' % (val, val_std, far))
                     # Add validation loss and accuracy to summary

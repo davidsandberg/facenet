@@ -7,26 +7,28 @@ import numpy as np
 import facenet
 import math
 
-def validate(sess, actual_issame, seed, batch_size, embeddings, labels, nrof_folds=10):
+def validate(sess, paths, actual_issame, seed, batch_size, images_placeholder, embeddings, nrof_folds=10):
+
+    image_size = images_placeholder.get_shape()[1]
+    embedding_size = embeddings.get_shape()[1]
 
     # Run forward pass to calculate embeddings
     print('Runnning forward pass on LFW images')
-    nrof_images = len(actual_issame)*2
+    nrof_images = len(paths)
     nrof_batches = int(math.ceil(1.0*nrof_images / batch_size))
-    emb_list = []
-    lbl_list = []
-    for _ in range(nrof_batches):
-        emb, lbl = sess.run([embeddings, labels])
-        emb_list.append(emb)
-        lbl_list.append(lbl)
-    emb_array = np.vstack(emb_list)
-    lbl_array = np.hstack(lbl_list)
-    emb_sorted = emb_array[lbl_array,:]
+    emb_array = np.zeros((nrof_images, embedding_size))
+    for i in range(nrof_batches):
+        start_index = i*batch_size
+        end_index = min((i+1)*batch_size, nrof_images)
+        paths_batch = paths[start_index:end_index]
+        images = facenet.load_data(paths_batch, False, False, image_size)
+        feed_dict = { images_placeholder: images }
+        emb_array[start_index:end_index,:] = sess.run(embeddings, feed_dict=feed_dict)
 
     # Calculate evaluation metrics
     thresholds = np.arange(0, 4, 0.01)
-    embeddings1 = emb_sorted[0::2]
-    embeddings2 = emb_sorted[1::2]
+    embeddings1 = emb_array[0::2]
+    embeddings2 = emb_array[1::2]
     tpr, fpr, accuracy = facenet.calculate_roc(thresholds, embeddings1, embeddings2,
         np.asarray(actual_issame), seed, nrof_folds=nrof_folds)
     thresholds = np.arange(0, 4, 0.001)
