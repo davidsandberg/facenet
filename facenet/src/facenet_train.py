@@ -43,6 +43,7 @@ def main(args):
         print('Pre-trained model: %s' % os.path.expanduser(args.pretrained_model))
     
     if args.lfw_dir:
+        print('LFW directory: %s' % args.lfw_dir)
         # Read the file containing the pairs used for testing
         pairs = lfw.read_pairs(os.path.expanduser(args.lfw_pairs))
         # Get the paths for the corresponding images

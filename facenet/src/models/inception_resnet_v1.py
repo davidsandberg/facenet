@@ -23,9 +23,7 @@ from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
 
-
 import tensorflow as tf
-from tensorflow.python.ops import control_flow_ops
 
 slim = tf.contrib.slim
 
@@ -130,36 +128,6 @@ def reduction_b(net):
                         tower_conv2_2, tower_pool])
     return net
   
-def batch_norm(x, is_training=True, decay=0.997, epsilon=0.001):
-    """
-    Batch normalization on convolutional maps.
-    Args:
-        x:           Tensor, 4D BHWD input maps
-        is_training: boolean tf.Variable, true indicates training phase
-    Return:
-        normed:      batch-normalized maps
-    Ref: http://stackoverflow.com/questions/33949786/how-could-i-use-batch-normalization-in-tensorflow/33950177
-    """
-    with tf.variable_scope('batch_norm'):
-        is_training = tf.convert_to_tensor(is_training, dtype=tf.bool)
-        n_out = int(x.get_shape()[3])
-        beta = tf.Variable(tf.constant(0.0, shape=[n_out], dtype=x.dtype),
-                           name='beta', trainable=True, dtype=x.dtype)
-        gamma = tf.Variable(tf.constant(1.0, shape=[n_out], dtype=x.dtype),
-                            name='gamma', trainable=True, dtype=x.dtype)
-      
-        batch_mean, batch_var = tf.nn.moments(x, [0,1,2], name='moments')
-        ema = tf.train.ExponentialMovingAverage(decay=decay)
-        def mean_var_with_update():
-            ema_apply_op = ema.apply([batch_mean, batch_var])
-            with tf.control_dependencies([ema_apply_op]):
-                return tf.identity(batch_mean), tf.identity(batch_var)
-        mean, var = control_flow_ops.cond(is_training,
-                                          mean_var_with_update,
-                                          lambda: (ema.average(batch_mean), ema.average(batch_var)))
-        normed = tf.nn.batch_normalization(x, mean, var, beta, gamma, epsilon)
-    return normed
-  
 #pylint: disable=unused-argument
 def inference(images, keep_probability, phase_train=True, weight_decay=0.0, reuse=None):
     batch_norm_params = {
@@ -171,7 +139,7 @@ def inference(images, keep_probability, phase_train=True, weight_decay=0.0, reus
     with slim.arg_scope([slim.conv2d],
                         weights_initializer=tf.truncated_normal_initializer(stddev=0.1),
                         weights_regularizer=slim.l2_regularizer(weight_decay),
-                        normalizer_fn=batch_norm,
+                        normalizer_fn=slim.batch_norm,
                         normalizer_params=batch_norm_params):
         return inception_resnet_v1(images, is_training=phase_train,
               dropout_keep_prob=keep_probability, reuse=reuse)

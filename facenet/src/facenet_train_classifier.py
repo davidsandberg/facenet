@@ -45,6 +45,7 @@ def main(args):
         print('Pre-trained model: %s' % pretrained_model)
     
     if args.lfw_dir:
+        print('LFW directory: %s' % args.lfw_dir)
         # Read the file containing the pairs used for testing
         pairs = lfw.read_pairs(os.path.expanduser(args.lfw_pairs))
         # Get the paths for the corresponding images
@@ -54,14 +55,11 @@ def main(args):
         tf.set_random_seed(args.seed)
         global_step = tf.Variable(0, trainable=False)
         
-        # Get a list of image paths and their labels
-        image_list, label_list = facenet.get_image_paths_and_labels(train_set)
-
         # Read data and apply label preserving distortions
-        image_batch, label_batch = facenet.read_and_augument_data(image_list, label_list, args.image_size, 
+        image_batch, label_batch, total_nrof_examples = facenet.read_and_augument_data(train_set, args.image_size, 
             args.batch_size, args.max_nrof_epochs, args.random_crop, args.random_flip)
         print('Total number of classes: %d' % len(train_set))
-        print('Total number of examples: %d' % len(label_list))
+        print('Total number of examples: %d' % total_nrof_examples)
         
         # Placeholder for the learning rate
         learning_rate_placeholder = tf.placeholder(tf.float32, name='learning_rate')
@@ -71,7 +69,7 @@ def main(args):
 
         # Build the inference graph
         prelogits, _ = network.inference(image_batch, args.keep_probability, 
-            phase_train=True, weight_decay=args.weight_decay)
+            phase_train=phase_train_placeholder, weight_decay=args.weight_decay)
         logits = slim.fully_connected(prelogits, len(train_set), activation_fn=None, scope='Logits', reuse=False)
         embeddings = tf.nn.l2_normalize(prelogits, 1, 1e-10, name='embeddings')
         
