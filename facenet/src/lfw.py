@@ -22,7 +22,7 @@ def validate(sess, paths, actual_issame, seed, batch_size, images_placeholder, p
         end_index = min((i+1)*batch_size, nrof_images)
         paths_batch = paths[start_index:end_index]
         images = facenet.load_data(paths_batch, False, False, image_size)
-        feed_dict = { images_placeholder:images, phase_train_placeholder:False }
+        feed_dict = { images_placeholder:images, phase_train_placeholder:True }
         emb_array[start_index:end_index,:] = sess.run(embeddings, feed_dict=feed_dict)
 
     # Calculate evaluation metrics
