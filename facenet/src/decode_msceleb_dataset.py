@@ -43,7 +43,7 @@ def main(args):
             img_dec_string = base64.b64decode(img_string)
             img_data = np.fromstring(img_dec_string, dtype=np.uint8)
             img = cv2.imdecode(img_data, cv2.cv.CV_LOAD_IMAGE_COLOR) #pylint: disable=maybe-no-member
-            if args.size>0:
+            if args.size:
                 img = misc.imresize(img, (args.size, args.size), interp='bilinear')
             full_class_dir = os.path.join(output_dir, class_dir)
             if not os.path.exists(full_class_dir):
@@ -59,7 +59,7 @@ if __name__ == '__main__':
 
     parser.add_argument('output_dir', type=str, help='Output base directory for the image dataset')
     parser.add_argument('tsv_files', type=argparse.FileType('r'), nargs='+', help='Input TSV file name(s)')
-    parser.add_argument('--size', type=int, help='Images are resized to the given size', default=-1)
+    parser.add_argument('--size', type=int, help='Images are resized to the given size')
     parser.add_argument('--output_format', type=str, help='Format of the output images', default='png', choices=['png', 'jpg'])
 
     main(parser.parse_args())
