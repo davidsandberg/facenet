@@ -58,9 +58,7 @@ def read_images_from_disk(input_queue):
     example = tf.image.decode_png(file_contents, channels=3)
     return example, label
   
-def read_and_augument_data(dataset, image_size, batch_size, max_nrof_epochs, random_crop, random_flip):
-    # Get a list of image paths and their labels
-    image_list, label_list = get_image_paths_and_labels(dataset)
+def read_and_augument_data(image_list, label_list, image_size, batch_size, max_nrof_epochs, random_crop, random_flip):
     
     images = ops.convert_to_tensor(image_list, dtype=tf.string)
     labels = ops.convert_to_tensor(label_list, dtype=tf.int32)
@@ -86,10 +84,10 @@ def read_and_augument_data(dataset, image_size, batch_size, max_nrof_epochs, ran
 
     image_batch, label_batch = tf.train.batch_join(
         images_and_labels, batch_size=batch_size,
-        capacity=4 * num_preprocess_threads * batch_size)#,
-        #allow_smaller_final_batch=True)
+        capacity=4 * num_preprocess_threads * batch_size,
+        allow_smaller_final_batch=True)
   
-    return image_batch, label_batch, len(label_list)
+    return image_batch, label_batch
   
 def _add_loss_summaries(total_loss):
     """Add summaries for losses.

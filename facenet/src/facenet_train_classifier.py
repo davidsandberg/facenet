@@ -55,11 +55,14 @@ def main(args):
         tf.set_random_seed(args.seed)
         global_step = tf.Variable(0, trainable=False)
         
+        # Get a list of image paths and their labels
+        image_list, label_list = facenet.get_image_paths_and_labels(train_set)
+
         # Read data and apply label preserving distortions
-        image_batch, label_batch, total_nrof_examples = facenet.read_and_augument_data(train_set, args.image_size, 
+        image_batch, label_batch = facenet.read_and_augument_data(image_list, label_list, args.image_size,
             args.batch_size, args.max_nrof_epochs, args.random_crop, args.random_flip)
         print('Total number of classes: %d' % len(train_set))
-        print('Total number of examples: %d' % total_nrof_examples)
+        print('Total number of examples: %d' % len(image_list))
         
         # Placeholder for the learning rate
         learning_rate_placeholder = tf.placeholder(tf.float32, name='learning_rate')
@@ -69,7 +72,7 @@ def main(args):
 
         # Build the inference graph
         prelogits, _ = network.inference(image_batch, args.keep_probability, 
-            phase_train=phase_train_placeholder, weight_decay=args.weight_decay)
+            phase_train=phase_train_placeholder, weight_decay=args.weight_decay, reuse=False)
         logits = slim.fully_connected(prelogits, len(train_set), activation_fn=None, scope='Logits', reuse=False)
         embeddings = tf.nn.l2_normalize(prelogits, 1, 1e-10, name='embeddings')
         
