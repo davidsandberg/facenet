@@ -72,8 +72,8 @@ def main(args):
 
         # Build the inference graph
         prelogits, _ = network.inference(image_batch, args.keep_probability, 
-            phase_train=phase_train_placeholder, weight_decay=args.weight_decay, reuse=False)
-        logits = slim.fully_connected(prelogits, len(train_set), activation_fn=None, scope='Logits', reuse=False)
+            phase_train=phase_train_placeholder, weight_decay=args.weight_decay)
+        logits = slim.fully_connected(prelogits, len(train_set), activation_fn=None, scope='Logits')
         embeddings = tf.nn.l2_normalize(prelogits, 1, 1e-10, name='embeddings')
         
         learning_rate = tf.train.exponential_decay(learning_rate_placeholder, global_step,
@@ -102,7 +102,7 @@ def main(args):
 
         # Start running operations on the Graph.
         gpu_options = tf.GPUOptions(per_process_gpu_memory_fraction=args.gpu_memory_fraction)
-        sess = tf.Session(config=tf.ConfigProto(gpu_options=gpu_options))
+        sess = tf.Session(config=tf.ConfigProto(gpu_options=gpu_options, log_device_placement=False))
         sess.run(tf.initialize_all_variables())
         sess.run(tf.initialize_local_variables())
         summary_writer = tf.train.SummaryWriter(log_dir, sess.graph)

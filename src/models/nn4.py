@@ -6,7 +6,7 @@ from __future__ import print_function
 import tensorflow as tf
 import models.network as network
 
-def inference(images, output_dim, keep_probability, phase_train=True, weight_decay=0.0):
+def inference(images, keep_probability, phase_train=True, weight_decay=0.0):
     """ Define an inference network for face recognition based 
            on inception modules using batch normalization
     
@@ -15,7 +15,6 @@ def inference(images, output_dim, keep_probability, phase_train=True, weight_dec
       phase_train: True if batch normalization should operate in training mode
     """
     endpoints = {}
-
     net = network.conv(images, 3, 64, 7, 7, 2, 2, 'SAME', 'conv1_7x7', phase_train=phase_train, use_batch_norm=True, weight_decay=weight_decay)
     endpoints['conv1'] = net
     net = network.mpool(net,  3, 3, 2, 2, 'SAME', 'pool1')
@@ -27,7 +26,7 @@ def inference(images, output_dim, keep_probability, phase_train=True, weight_dec
     net = network.mpool(net,  3, 3, 2, 2, 'SAME', 'pool3')
     endpoints['pool3'] = net
   
-    net = network.inception(net,    192, 1, 64, 96, 128, 16, 32, 3, 32, 1, 'MAX', 'incept3a', phase_train=phase_train, use_batch_norm=True, weight_decay=weight_decay)
+    net = network.inception(net, 192, 1, 64, 96, 128, 16, 32, 3, 32, 1, 'MAX', 'incept3a', phase_train=phase_train, use_batch_norm=True, weight_decay=weight_decay)
     endpoints['incept3a'] = net
     net = network.inception(net, 256, 1, 64, 96, 128, 32, 64, 3, 64, 1, 'MAX', 'incept3b', phase_train=phase_train, use_batch_norm=True, weight_decay=weight_decay)
     endpoints['incept3b'] = net
@@ -45,7 +44,7 @@ def inference(images, output_dim, keep_probability, phase_train=True, weight_dec
     net = network.inception(net, 640, 2, 0, 160, 256, 64, 128, 3, 0, 2, 'MAX', 'incept4e', phase_train=phase_train, use_batch_norm=True)
     endpoints['incept4e'] = net
     
-    net = network.inception(net,    1024, 1, 384, 192, 384, 0, 0, 3, 128, 1, 'MAX', 'incept5a', phase_train=phase_train, use_batch_norm=True, weight_decay=weight_decay)
+    net = network.inception(net, 1024, 1, 384, 192, 384, 0, 0, 3, 128, 1, 'MAX', 'incept5a', phase_train=phase_train, use_batch_norm=True, weight_decay=weight_decay)
     endpoints['incept5a'] = net
     net = network.inception(net, 896, 1, 384, 192, 384, 0, 0, 3, 128, 1, 'MAX', 'incept5b', phase_train=phase_train, use_batch_norm=True, weight_decay=weight_decay)
     endpoints['incept5b'] = net
@@ -53,9 +52,6 @@ def inference(images, output_dim, keep_probability, phase_train=True, weight_dec
     endpoints['pool6'] = net
     net = tf.reshape(net, [-1, 896])
     endpoints['prelogits'] = net
-    
-    net = network.affine(net, 896, output_dim, 'fc7', weight_decay=weight_decay)
-    endpoints['fc7'] = net
     net = tf.nn.dropout(net, keep_probability)
     endpoints['dropout'] = net
     
