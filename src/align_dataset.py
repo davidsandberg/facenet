@@ -46,9 +46,11 @@ def main(args):
                 else:
                     if img.ndim == 2:
                         img = facenet.to_rgb(img)
-                    if args.use_new_alignment:
-                        aligned = align.align_new(args.image_size, img, landmarkIndices=landmarkIndices, 
-                                              skipMulti=False, scale=scale)
+                    if args.use_center_crop:
+                        scaled = misc.imresize(img, args.prealigned_scale, interp='bilinear')
+                        sz1 = scaled.shape[1]/2
+                        sz2 = args.image_size/2
+                        aligned = scaled[(sz1-sz2):(sz1+sz2),(sz1-sz2):(sz1+sz2),:]
                     else:
                         aligned = align.align(args.image_size, img, landmarkIndices=landmarkIndices, 
                                               skipMulti=False, scale=scale)
@@ -101,8 +103,8 @@ def parse_arguments(argv):
         help='Image size (height, width) in pixels.', default=110)
     parser.add_argument('--face_size', type=int,
         help='Size of the face thumbnail (height, width) in pixels.', default=96)
-    parser.add_argument('--use_new_alignment', 
-        help='Indicates if the improved alignment transformation should be used.', action='store_true')
+    parser.add_argument('--use_center_crop', 
+        help='Use the center crop of the original image after scaling the image using prealigned_scale.', action='store_true')
     parser.add_argument('--prealigned_dir', type=str,
         help='Replace image with a pre-aligned version when face detection fails.', default='')
     parser.add_argument('--prealigned_scale', type=float,
