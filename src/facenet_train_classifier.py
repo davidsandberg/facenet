@@ -60,7 +60,7 @@ def main(args):
 
         # Read data and apply label preserving distortions
         image_batch, label_batch = facenet.read_and_augument_data(image_list, label_list, args.image_size,
-            args.batch_size, args.max_nrof_epochs, args.random_crop, args.random_flip)
+            args.batch_size, args.max_nrof_epochs, args.random_crop, args.random_flip, args.nrof_preprocess_threads)
         print('Total number of classes: %d' % len(train_set))
         print('Total number of examples: %d' % len(image_list))
         
@@ -219,6 +219,8 @@ def parse_arguments(argv):
         help='Exponential decay for tracking of training parameters.', default=0.9999)
     parser.add_argument('--seed', type=int,
         help='Random seed.', default=666)
+    parser.add_argument('--nrof_preprocess_threads', type=int,
+        help='Number of preprocessing (data loading and augumentation) threads.', default=4)
  
     # Parameters for validation on LFW
     parser.add_argument('--lfw_pairs', type=str,

@@ -84,6 +84,36 @@ class TrainTest(unittest.TestCase):
         args = facenet_train_classifier.parse_arguments(argv)
         facenet_train_classifier.main(args)
 
+    def test_training_classifier_inception_resnet_v1(self):
+        argv = ['--logs_base_dir', self.tmp_dir,
+                '--models_base_dir', self.tmp_dir,
+                '--data_dir', self.dataset_dir,
+                '--model_def', 'models.inception_resnet_v1',
+                '--epoch_size', '1',
+                '--max_nrof_epochs', '1',
+                '--batch_size', '1',
+                '--lfw_pairs', self.lfw_pairs_file,
+                '--lfw_dir', self.dataset_dir,
+                '--lfw_nrof_folds', '2',
+                '--nrof_preprocess_threads', '1' ]
+        args = facenet_train_classifier.parse_arguments(argv)
+        facenet_train_classifier.main(args)
+
+    def test_training_classifier_inception_resnet_v2(self):
+        argv = ['--logs_base_dir', self.tmp_dir,
+                '--models_base_dir', self.tmp_dir,
+                '--data_dir', self.dataset_dir,
+                '--model_def', 'models.inception_resnet_v2',
+                '--epoch_size', '1',
+                '--max_nrof_epochs', '1',
+                '--batch_size', '1',
+                '--lfw_pairs', self.lfw_pairs_file,
+                '--lfw_dir', self.dataset_dir,
+                '--lfw_nrof_folds', '2',
+                '--nrof_preprocess_threads', '1' ]
+        args = facenet_train_classifier.parse_arguments(argv)
+        facenet_train_classifier.main(args)
+
     def test_compare(self):
         argv = ['../data/model/20160620-173927/model.ckpt-500000', 
                 '../data/images/Anthony_Hopkins_0001.png',
