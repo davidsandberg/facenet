@@ -73,7 +73,13 @@ def main(args):
         # Build the inference graph
         prelogits, _ = network.inference(image_batch, args.keep_probability, 
             phase_train=phase_train_placeholder, weight_decay=args.weight_decay)
-        logits = slim.fully_connected(prelogits, len(train_set), activation_fn=None, scope='Logits')
+        n = int(prelogits.get_shape()[1])
+        m = len(train_set)
+        w = tf.create_partitioned_variables(shape=[n,m], slicing=[1,64], dtype=tf.float32, initializer=tf.truncated_normal_initializer(stddev=0.1))
+        b = tf.get_variable("b", [m], initializer=None, trainable=True)
+        logits = tf.matmul(prelogits, tf.concat(1, w)) + b
+        
+        #logits = slim.fully_connected(prelogits, len(train_set), activation_fn=None, scope='Logits')
         embeddings = tf.nn.l2_normalize(prelogits, 1, 1e-10, name='embeddings')
         
         learning_rate = tf.train.exponential_decay(learning_rate_placeholder, global_step,
@@ -95,7 +101,7 @@ def main(args):
             learning_rate, args.moving_average_decay, tf.all_variables())
 
         # Create a saver
-        saver = tf.train.Saver(tf.all_variables(), max_to_keep=3)
+        saver = tf.train.Saver(tf.trainable_variables(), max_to_keep=3)
 
         # Build the summary operation based on the TF collection of Summaries.
         summary_op = tf.merge_all_summaries()
@@ -123,21 +129,31 @@ def main(args):
                     total_loss, train_op, summary_op, summary_writer, regularization_losses)
 
                 if args.lfw_dir:
+                    start_time = time.time()
                     _, _, accuracy, val, val_std, far = lfw.validate(sess, lfw_paths, actual_issame, args.seed, 
                         args.batch_size, image_batch, phase_train_placeholder, embeddings, nrof_folds=args.lfw_nrof_folds)
                     print('Accuracy: %1.3f+-%1.3f' % (np.mean(accuracy), np.std(accuracy)))
                     print('Validation rate: %2.5f+-%2.5f @ FAR=%2.5f' % (val, val_std, far))
+                    lfw_time = time.time() - start_time
                     # Add validation loss and accuracy to summary
                     summary = tf.Summary()
                     #pylint: disable=maybe-no-member
                     summary.value.add(tag='lfw/accuracy', simple_value=np.mean(accuracy))
                     summary.value.add(tag='lfw/val_rate', simple_value=val)
+                    summary.value.add(tag='time/lfw', simple_value=lfw_time)
                     summary_writer.add_summary(summary, step)
 
                 # Save the model checkpoint
                 print('Saving checkpoint')
+                start_time = time.time()
                 checkpoint_path = os.path.join(model_dir, 'model.ckpt')
                 saver.save(sess, checkpoint_path, global_step=step)
+                save_time = time.time() - start_time
+                print('Checkpoint saved in %.2f seconds' % save_time)
+                summary = tf.Summary()
+                #pylint: disable=maybe-no-member
+                summary.value.add(tag='time/save', simple_value=save_time)
+                summary_writer.add_summary(summary, step)
                 
     return model_dir
   
