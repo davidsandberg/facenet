@@ -58,7 +58,8 @@ def read_images_from_disk(input_queue):
     example = tf.image.decode_png(file_contents, channels=3)
     return example, label
   
-def read_and_augument_data(image_list, label_list, image_size, batch_size, max_nrof_epochs, random_crop, random_flip):
+def read_and_augument_data(image_list, label_list, image_size, batch_size, max_nrof_epochs, 
+        random_crop, random_flip, nrof_preprocess_threads):
     
     images = ops.convert_to_tensor(image_list, dtype=tf.string)
     labels = ops.convert_to_tensor(label_list, dtype=tf.int32)
@@ -67,9 +68,8 @@ def read_and_augument_data(image_list, label_list, image_size, batch_size, max_n
     input_queue = tf.train.slice_input_producer([images, labels],
         num_epochs=max_nrof_epochs, shuffle=True)
 
-    num_preprocess_threads = 4
     images_and_labels = []
-    for _ in range(num_preprocess_threads):
+    for _ in range(nrof_preprocess_threads):
         image, label = read_images_from_disk(input_queue)
         if random_crop:
             image = tf.random_crop(image, [image_size, image_size, 3])
@@ -84,7 +84,7 @@ def read_and_augument_data(image_list, label_list, image_size, batch_size, max_n
 
     image_batch, label_batch = tf.train.batch_join(
         images_and_labels, batch_size=batch_size,
-        capacity=4 * num_preprocess_threads * batch_size,
+        capacity=4 * nrof_preprocess_threads * batch_size,
         allow_smaller_final_batch=True)
   
     return image_batch, label_batch

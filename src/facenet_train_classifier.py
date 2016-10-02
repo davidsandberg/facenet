@@ -60,7 +60,7 @@ def main(args):
 
         # Read data and apply label preserving distortions
         image_batch, label_batch = facenet.read_and_augument_data(image_list, label_list, args.image_size,
-            args.batch_size, args.max_nrof_epochs, args.random_crop, args.random_flip)
+            args.batch_size, args.max_nrof_epochs, args.random_crop, args.random_flip, args.nrof_preprocess_threads)
         print('Total number of classes: %d' % len(train_set))
         print('Total number of examples: %d' % len(image_list))
         
@@ -72,8 +72,17 @@ def main(args):
 
         # Build the inference graph
         prelogits, _ = network.inference(image_batch, args.keep_probability, 
-            phase_train=phase_train_placeholder, weight_decay=args.weight_decay, reuse=False)
-        logits = slim.fully_connected(prelogits, len(train_set), activation_fn=None, scope='Logits', reuse=False)
+            phase_train=phase_train_placeholder, weight_decay=args.weight_decay)
+        with tf.variable_scope('Logits'):
+            n = int(prelogits.get_shape()[1])
+            m = len(train_set)
+            w = tf.get_variable('w', shape=[n,m], dtype=tf.float32, 
+                initializer=tf.truncated_normal_initializer(stddev=0.1), 
+                regularizer=slim.l2_regularizer(args.weight_decay),
+                trainable=True)
+            b = tf.get_variable('b', [m], initializer=None, trainable=True)
+            logits = tf.matmul(prelogits, w) + b
+
         embeddings = tf.nn.l2_normalize(prelogits, 1, 1e-10, name='embeddings')
         
         learning_rate = tf.train.exponential_decay(learning_rate_placeholder, global_step,
@@ -95,14 +104,15 @@ def main(args):
             learning_rate, args.moving_average_decay, tf.all_variables())
 
         # Create a saver
-        saver = tf.train.Saver(tf.all_variables(), max_to_keep=3)
+        save_variables = list(set(tf.trainable_variables())-set([w])-set([b]))
+        saver = tf.train.Saver(save_variables, max_to_keep=3)
 
         # Build the summary operation based on the TF collection of Summaries.
         summary_op = tf.merge_all_summaries()
 
         # Start running operations on the Graph.
         gpu_options = tf.GPUOptions(per_process_gpu_memory_fraction=args.gpu_memory_fraction)
-        sess = tf.Session(config=tf.ConfigProto(gpu_options=gpu_options))
+        sess = tf.Session(config=tf.ConfigProto(gpu_options=gpu_options, log_device_placement=False))
         sess.run(tf.initialize_all_variables())
         sess.run(tf.initialize_local_variables())
         summary_writer = tf.train.SummaryWriter(log_dir, sess.graph)
@@ -119,36 +129,38 @@ def main(args):
                 step = sess.run(global_step, feed_dict=None)
                 epoch = step // args.epoch_size
                 # Train for one epoch
-                step = train(args, sess, epoch, phase_train_placeholder, learning_rate_placeholder, global_step, 
-                    total_loss, train_op, summary_op, summary_writer, regularization_losses)
+                train(args, sess, epoch, phase_train_placeholder, learning_rate_placeholder, global_step, 
+                    total_loss, train_op, summary_op, summary_writer, regularization_losses, args.learning_rate_schedule_file)
 
+                # Evaluate on LFW
                 if args.lfw_dir:
+                    start_time = time.time()
                     _, _, accuracy, val, val_std, far = lfw.validate(sess, lfw_paths, actual_issame, args.seed, 
                         args.batch_size, image_batch, phase_train_placeholder, embeddings, nrof_folds=args.lfw_nrof_folds)
                     print('Accuracy: %1.3f+-%1.3f' % (np.mean(accuracy), np.std(accuracy)))
                     print('Validation rate: %2.5f+-%2.5f @ FAR=%2.5f' % (val, val_std, far))
+                    lfw_time = time.time() - start_time
                     # Add validation loss and accuracy to summary
                     summary = tf.Summary()
                     #pylint: disable=maybe-no-member
                     summary.value.add(tag='lfw/accuracy', simple_value=np.mean(accuracy))
                     summary.value.add(tag='lfw/val_rate', simple_value=val)
+                    summary.value.add(tag='time/lfw', simple_value=lfw_time)
                     summary_writer.add_summary(summary, step)
 
-                # Save the model checkpoint
-                print('Saving checkpoint')
-                checkpoint_path = os.path.join(model_dir, 'model.ckpt')
-                saver.save(sess, checkpoint_path, global_step=step)
+                # Save variables and the metagraph if it doesn't exist already
+                save_variables_and_metagraph(sess, saver, summary_writer, model_dir, step)
                 
     return model_dir
   
 def train(args, sess, epoch, phase_train_placeholder, learning_rate_placeholder, global_step, 
-      loss, train_op, summary_op, summary_writer, regularization_losses):
+      loss, train_op, summary_op, summary_writer, regularization_losses, learning_rate_schedule_file):
     batch_number = 0
     
     if args.learning_rate>0.0:
         lr = args.learning_rate
     else:
-        lr = facenet.get_learning_rate_from_file('../data/learning_rate_schedule.txt', epoch)
+        lr = facenet.get_learning_rate_from_file(learning_rate_schedule_file, epoch)
     while batch_number < args.epoch_size:
         # Perform training on the selected triplets
         train_time = 0
@@ -172,6 +184,29 @@ def train(args, sess, epoch, phase_train_placeholder, learning_rate_placeholder,
         summary.value.add(tag='time/total', simple_value=train_time)
         summary_writer.add_summary(summary, step)
     return step
+  
+def save_variables_and_metagraph(sess, saver, summary_writer, model_dir, step):
+    # Save the model checkpoint
+    print('Saving variables')
+    start_time = time.time()
+    checkpoint_path = os.path.join(model_dir, 'model.ckpt')
+    saver.save(sess, checkpoint_path, global_step=step, write_meta_graph=False)
+    save_time_variables = time.time() - start_time
+    print('Variables saved in %.2f seconds' % save_time_variables)
+    metagraph_filename = os.path.join(model_dir, 'model.meta')
+    save_time_metagraph = 0  
+    if not os.path.exists(metagraph_filename):
+        print('Saving metagraph')
+        start_time = time.time()
+        saver.export_meta_graph(metagraph_filename)
+        save_time_metagraph = time.time() - start_time
+        print('Metagraph saved in %.2f seconds' % save_time_metagraph)
+    summary = tf.Summary()
+    #pylint: disable=maybe-no-member
+    summary.value.add(tag='time/save_variables', simple_value=save_time_variables)
+    summary.value.add(tag='time/save_metagraph', simple_value=save_time_metagraph)
+    summary_writer.add_summary(summary, step)
+  
 
 def parse_arguments(argv):
     parser = argparse.ArgumentParser()
@@ -219,6 +254,10 @@ def parse_arguments(argv):
         help='Exponential decay for tracking of training parameters.', default=0.9999)
     parser.add_argument('--seed', type=int,
         help='Random seed.', default=666)
+    parser.add_argument('--nrof_preprocess_threads', type=int,
+        help='Number of preprocessing (data loading and augumentation) threads.', default=4)
+    parser.add_argument('--learning_rate_schedule_file', type=str,
+        help='File containing the learning rate schedule that is used when learning_rate is set to to -1.', default='../data/learning_rate_schedule.txt')
  
     # Parameters for validation on LFW
     parser.add_argument('--lfw_pairs', type=str,
