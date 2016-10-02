@@ -6,7 +6,7 @@ from __future__ import print_function
 import tensorflow as tf
 import models.network as network
 
-def inference(images, output_dim, keep_probability, phase_train=True, weight_decay=0.0):
+def inference(images, keep_probability, phase_train=True, weight_decay=0.0):
     """ Define an inference network for face recognition based 
            on inception modules using batch normalization
     
@@ -15,7 +15,6 @@ def inference(images, output_dim, keep_probability, phase_train=True, weight_dec
       phase_train: True if batch normalization should operate in training mode
     """
     endpoints = {}
-
     net = network.conv(images, 3, 64, 7, 7, 2, 2, 'SAME', 'conv1_7x7', phase_train=phase_train, use_batch_norm=True, weight_decay=weight_decay)
     endpoints['conv1'] = net
     net = network.mpool(net,  3, 3, 2, 2, 'SAME', 'pool1')
@@ -27,7 +26,7 @@ def inference(images, output_dim, keep_probability, phase_train=True, weight_dec
     net = network.mpool(net,  3, 3, 2, 2, 'SAME', 'pool3')
     endpoints['pool3'] = net
   
-    net = network.inception(net,    192, 1, 64, 96, 128, 16, 32, 3, 32, 1, 'MAX', 'incept3a', phase_train=phase_train, use_batch_norm=True, weight_decay=weight_decay)
+    net = network.inception(net, 192, 1, 64, 96, 128, 16, 32, 3, 32, 1, 'MAX', 'incept3a', phase_train=phase_train, use_batch_norm=True, weight_decay=weight_decay)
     endpoints['incept3a'] = net
     net = network.inception(net, 256, 1, 64, 96, 128, 32, 64, 3, 64, 1, 'MAX', 'incept3b', phase_train=phase_train, use_batch_norm=True, weight_decay=weight_decay)
     endpoints['incept3b'] = net
@@ -53,10 +52,7 @@ def inference(images, output_dim, keep_probability, phase_train=True, weight_dec
     endpoints['pool6'] = net
     net = tf.reshape(net, [-1, 1024])
     endpoints['prelogits'] = net
-    
-    net = network.affine(net, 1024, output_dim, 'fc7', weight_decay=weight_decay)
-    endpoints['fc7'] = net
-    logits = tf.nn.dropout(net, keep_probability)
+    net = tf.nn.dropout(net, keep_probability)
     endpoints['dropout'] = net
-  
-    return logits, endpoints
+    
+    return net, endpoints

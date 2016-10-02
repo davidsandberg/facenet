@@ -26,7 +26,7 @@ def inference(images, keep_probability, phase_train=True, weight_decay=0.0):
     net = network.mpool(net,  3, 3, 2, 2, 'SAME', 'pool3')
     endpoints['pool3'] = net
   
-    net = network.inception(net,    192, 1, 64, 96, 128, 16, 32, 3, 32, 1, 'MAX', 'incept3a', phase_train=phase_train, use_batch_norm=True, weight_decay=weight_decay)
+    net = network.inception(net, 192, 1, 64, 96, 128, 16, 32, 3, 32, 1, 'MAX', 'incept3a', phase_train=phase_train, use_batch_norm=True, weight_decay=weight_decay)
     endpoints['incept3a'] = net
     net = network.inception(net, 256, 1, 64, 96, 128, 32, 64, 3, 64, 1, 'MAX', 'incept3b', phase_train=phase_train, use_batch_norm=True, weight_decay=weight_decay)
     endpoints['incept3b'] = net

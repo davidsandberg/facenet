@@ -12,6 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 # ==============================================================================
+
 """Contains the definition of the Inception Resnet V2 architecture.
 As described in http://arxiv.org/abs/1602.07261.
   Inception-v4, Inception-ResNet and the Impact of Residual Connections
@@ -22,12 +23,11 @@ from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
 
-
 import tensorflow as tf
 
 slim = tf.contrib.slim
 
-
+# Inception-Renset-A
 def block35(net, scale=1.0, activation_fn=tf.nn.relu, scope=None, reuse=None):
     """Builds the 35x35 resnet block."""
     with tf.variable_scope(scope, 'Block35', [net], reuse=reuse):
@@ -48,7 +48,7 @@ def block35(net, scale=1.0, activation_fn=tf.nn.relu, scope=None, reuse=None):
             net = activation_fn(net)
     return net
 
-
+# Inception-Renset-B
 def block17(net, scale=1.0, activation_fn=tf.nn.relu, scope=None, reuse=None):
     """Builds the 17x17 resnet block."""
     with tf.variable_scope(scope, 'Block17', [net], reuse=reuse):
@@ -69,6 +69,7 @@ def block17(net, scale=1.0, activation_fn=tf.nn.relu, scope=None, reuse=None):
     return net
 
 
+# Inception-Resnet-C
 def block8(net, scale=1.0, activation_fn=tf.nn.relu, scope=None, reuse=None):
     """Builds the 8x8 resnet block."""
     with tf.variable_scope(scope, 'Block8', [net], reuse=reuse):
@@ -89,7 +90,7 @@ def block8(net, scale=1.0, activation_fn=tf.nn.relu, scope=None, reuse=None):
     return net
   
 #pylint: disable=unused-argument
-def inference(images, output_dim, keep_probability, phase_train=True, weight_decay=0.0):
+def inference(images, keep_probability, phase_train=True, weight_decay=0.0, reuse=None):
     batch_norm_params = {
         # Decay for the moving averages.
         'decay': 0.9997,
@@ -101,11 +102,11 @@ def inference(images, output_dim, keep_probability, phase_train=True, weight_dec
                         weights_regularizer=slim.l2_regularizer(weight_decay),
                         normalizer_fn=slim.batch_norm,
                         normalizer_params=batch_norm_params):
-        return inception_resnet_v2(images, num_classes=output_dim, is_training=phase_train,
-              dropout_keep_prob=keep_probability)
+        return inception_resnet_v2(images, is_training=phase_train,
+              dropout_keep_prob=keep_probability, reuse=reuse)
 
 
-def inception_resnet_v2(inputs, num_classes=1001, is_training=True,
+def inception_resnet_v2(inputs, is_training=True,
                         dropout_keep_prob=0.8,
                         reuse=None,
                         scope='InceptionResnetV2'):
@@ -203,18 +204,6 @@ def inception_resnet_v2(inputs, num_classes=1001, is_training=True,
                 end_points['Mixed_6a'] = net
                 net = slim.repeat(net, 20, block17, scale=0.10)
         
-                # Auxillary tower
-                with tf.variable_scope('AuxLogits'):
-                    aux = slim.avg_pool2d(net, 5, stride=3, padding='VALID',
-                                          scope='Conv2d_1a_3x3')
-                    aux = slim.conv2d(aux, 128, 1, scope='Conv2d_1b_1x1')
-                    aux = slim.conv2d(aux, 768, aux.get_shape()[1:3],
-                                      padding='VALID', scope='Conv2d_2a_5x5')
-                    aux = slim.flatten(aux)
-                    aux = slim.fully_connected(aux, num_classes, activation_fn=None,
-                                               scope='Logits')
-                    end_points['AuxLogits'] = aux
-        
                 with tf.variable_scope('Mixed_7a'):
                     with tf.variable_scope('Branch_0'):
                         tower_conv = slim.conv2d(net, 256, 1, scope='Conv2d_0a_1x1')
@@ -255,9 +244,5 @@ def inception_resnet_v2(inputs, num_classes=1001, is_training=True,
                                        scope='Dropout')
           
                     end_points['PreLogitsFlatten'] = net
-                    logits = slim.fully_connected(net, num_classes, activation_fn=None,
-                                                  scope='Logits')
-                    end_points['Logits'] = logits
-        #           end_points['Predictions'] = tf.nn.softmax(logits, name='Predictions')
   
-    return logits, end_points
+    return net, end_points
