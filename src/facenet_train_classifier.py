@@ -147,6 +147,8 @@ def main(args):
                     summary.value.add(tag='lfw/val_rate', simple_value=val)
                     summary.value.add(tag='time/lfw', simple_value=lfw_time)
                     summary_writer.add_summary(summary, step)
+                    with open(os.path.join(log_dir,'lfw_result.txt'),'at') as f:
+                        f.write('%d\t%.5f\t%.5f\n' % (step, np.mean(accuracy), val))
 
                 # Save variables and the metagraph if it doesn't exist already
                 save_variables_and_metagraph(sess, saver, summary_writer, model_dir, step)
