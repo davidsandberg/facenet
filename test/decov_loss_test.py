@@ -2,9 +2,9 @@ import unittest
 import tensorflow as tf
 import numpy as np
 import numpy.testing as testing
+import facenet
 
 class DecovLossTest(unittest.TestCase):
-
 
     def testDecovLoss(self):
         batch_size = 7
@@ -14,14 +14,7 @@ class DecovLossTest(unittest.TestCase):
         with tf.Graph().as_default():
         
             xs = tf.placeholder(tf.float32, shape=(batch_size, image_size, image_size, channels), name='input')
-            x = tf.reshape(xs, [batch_size, image_size*image_size*channels])
-            
-            m = tf.reduce_mean(x, 0, True)
-            z = tf.expand_dims(x-m, 2)
-            corr = tf.reduce_mean(tf.batch_matmul(z, tf.transpose(z, perm=[0,2,1])), 0)
-            corr_frob_sqr = tf.reduce_sum(tf.square(corr))
-            corr_diag_sqr = tf.reduce_sum(tf.square(tf.diag_part(corr)))
-            loss = 0.5*(corr_frob_sqr - corr_diag_sqr)
+            loss = facenet.decov_loss(xs)
       
             sess = tf.Session()
             with sess.as_default():

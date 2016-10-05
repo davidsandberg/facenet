@@ -83,6 +83,11 @@ def main(args):
             b = tf.get_variable('b', [m], initializer=None, trainable=True)
             logits = tf.matmul(prelogits, w) + b
 
+        # Add DeCov regularization loss
+        if args.decov_loss_factor>0.0:
+            logits_decov_loss = facenet.decov_loss(logits) * args.decov_loss_factor
+            tf.add_to_collection(tf.GraphKeys.REGULARIZATION_LOSSES, logits_decov_loss)
+
         embeddings = tf.nn.l2_normalize(prelogits, 1, 1e-10, name='embeddings')
         
         learning_rate = tf.train.exponential_decay(learning_rate_placeholder, global_step,
@@ -243,6 +248,8 @@ def parse_arguments(argv):
         help='Keep probability of dropout for the fully connected layer(s).', default=1.0)
     parser.add_argument('--weight_decay', type=float,
         help='L2 weight regularization.', default=0.0)
+    parser.add_argument('--decov_loss_factor', type=float,
+        help='DeCov loss factor.', default=0.0)
     parser.add_argument('--optimizer', type=str, choices=['ADAGRAD', 'ADADELTA', 'ADAM', 'RMSPROP', 'MOM'],
         help='The optimization algorithm to use', default='ADAGRAD')
     parser.add_argument('--learning_rate', type=float,
