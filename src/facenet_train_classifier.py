@@ -64,6 +64,9 @@ def main(args):
         print('Total number of classes: %d' % len(train_set))
         print('Total number of examples: %d' % len(image_list))
         
+        # Node for input images
+        image_batch = tf.identity(image_batch, name='input')
+        
         # Placeholder for the learning rate
         learning_rate_placeholder = tf.placeholder(tf.float32, name='learning_rate')
         
@@ -109,7 +112,7 @@ def main(args):
             learning_rate, args.moving_average_decay, tf.all_variables())
 
         # Create a saver
-        save_variables = list(set(tf.trainable_variables())-set([w])-set([b]))
+        save_variables = list(set(tf.all_variables())-set([w])-set([b]))
         saver = tf.train.Saver(save_variables, max_to_keep=3)
 
         # Build the summary operation based on the TF collection of Summaries.
@@ -156,7 +159,7 @@ def main(args):
                         f.write('%d\t%.5f\t%.5f\n' % (step, np.mean(accuracy), val))
 
                 # Save variables and the metagraph if it doesn't exist already
-                save_variables_and_metagraph(sess, saver, summary_writer, model_dir, step)
+                save_variables_and_metagraph(sess, saver, summary_writer, model_dir, subdir, step)
                 
     return model_dir
   
@@ -192,15 +195,15 @@ def train(args, sess, epoch, phase_train_placeholder, learning_rate_placeholder,
         summary_writer.add_summary(summary, step)
     return step
   
-def save_variables_and_metagraph(sess, saver, summary_writer, model_dir, step):
+def save_variables_and_metagraph(sess, saver, summary_writer, model_dir, model_name, step):
     # Save the model checkpoint
     print('Saving variables')
     start_time = time.time()
-    checkpoint_path = os.path.join(model_dir, 'model.ckpt')
+    checkpoint_path = os.path.join(model_dir, 'model-%s.ckpt' % model_name)
     saver.save(sess, checkpoint_path, global_step=step, write_meta_graph=False)
     save_time_variables = time.time() - start_time
     print('Variables saved in %.2f seconds' % save_time_variables)
-    metagraph_filename = os.path.join(model_dir, 'model.meta')
+    metagraph_filename = os.path.join(model_dir, 'model-%s.meta' % model_name)
     save_time_metagraph = 0  
     if not os.path.exists(metagraph_filename):
         print('Saving metagraph')
