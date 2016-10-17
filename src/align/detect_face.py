@@ -1,10 +1,332 @@
 """ Hej
 """
+
+from __future__ import absolute_import
+from __future__ import division
+from __future__ import print_function
+
 import numpy as np
-import cv2
+import tensorflow as tf
+#import cv2
 from math import floor
-#from scipy import misc
-import scipy.io as sio
+
+DEFAULT_PADDING = 'SAME'
+
+
+def layer(op):
+    '''Decorator for composable network layers.'''
+
+    def layer_decorated(self, *args, **kwargs):
+        # Automatically set a name if not provided.
+        name = kwargs.setdefault('name', self.get_unique_name(op.__name__))
+        # Figure out the layer inputs.
+        if len(self.terminals) == 0:
+            raise RuntimeError('No input variables found for layer %s.' % name)
+        elif len(self.terminals) == 1:
+            layer_input = self.terminals[0]
+        else:
+            layer_input = list(self.terminals)
+        # Perform the operation and get the output.
+        layer_output = op(self, layer_input, *args, **kwargs)
+        # Add to layer LUT.
+        self.layers[name] = layer_output
+        # This output is now the input for the next layer.
+        self.feed(layer_output)
+        # Return self for chained calls.
+        return self
+
+    return layer_decorated
+
+class Network(object):
+
+    def __init__(self, inputs, trainable=True):
+        # The input nodes for this network
+        self.inputs = inputs
+        # The current list of terminal nodes
+        self.terminals = []
+        # Mapping from layer names to layers
+        self.layers = dict(inputs)
+        # If true, the resulting variables are set as trainable
+        self.trainable = trainable
+        # Switch variable for dropout
+        self.use_dropout = tf.placeholder_with_default(tf.constant(1.0),
+                                                       shape=[],
+                                                       name='use_dropout')
+        self.setup()
+
+    def setup(self):
+        '''Construct the network. '''
+        raise NotImplementedError('Must be implemented by the subclass.')
+
+    def load(self, data_path, session, ignore_missing=False):
+        '''Load network weights.
+        data_path: The path to the numpy-serialized network weights
+        session: The current TensorFlow session
+        ignore_missing: If true, serialized weights for missing layers are ignored.
+        '''
+        data_dict = np.load(data_path).item() #pylint: disable=no-member
+        for op_name in data_dict:
+            with tf.variable_scope(op_name, reuse=True):
+                for param_name, data in data_dict[op_name].iteritems():
+                    try:
+                        var = tf.get_variable(param_name)
+                        session.run(var.assign(data))
+                    except ValueError:
+                        if not ignore_missing:
+                            raise
+
+    def feed(self, *args):
+        '''Set the input(s) for the next operation by replacing the terminal nodes.
+        The arguments can be either layer names or the actual layers.
+        '''
+        assert len(args) != 0
+        self.terminals = []
+        for fed_layer in args:
+            if isinstance(fed_layer, basestring):
+                try:
+                    fed_layer = self.layers[fed_layer]
+                except KeyError:
+                    raise KeyError('Unknown layer name fed: %s' % fed_layer)
+            self.terminals.append(fed_layer)
+        return self
+
+    def get_output(self):
+        '''Returns the current network output.'''
+        return self.terminals[-1]
+
+    def get_unique_name(self, prefix):
+        '''Returns an index-suffixed unique name for the given prefix.
+        This is used for auto-generating layer names based on the type-prefix.
+        '''
+        ident = sum(t.startswith(prefix) for t, _ in self.layers.items()) + 1
+        return '%s_%d' % (prefix, ident)
+
+    def make_var(self, name, shape):
+        '''Creates a new TensorFlow variable.'''
+        return tf.get_variable(name, shape, trainable=self.trainable)
+
+    def validate_padding(self, padding):
+        '''Verifies that the padding is one of the supported ones.'''
+        assert padding in ('SAME', 'VALID')
+
+    @layer
+    def conv(self,
+             inp,
+             k_h,
+             k_w,
+             c_o,
+             s_h,
+             s_w,
+             name,
+             relu=True,
+             padding=DEFAULT_PADDING,
+             group=1,
+             biased=True):
+        # Verify that the padding is acceptable
+        self.validate_padding(padding)
+        # Get the number of channels in the input
+        c_i = int(inp.get_shape()[-1])
+        # Verify that the grouping parameter is valid
+        assert c_i % group == 0
+        assert c_o % group == 0
+        # Convolution for a given input and kernel
+        convolve = lambda i, k: tf.nn.conv2d(i, k, [1, s_h, s_w, 1], padding=padding)
+        with tf.variable_scope(name) as scope:
+            kernel = self.make_var('weights', shape=[k_h, k_w, c_i / group, c_o])
+            if group == 1:
+                # This is the common-case. Convolve the input without any further complications.
+                output = convolve(inp, kernel)
+            else:
+                # Split the input into groups and then convolve each of them independently
+                input_groups = tf.split(3, group, inp)
+                kernel_groups = tf.split(3, group, kernel)
+                output_groups = [convolve(i, k) for i, k in zip(input_groups, kernel_groups)]
+                # Concatenate the groups
+                output = tf.concat(3, output_groups)
+            # Add the biases
+            if biased:
+                biases = self.make_var('biases', [c_o])
+                output = tf.nn.bias_add(output, biases)
+            if relu:
+                # ReLU non-linearity
+                output = tf.nn.relu(output, name=scope.name)
+            print('Conv: %s' % name)
+            return output
+
+    @layer
+    def relu(self, inp, name):
+        print('ReLU: %s' % name)
+        return tf.nn.relu(inp, name=name)
+
+    @layer
+    def prelu(self, inp, name):
+        print('PReLU: %s' % name)
+        with tf.variable_scope(name):
+            i = inp.get_shape().as_list()
+            alpha = self.make_var('alpha', shape=(i[-1]))
+            output = tf.nn.relu(inp) + tf.mul(alpha, -tf.nn.relu(-inp))
+        return output
+
+    @layer
+    def max_pool(self, inp, k_h, k_w, s_h, s_w, name, padding=DEFAULT_PADDING):
+        self.validate_padding(padding)
+        print('MaxPool: %s' % name)
+        return tf.nn.max_pool(inp,
+                              ksize=[1, k_h, k_w, 1],
+                              strides=[1, s_h, s_w, 1],
+                              padding=padding,
+                              name=name)
+
+    @layer
+    def avg_pool(self, inp, k_h, k_w, s_h, s_w, name, padding=DEFAULT_PADDING):
+        print('AvgPool: %s' % name)
+        self.validate_padding(padding)
+        return tf.nn.avg_pool(inp,
+                              ksize=[1, k_h, k_w, 1],
+                              strides=[1, s_h, s_w, 1],
+                              padding=padding,
+                              name=name)
+
+    @layer
+    def lrn(self, inp, radius, alpha, beta, name, bias=1.0):
+        return tf.nn.local_response_normalization(inp,
+                                                  depth_radius=radius,
+                                                  alpha=alpha,
+                                                  beta=beta,
+                                                  bias=bias,
+                                                  name=name)
+
+    @layer
+    def concat(self, inputs, axis, name):
+        return tf.concat(concat_dim=axis, values=inputs, name=name)
+
+    @layer
+    def add(self, inputs, name):
+        return tf.add_n(inputs, name=name)
+
+    @layer
+    def fc(self, inp, num_out, name, relu=True):
+        print('Fc: %s' % name)
+        with tf.variable_scope(name) as scope:
+            input_shape = inp.get_shape()
+            if input_shape.ndims == 4:
+                # The input is spatial. Vectorize it first.
+                dim = 1
+                for d in input_shape[1:].as_list():
+                    dim *= d
+                feed_in = tf.reshape(inp, [-1, dim])
+            else:
+                feed_in, dim = (inp, input_shape[-1].value)
+            weights = self.make_var('weights', shape=[dim, num_out])
+            biases = self.make_var('biases', [num_out])
+            op = tf.nn.relu_layer if relu else tf.nn.xw_plus_b
+            fc = op(feed_in, weights, biases, name=scope.name)
+            return fc
+
+
+    """
+    Multi dimensional softmax,
+    refer to https://github.com/tensorflow/tensorflow/issues/210
+    compute softmax along the dimension of target
+    the native softmax only supports batch_size x dimension
+    """
+    @layer
+    def softmax(self, target, axis, name=None):
+        print('Softmax: %s' % name)
+        max_axis = tf.reduce_max(target, axis, keep_dims=True)
+        target_exp = tf.exp(target-max_axis)
+        normalize = tf.reduce_sum(target_exp, axis, keep_dims=True)
+        softmax = tf.div(target_exp, normalize, name)
+        return softmax
+    
+    @layer
+    def batch_normalization(self, inp, name, scale_offset=True, relu=False):
+        # NOTE: Currently, only inference is supported
+        with tf.variable_scope(name):
+            shape = [inp.get_shape()[-1]]
+            if scale_offset:
+                scale = self.make_var('scale', shape=shape)
+                offset = self.make_var('offset', shape=shape)
+            else:
+                scale, offset = (None, None)
+            output = tf.nn.batch_normalization(
+                inp,
+                mean=self.make_var('mean', shape=shape),
+                variance=self.make_var('variance', shape=shape),
+                offset=offset,
+                scale=scale,
+                # Get the actual eps from parameters
+                variance_epsilon=1e-5,
+                name=name)
+            if relu:
+                output = tf.nn.relu(output)
+            return output
+
+    @layer
+    def dropout(self, inp, keep_prob, name):
+        keep = 1 - self.use_dropout + (self.use_dropout * keep_prob)
+        return tf.nn.dropout(inp, keep, name=name)
+
+
+class PNet(Network):
+    def setup(self):
+        (self.feed('data') #pylint: disable=no-value-for-parameter, no-member
+             .conv(3, 3, 10, 1, 1, padding='VALID', relu=False, name='conv1')
+             .prelu(name='PReLU1')
+             .max_pool(2, 2, 2, 2, name='pool1')
+             .conv(3, 3, 16, 1, 1, padding='VALID', relu=False, name='conv2')
+             .prelu(name='PReLU2')
+             .conv(3, 3, 32, 1, 1, padding='VALID', relu=False, name='conv3')
+             .prelu(name='PReLU3')
+             .conv(1, 1, 2, 1, 1, relu=False, name='conv4-1')
+             .softmax(3,name='prob1'))
+
+        (self.feed('PReLU3') #pylint: disable=no-value-for-parameter
+             .conv(1, 1, 4, 1, 1, relu=False, name='conv4-2'))
+        
+class RNet(Network):
+    def setup(self):
+        (self.feed('data') #pylint: disable=no-value-for-parameter, no-member
+             .conv(3, 3, 28, 1, 1, padding='VALID', relu=False, name='conv1')
+             .prelu(name='prelu1')
+             .max_pool(3, 3, 2, 2, name='pool1')
+             .conv(3, 3, 48, 1, 1, padding='VALID', relu=False, name='conv2')
+             .prelu(name='prelu2')
+             .max_pool(3, 3, 2, 2, padding='VALID', name='pool2')
+             .conv(2, 2, 64, 1, 1, padding='VALID', relu=False, name='conv3')
+             .prelu(name='prelu3')
+             .fc(128, relu=False, name='conv4')
+             .prelu(name='prelu4')
+             .fc(2, relu=False, name='conv5-1')
+             .softmax(1,name='prob1'))
+
+        (self.feed('prelu4') #pylint: disable=no-value-for-parameter
+             .fc(4, relu=False, name='conv5-2'))
+
+class ONet(Network):
+    def setup(self):
+        (self.feed('data') #pylint: disable=no-value-for-parameter, no-member
+             .conv(3, 3, 32, 1, 1, padding='VALID', relu=False, name='conv1')
+             .prelu(name='prelu1')
+             .max_pool(3, 3, 2, 2, name='pool1')
+             .conv(3, 3, 64, 1, 1, padding='VALID', relu=False, name='conv2')
+             .prelu(name='prelu2')
+             .max_pool(3, 3, 2, 2, padding='VALID', name='pool2')
+             .conv(3, 3, 64, 1, 1, padding='VALID', relu=False, name='conv3')
+             .prelu(name='prelu3')
+             .max_pool(2, 2, 2, 2, name='pool3')
+             .conv(2, 2, 128, 1, 1, padding='VALID', relu=False, name='conv4')
+             .prelu(name='prelu4')
+             .fc(256, relu=False, name='conv5')
+             .prelu(name='prelu5')
+             .fc(2, relu=False, name='conv6-1')
+             .softmax(1, name='prob1'))
+
+        (self.feed('prelu5') #pylint: disable=no-value-for-parameter
+             .fc(4, relu=False, name='conv6-2'))
+
+        (self.feed('prelu5') #pylint: disable=no-value-for-parameter
+             .fc(10, relu=False, name='conv6-3'))
 
 def detect_face(img, minsize, pnet, rnet, onet, threshold, factor):
     # im: input image
@@ -57,7 +379,7 @@ def detect_face(img, minsize, pnet, rnet, onet, threshold, factor):
         #out1 = out[1]
         
         #boxes=generateBoundingBox(out{2}(:,:,2), out{1}, scale, threshold[0]);
-        boxes, reg = generateBoundingBox(out1[0,:,:,1].copy(), out0[0,:,:,:].copy(), scale, threshold[0])
+        boxes, _ = generateBoundingBox(out1[0,:,:,1].copy(), out0[0,:,:,:].copy(), scale, threshold[0])
         
         # inter-scale nms
         pick = nms(boxes.copy(), 0.5, 'Union')
@@ -163,17 +485,17 @@ def bbreg(boundingbox,reg):
     boundingbox[:,0:4] = np.transpose(np.vstack([b1, b2, b3, b4 ])) # boundingbox(:,1:4)=[boundingbox(:,1)+reg(:,1).*w boundingbox(:,2)+reg(:,2).*h boundingbox(:,3)+reg(:,3).*w boundingbox(:,4)+reg(:,4).*h];
     return boundingbox
  
-def generateBoundingBox(map, reg, scale, t):
+def generateBoundingBox(imap, reg, scale, t):
     # use heatmap to generate bounding boxes
     stride=2
     cellsize=12
 
-    map = np.transpose(map)  #     map=map';
+    imap = np.transpose(imap)  #     map=map';
     dx1 = np.transpose(reg[:,:,0]) # dx1=reg(:,:,1)';
     dy1 = np.transpose(reg[:,:,1]) # dy1=reg(:,:,2)';
     dx2 = np.transpose(reg[:,:,2]) # dx2=reg(:,:,3)';
     dy2 = np.transpose(reg[:,:,3]) # dy2=reg(:,:,4)';
-    y, x = np.where(map > t)  # [y x]=find(map>=t);
+    y, x = np.where(imap > t)  # [y x]=find(map>=t);
     if y.shape[0]==1:  # if size(y,1)==1
       # *** not checked ***
 #         y=y';x=x';score=map(a)';dx1=dx1';dy1=dy1';dx2=dx2';dy2=dy2';
@@ -183,9 +505,9 @@ def generateBoundingBox(map, reg, scale, t):
         dy1 = np.transpose(dy1)
         dx2 = np.transpose(dx2)
         dy2 = np.transpose(dy2)
-        score = map[(y,x)]
+        score = imap[(y,x)]
     else:
-        score = map[(y,x)]
+        score = imap[(y,x)]
 
     reg = np.transpose(np.vstack([ dx1[(y,x)], dy1[(y,x)], dx2[(y,x)], dy2[(y,x)] ]))  #     reg=[dx1(a) dy1(a) dx2(a) dy2(a)];
     if reg.size==0:   #     if isempty(reg)
@@ -198,7 +520,7 @@ def generateBoundingBox(map, reg, scale, t):
     return boundingbox, reg
  
 # function pick = nms(boxes,threshold,type)
-def nms(boxes,threshold,type):
+def nms(boxes, threshold, method):
     if boxes.size==0:  # if isempty(boxes)
         return np.empty((0,3))   ###### check dimension  #######
     x1 = boxes[:,0]
@@ -224,7 +546,7 @@ def nms(boxes,threshold,type):
         w = np.maximum(0.0, xx2-xx1+1)   # w = max(0.0, xx2-xx1+1);
         h = np.maximum(0.0, yy2-yy1+1)   # h = max(0.0, yy2-yy1+1); 
         inter = w * h #     inter = w.*h;
-        if type is 'Min':  #     if strcmp(type,'Min')
+        if method is 'Min':  #     if strcmp(type,'Min')
             o = inter / np.minimum(area[i], area[idx])  # o = inter ./ min(area(i),area(I(1:last-1)));
         else:
             o = inter / (area[i] + area[idx] - inter)   # o = inter ./ (area(i) + area(I(1:last-1)) - inter);
@@ -279,6 +601,7 @@ def rerec(bboxA):
     bboxA[:,2:4] = bboxA[:,0:2] + np.transpose(np.tile(l,(2,1))) # bboxA(:,3:4)=bboxA(:,1:2)+repmat(l,[1 2]);
     return bboxA
 
+#pylint: disable=unused-argument
 def imResample2(img, sz, method):
     h=img.shape[0]
     w=img.shape[1]
@@ -291,3 +614,5 @@ def imResample2(img, sz, method):
             for a3 in range(0,3):
                 im_data[a1,a2,a3] = img[floor(a1*dy),floor(a2*dx),a3]
     return im_data
+
+

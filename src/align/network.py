@@ -56,7 +56,7 @@ class Network(object):
         session: The current TensorFlow session
         ignore_missing: If true, serialized weights for missing layers are ignored.
         '''
-        data_dict = np.load(data_path).item()
+        data_dict = np.load(data_path).item() #pylint: disable=no-member
         for op_name in data_dict:
             with tf.variable_scope(op_name, reuse=True):
                 for param_name, data in data_dict[op_name].iteritems():
@@ -103,7 +103,7 @@ class Network(object):
 
     @layer
     def conv(self,
-             input,
+             inp,
              k_h,
              k_w,
              c_o,
@@ -117,7 +117,7 @@ class Network(object):
         # Verify that the padding is acceptable
         self.validate_padding(padding)
         # Get the number of channels in the input
-        c_i = input.get_shape()[-1]
+        c_i = inp.get_shape()[-1]
         # Verify that the grouping parameter is valid
         assert c_i % group == 0
         assert c_o % group == 0
@@ -127,10 +127,10 @@ class Network(object):
             kernel = self.make_var('weights', shape=[k_h, k_w, c_i / group, c_o])
             if group == 1:
                 # This is the common-case. Convolve the input without any further complications.
-                output = convolve(input, kernel)
+                output = convolve(inp, kernel)
             else:
                 # Split the input into groups and then convolve each of them independently
-                input_groups = tf.split(3, group, input)
+                input_groups = tf.split(3, group, inp)
                 kernel_groups = tf.split(3, group, kernel)
                 output_groups = [convolve(i, k) for i, k in zip(input_groups, kernel_groups)]
                 # Concatenate the groups
@@ -146,52 +146,42 @@ class Network(object):
             return output
 
     @layer
-    def relu(self, input, name):
+    def relu(self, inp, name):
         print('ReLU: %s' % name)
-        return tf.nn.relu(input, name=name)
+        return tf.nn.relu(inp, name=name)
 
     @layer
-    def prelu(self, input, name):
+    def prelu(self, inp, name):
         print('PReLU: %s' % name)
         with tf.variable_scope(name):
-            i = input.get_shape().as_list()
+            i = inp.get_shape().as_list()
             alpha = self.make_var('alpha', shape=(i[-1]))
-            output = tf.nn.relu(input) + tf.mul(alpha, -tf.nn.relu(-input))
+            output = tf.nn.relu(inp) + tf.mul(alpha, -tf.nn.relu(-input))
         return output
 
-# This PReLU layer worked well for PNet when all tensors where 4D
-#     @layer
-#     def prelu(self, input, name):
-#         with tf.variable_scope(name):
-#             i = input.get_shape()
-#             alpha = self.make_var('alpha', shape=(i[3]))
-#             output = tf.nn.relu(input) + tf.mul(tf.ones((i[0],i[1],i[2],1)) * alpha, -tf.nn.relu(-input))
-#         print('PReLU')
-#         return output
-
     @layer
-    def max_pool(self, input, k_h, k_w, s_h, s_w, name, padding=DEFAULT_PADDING):
+    def max_pool(self, inp, k_h, k_w, s_h, s_w, name, padding=DEFAULT_PADDING):
         self.validate_padding(padding)
         print('MaxPool: %s' % name)
-        return tf.nn.max_pool(input,
+        return tf.nn.max_pool(inp,
                               ksize=[1, k_h, k_w, 1],
                               strides=[1, s_h, s_w, 1],
                               padding=padding,
                               name=name)
 
     @layer
-    def avg_pool(self, input, k_h, k_w, s_h, s_w, name, padding=DEFAULT_PADDING):
+    def avg_pool(self, inp, k_h, k_w, s_h, s_w, name, padding=DEFAULT_PADDING):
         print('AvgPool: %s' % name)
         self.validate_padding(padding)
-        return tf.nn.avg_pool(input,
+        return tf.nn.avg_pool(inp,
                               ksize=[1, k_h, k_w, 1],
                               strides=[1, s_h, s_w, 1],
                               padding=padding,
                               name=name)
 
     @layer
-    def lrn(self, input, radius, alpha, beta, name, bias=1.0):
-        return tf.nn.local_response_normalization(input,
+    def lrn(self, inp, radius, alpha, beta, name, bias=1.0):
+        return tf.nn.local_response_normalization(inp,
                                                   depth_radius=radius,
                                                   alpha=alpha,
                                                   beta=beta,
@@ -207,18 +197,18 @@ class Network(object):
         return tf.add_n(inputs, name=name)
 
     @layer
-    def fc(self, input, num_out, name, relu=True):
+    def fc(self, inp, num_out, name, relu=True):
         print('Fc: %s' % name)
         with tf.variable_scope(name) as scope:
-            input_shape = input.get_shape()
+            input_shape = inp.get_shape()
             if input_shape.ndims == 4:
                 # The input is spatial. Vectorize it first.
                 dim = 1
                 for d in input_shape[1:].as_list():
                     dim *= d
-                feed_in = tf.reshape(input, [-1, dim])
+                feed_in = tf.reshape(inp, [-1, dim])
             else:
-                feed_in, dim = (input, input_shape[-1].value)
+                feed_in, dim = (inp, input_shape[-1].value)
             weights = self.make_var('weights', shape=[dim, num_out])
             biases = self.make_var('biases', [num_out])
             op = tf.nn.relu_layer if relu else tf.nn.xw_plus_b
@@ -241,41 +231,22 @@ class Network(object):
         softmax = tf.div(target_exp, normalize, name)
         return softmax
     
-#     @layer
-#     def softmax(self, input, name):
-#         input_shape = map(lambda v: v.value, input.get_shape())
-# #         if len(input_shape) > 2:
-# #             # For certain models (like NiN), the singleton spatial dimensions
-# #             # need to be explicitly squeezed, since they're not broadcast-able
-# #             # in TensorFlow's NHWC ordering (unlike Caffe's NCHW).
-# #             if input_shape[1] == 1 and input_shape[2] == 1:
-# #                 input = tf.squeeze(input, squeeze_dims=[1, 2])
-# #             else:
-# #                 raise ValueError('Rank 2 tensor input expected for softmax!')
-#         print('SoftMax')
-#         x1 = tf.reshape(input, (input_shape[0], input_shape[1]*input_shape[2]*input_shape[3]))
-#         x2 = tf.nn.softmax(x1, dim=-1)
-#         x3 = tf.reshape(x2, input_shape, name)
-#         return x3
-#         #return tf.nn.softmax(input, name)
-
     @layer
-    def batch_normalization(self, input, name, scale_offset=True, relu=False):
+    def batch_normalization(self, inp, name, scale_offset=True, relu=False):
         # NOTE: Currently, only inference is supported
-        with tf.variable_scope(name) as scope:
-            shape = [input.get_shape()[-1]]
+        with tf.variable_scope(name):
+            shape = [inp.get_shape()[-1]]
             if scale_offset:
                 scale = self.make_var('scale', shape=shape)
                 offset = self.make_var('offset', shape=shape)
             else:
                 scale, offset = (None, None)
             output = tf.nn.batch_normalization(
-                input,
+                inp,
                 mean=self.make_var('mean', shape=shape),
                 variance=self.make_var('variance', shape=shape),
                 offset=offset,
                 scale=scale,
-                # TODO: This is the default Caffe batch norm eps
                 # Get the actual eps from parameters
                 variance_epsilon=1e-5,
                 name=name)
@@ -284,6 +255,6 @@ class Network(object):
             return output
 
     @layer
-    def dropout(self, input, keep_prob, name):
+    def dropout(self, inp, keep_prob, name):
         keep = 1 - self.use_dropout + (self.use_dropout * keep_prob)
-        return tf.nn.dropout(input, keep, name=name)
+        return tf.nn.dropout(inp, keep, name=name)
