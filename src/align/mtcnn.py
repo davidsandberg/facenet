@@ -8,11 +8,12 @@ from scipy import misc
 
 g1 = tf.Graph()
 with g1.as_default():
-    data = tf.placeholder(tf.float32, (None,None,None,3), 'input')
-    pnet = src.align.detect_face.PNet({'data':data})
-    sess1 = tf.Session(graph=g1)
-    pnet.load('../../data/det1.npy', sess1)
-    pnet_fun = lambda img : sess1.run(('conv4-2/BiasAdd:0', 'prob1:0'), feed_dict={'input:0':img})
+    with tf.name_scope('pnet') as scope:
+        data = tf.placeholder(tf.float32, (None,None,None,3), 'input')
+        pnet = src.align.detect_face.PNet({'data':data})
+        sess1 = tf.Session(graph=g1)
+        pnet.load('../../data/det1.npy', sess1)
+    pnet_fun = lambda img : sess1.run(('pnet/conv4-2/BiasAdd:0', 'pnet/prob1:0'), feed_dict={'pnet/input:0':img})
 
 g2 = tf.Graph()
 with g2.as_default():
