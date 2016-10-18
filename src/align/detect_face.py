@@ -220,7 +220,6 @@ class Network(object):
             weights = self.make_var('weights', shape=[dim, num_out])
             biases = self.make_var('biases', [num_out])
             op = tf.nn.relu_layer if relu else tf.nn.xw_plus_b
-            #fc = op(feed_in, weights, biases, name=scope.name)
             fc = op(feed_in, weights, biases, name=name)
             return fc
 
@@ -401,7 +400,7 @@ def detect_face(img, minsize, pnet, rnet, onet, threshold, factor):
         qq4 = total_boxes[:,3]+total_boxes[:,8]*regh
         total_boxes = np.transpose(np.vstack([qq1, qq2, qq3, qq4, total_boxes[:,4]]))
         total_boxes = rerec(total_boxes.copy()) # total_boxes=rerec(total_boxes);
-        total_boxes[:,0:4] = np.fix(total_boxes[:,0:4])  # total_boxes(:,1:4)=fix(total_boxes(:,1:4));
+        total_boxes[:,0:4] = np.fix(total_boxes[:,0:4]).astype(np.int32)  # total_boxes(:,1:4)=fix(total_boxes(:,1:4));
         dy, edy, dx, edx, y, ey, x, ex, tmpw, tmph = pad(total_boxes.copy(), w, h)
 
     numbox = total_boxes.shape[0] # numbox=size(total_boxes,1);
@@ -409,7 +408,7 @@ def detect_face(img, minsize, pnet, rnet, onet, threshold, factor):
         # second stage
         tempimg = np.zeros((24,24,3,numbox)) # tempimg=zeros(24,24,3,numbox);
         for k in range(0,numbox):  # for k=1:numbox
-            tmp = np.zeros((tmph[k],tmpw[k],3))  #       tmp=zeros(tmph(k),tmpw(k),3);
+            tmp = np.zeros((int(tmph[k]),int(tmpw[k]),3))  #       tmp=zeros(tmph(k),tmpw(k),3);
             tmp[dy[k]-1:edy[k],dx[k]-1:edx[k],:] = img[y[k]-1:ey[k],x[k]-1:ex[k],:]  # tmp(dy(k):edy(k),dx(k):edx(k),:)=img(y(k):ey(k),x(k):ex(k),:);
             if tmp.shape[0]>0 and tmp.shape[1]>0 or tmp.shape[0]==0 and tmp.shape[1]==0:  # if size(tmp,1)>0 && size(tmp,2)>0 || size(tmp,1)==0 && size(tmp,2)==0
                 tempimg[:,:,:,k] = imResample2(tmp, (24, 24), 'bilinear')  #                 tempimg(:,:,:,k)=imResample(tmp,[24 24],'bilinear');
@@ -435,11 +434,11 @@ def detect_face(img, minsize, pnet, rnet, onet, threshold, factor):
     numbox = total_boxes.shape[0]  #     numbox=size(total_boxes,1);
     if numbox>0:
         # third stage
-        total_boxes=np.fix(total_boxes)  # total_boxes=fix(total_boxes);
+        total_boxes = np.fix(total_boxes).astype(np.int32)  # total_boxes=fix(total_boxes);
         dy, edy, dx, edx, y, ey, x, ex, tmpw, tmph = pad(total_boxes.copy(), w, h) # [dy edy dx edx y ey x ex tmpw tmph]=pad(total_boxes,w,h);
         tempimg = np.zeros((48,48,3,numbox))  # tempimg=zeros(48,48,3,numbox);
         for k in range(0,numbox):  # for k=1:numbox
-            tmp = np.zeros((tmph[k],tmpw[k],3))#         tmp=zeros(tmph(k),tmpw(k),3);
+            tmp = np.zeros((int(tmph[k]),int(tmpw[k]),3))#         tmp=zeros(tmph(k),tmpw(k),3);
             tmp[dy[k]-1:edy[k],dx[k]-1:edx[k],:] = img[y[k]-1:ey[k],x[k]-1:ex[k],:]          # tmp(dy(k):edy(k),dx(k):edx(k),:)=img(y(k):ey(k),x(k):ex(k),:);
             if tmp.shape[0]>0 and tmp.shape[1]>0 or tmp.shape[0]==0 and tmp.shape[1]==0:  # if size(tmp,1)>0 && size(tmp,2)>0 || size(tmp,1)==0 && size(tmp,2)==0
                 tempimg[:,:,:,k] = imResample2(tmp, (48, 48), 'bilinear')  # tempimg(:,:,:,k)=imResample(tmp,[48 48],'bilinear');
@@ -558,19 +557,19 @@ def nms(boxes, threshold, method):
 # function [dy edy dx edx y ey x ex tmpw tmph] = pad(total_boxes,w,h)
 def pad(total_boxes, w, h):
     # compute the padding coordinates (pad the bounding boxes to square)
-    tmpw = total_boxes[:,2]-total_boxes[:,0]+1  # tmpw=total_boxes(:,3)-total_boxes(:,1)+1;
-    tmph = total_boxes[:,3]-total_boxes[:,1]+1 # tmph=total_boxes(:,4)-total_boxes(:,2)+1;
-    numbox=total_boxes.shape[0]
+    tmpw = (total_boxes[:,2]-total_boxes[:,0]+1).astype(np.int32)  # tmpw=total_boxes(:,3)-total_boxes(:,1)+1;
+    tmph = (total_boxes[:,3]-total_boxes[:,1]+1).astype(np.int32) # tmph=total_boxes(:,4)-total_boxes(:,2)+1;
+    numbox = total_boxes.shape[0]
 
-    dx = np.ones((numbox,1))   # dx=ones(numbox,1);
-    dy = np.ones((numbox,1))   # dy=ones(numbox,1);
-    edx=tmpw.copy()
-    edy=tmph.copy()
+    dx = np.ones((numbox), dtype=np.int32)   # dx=ones(numbox,1);
+    dy = np.ones((numbox), dtype=np.int32)   # dy=ones(numbox,1);
+    edx = tmpw.copy().astype(np.int32)
+    edy = tmph.copy().astype(np.int32)
 
-    x = total_boxes[:,0].copy()  # x=total_boxes(:,1);
-    y = total_boxes[:,1].copy()  # y=total_boxes(:,2);
-    ex = total_boxes[:,2].copy() # ex=total_boxes(:,3);
-    ey = total_boxes[:,3].copy()  # ey=total_boxes(:,4);    
+    x = total_boxes[:,0].copy().astype(np.int32)  # x=total_boxes(:,1);
+    y = total_boxes[:,1].copy().astype(np.int32)  # y=total_boxes(:,2);
+    ex = total_boxes[:,2].copy().astype(np.int32) # ex=total_boxes(:,3);
+    ey = total_boxes[:,3].copy().astype(np.int32)  # ey=total_boxes(:,4);    
 
     tmp = np.where(ex>w)  #   tmp=find(ex>w);
     edx[tmp] = np.expand_dims(-ex[tmp]+w+tmpw[tmp],1)  # edx(tmp)=-ex(tmp)+w+tmpw(tmp);ex(tmp)=w;
@@ -613,7 +612,7 @@ def imResample2(img, sz, method):
     for a1 in range(0,hs):
         for a2 in range(0,ws):
             for a3 in range(0,3):
-                im_data[a1,a2,a3] = img[floor(a1*dy),floor(a2*dx),a3]
+                im_data[a1,a2,a3] = img[int(floor(a1*dy)),int(floor(a2*dx)),a3]
     return im_data
 
 
