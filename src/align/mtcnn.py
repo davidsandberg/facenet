@@ -23,15 +23,9 @@ with tf.Graph().as_default():
             onet = src.align.detect_face.ONet({'data':data})
             onet.load('../../data/det3.npy', sess)
             
-#         for op in tf.get_default_graph().get_operations():
-#             print(op.name)
-
-    
         pnet_fun = lambda img : sess.run(('pnet/conv4-2/BiasAdd:0', 'pnet/prob1:0'), feed_dict={'pnet/input:0':img})
-        #rnet_fun = lambda img : sess1.run(('rnet/conv5-2/conv5-2:0', 'rnet/prob1:0'), feed_dict={'rnet/input:0':img})
-        rnet_fun = lambda img : sess.run(('rnet/conv5-2/rnet/conv5-2:0', 'rnet/prob1:0'), feed_dict={'rnet/input:0':img})
-        #onet_fun = lambda img : sess1.run(('onet/conv6-2/conv6-2:0', 'onet/conv6-3/conv6-3:0', 'onet/prob1:0'), feed_dict={'onet/input:0':img})
-        onet_fun = lambda img : sess.run(('onet/conv6-2/onet/conv6-2:0', 'onet/conv6-3/onet/conv6-3:0', 'onet/prob1:0'), feed_dict={'onet/input:0':img})
+        rnet_fun = lambda img : sess.run(('rnet/conv5-2/conv5-2:0', 'rnet/prob1:0'), feed_dict={'rnet/input:0':img})
+        onet_fun = lambda img : sess.run(('onet/conv6-2/conv6-2:0', 'onet/conv6-3/conv6-3:0', 'onet/prob1:0'), feed_dict={'onet/input:0':img})
 
 minsize = 20 # minimum size of face
 threshold = [ 0.6, 0.7, 0.7 ]  # three steps's threshold

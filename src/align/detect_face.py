@@ -207,7 +207,7 @@ class Network(object):
     @layer
     def fc(self, inp, num_out, name, relu=True):
         print('Fc: %s' % name)
-        with tf.variable_scope(name) as scope:
+        with tf.variable_scope(name):
             input_shape = inp.get_shape()
             if input_shape.ndims == 4:
                 # The input is spatial. Vectorize it first.
@@ -220,7 +220,8 @@ class Network(object):
             weights = self.make_var('weights', shape=[dim, num_out])
             biases = self.make_var('biases', [num_out])
             op = tf.nn.relu_layer if relu else tf.nn.xw_plus_b
-            fc = op(feed_in, weights, biases, name=scope.name)
+            #fc = op(feed_in, weights, biases, name=scope.name)
+            fc = op(feed_in, weights, biases, name=name)
             return fc
 
 
