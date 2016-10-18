@@ -383,8 +383,8 @@ def detect_face(img, minsize, pnet, rnet, onet, threshold, factor):
         
         # inter-scale nms
         pick = nms(boxes.copy(), 0.5, 'Union')
-        boxes = boxes[pick,:]  # boxes=boxes(pick,:);
-        if boxes.size>0: # if ~isempty(boxes)
+        if boxes.size>0 and pick.size>0: # if ~isempty(boxes)
+            boxes = boxes[pick,:]  # boxes=boxes(pick,:);
             total_boxes = np.append(total_boxes, boxes, axis=0)  # total_boxes=[total_boxes;boxes];
 
     numbox = total_boxes.shape[0]  # numbox=size(total_boxes,1);
