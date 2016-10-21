@@ -9,6 +9,7 @@ import numpy as np
 import tensorflow as tf
 #import cv2
 from math import floor
+import scipy.io as io
 
 DEFAULT_PADDING = 'SAME'
 
@@ -359,11 +360,7 @@ def detect_face(img, minsize, pnet, rnet, onet, threshold, factor):
         scale=scales[j]
         hs=int(np.ceil(h*scale))
         ws=int(np.ceil(w*scale))
-        #im_data=(imResample(img,[hs ws],'bilinear')-127.5)*0.0078125;
-        #im_data = (misc.imresize(img, (hs, ws), interp='bilinear')-127.5)*0.0078125
-        #im_data = (cv2.resize(img, (hs, ws), interpolation=cv2.INTER_LINEAR)-127.5)*0.0078125
-        #im_data = (cv2.resize(img, (hs, ws), interpolation=cv2.INTER_NEAREST)-127.5)*0.0078125
-        #im_data = (img[0:hs,0:ws,:]-127.5)*0.0078125
+        #im_data = misc.imresize(img, (hs, ws), interp='bilinear')
         im_data = imResample2(img, (hs, ws), 'bilinear')
         im_data = (im_data-127.5)*0.0078125
         
@@ -374,9 +371,7 @@ def detect_face(img, minsize, pnet, rnet, onet, threshold, factor):
         img_y = np.transpose(img_x, (0,2,1,3))
         out = pnet(img_y)
         out0 = np.transpose(out[0], (0,2,1,3))
-        #out0 = out[0]
         out1 = np.transpose(out[1], (0,2,1,3))
-        #out1 = out[1]
         
         #boxes=generateBoundingBox(out{2}(:,:,2), out{1}, scale, threshold[0]);
         boxes, _ = generateBoundingBox(out1[0,:,:,1].copy(), out0[0,:,:,:].copy(), scale, threshold[0])
@@ -386,6 +381,11 @@ def detect_face(img, minsize, pnet, rnet, onet, threshold, factor):
         if boxes.size>0 and pick.size>0: # if ~isempty(boxes)
             boxes = boxes[pick,:]  # boxes=boxes(pick,:);
             total_boxes = np.append(total_boxes, boxes, axis=0)  # total_boxes=[total_boxes;boxes];
+# qqq1 = io.loadmat('test1.mat')
+# np.sum(abs(out1-qqq1['out1_save'][0][0]))/np.sum(abs(out1))
+# np.where(abs(boxes-qqq1['boxes_save'][0][0])>1)
+# np.sum(abs(boxes-qqq1['boxes_gbb_save'][0][0]))/np.sum(abs(boxes)) -> 7.66e-13 after generateBoundingBoxes
+# np.sum(abs(boxes-qqq1['boxes_save'][0][0]))/np.sum(abs(boxes)) -> 0.0004029 after nms
 
     numbox = total_boxes.shape[0]  # numbox=size(total_boxes,1);
     if numbox>0:  #   if ~isempty(total_boxes)
@@ -495,20 +495,17 @@ def generateBoundingBox(imap, reg, scale, t):
     dy1 = np.transpose(reg[:,:,1]) # dy1=reg(:,:,2)';
     dx2 = np.transpose(reg[:,:,2]) # dx2=reg(:,:,3)';
     dy2 = np.transpose(reg[:,:,3]) # dy2=reg(:,:,4)';
-    y, x = np.where(imap > t)  # [y x]=find(map>=t);
+    y, x = np.where(imap >= t)  # [y x]=find(map>=t);
     if y.shape[0]==1:  # if size(y,1)==1
       # *** not checked ***
 #         y=y';x=x';score=map(a)';dx1=dx1';dy1=dy1';dx2=dx2';dy2=dy2';
-        y = np.transpose(y)
-        x = np.transpose(x)
-        dx1 = np.transpose(dx1)
-        dy1 = np.transpose(dy1)
-        dx2 = np.transpose(dx2)
-        dy2 = np.transpose(dy2)
-        score = imap[(y,x)]
-    else:
-        score = imap[(y,x)]
-
+#         y = np.transpose(y)
+#         x = np.transpose(x)
+        dx1 = np.flipud(dx1)
+        dy1 = np.flipud(dy1)
+        dx2 = np.flipud(dx2)
+        dy2 = np.flipud(dy2)
+    score = imap[(y,x)]
     reg = np.transpose(np.vstack([ dx1[(y,x)], dy1[(y,x)], dx2[(y,x)], dy2[(y,x)] ]))  #     reg=[dx1(a) dy1(a) dx2(a) dy2(a)];
     if reg.size==0:   #     if isempty(reg)
         # *** not checked ***

@@ -12,7 +12,7 @@ import random
 import tensorflow as tf
 import numpy as np
 import facenet
-import src.align.detect_face
+import align.detect_face
 
 def main(args):
     output_dir = os.path.expanduser(args.output_dir)
@@ -22,7 +22,7 @@ def main(args):
     src_path,_ = os.path.split(os.path.realpath(__file__))
     facenet.store_revision_info(src_path, output_dir, ' '.join(sys.argv))
     dataset = facenet.get_dataset(args.input_dir)
-    random.shuffle(dataset)
+    #random.shuffle(dataset)#################################################
     
     print('Creating networks and loading parameters')    
     with tf.Graph().as_default():
@@ -30,15 +30,15 @@ def main(args):
         with sess.as_default():
             with tf.variable_scope('pnet'):
                 data = tf.placeholder(tf.float32, (None,None,None,3), 'input')
-                pnet = src.align.detect_face.PNet({'data':data})
+                pnet = align.detect_face.PNet({'data':data})
                 pnet.load('../../data/det1.npy', sess)
             with tf.variable_scope('rnet'):
                 data = tf.placeholder(tf.float32, (None,24,24,3), 'input')
-                rnet = src.align.detect_face.RNet({'data':data})
+                rnet = align.detect_face.RNet({'data':data})
                 rnet.load('../../data/det2.npy', sess)
             with tf.variable_scope('onet'):
                 data = tf.placeholder(tf.float32, (None,48,48,3), 'input')
-                onet = src.align.detect_face.ONet({'data':data})
+                onet = align.detect_face.ONet({'data':data})
                 onet.load('../../data/det3.npy', sess)
                 
             pnet_fun = lambda img : sess.run(('pnet/conv4-2/BiasAdd:0', 'pnet/prob1:0'), feed_dict={'pnet/input:0':img})
@@ -57,11 +57,13 @@ def main(args):
         output_class_dir = os.path.join(output_dir, cls.name)
         if not os.path.exists(output_class_dir):
             os.makedirs(output_class_dir)
-        random.shuffle(cls.image_paths)
+        #random.shuffle(cls.image_paths) ################################################
         for image_path in cls.image_paths:
+            image_path = '/home/david/datasets/facescrub/facescrub/Aaron_Eckhart/7ee3f8ff414b151ee7a76f893d674d49e7cfeed2.jpg'
             nrof_images_total += 1
             filename = os.path.splitext(os.path.split(image_path)[1])[0]
             output_filename = os.path.join(output_class_dir, filename+'.png')
+            print(image_path)
             if not os.path.exists(output_filename):
                 try:
                     img = misc.imread(image_path)
@@ -71,8 +73,9 @@ def main(args):
                 else:
                     if img.ndim == 2:
                         img = facenet.to_rgb(img)
+                    img = img[:,:,0:3]
 
-                    bounding_boxes, _ = src.align.detect_face.detect_face(img, minsize, pnet_fun, rnet_fun, onet_fun, threshold, factor)
+                    bounding_boxes, _ = align.detect_face.detect_face(img, minsize, pnet_fun, rnet_fun, onet_fun, threshold, factor)
                     nrof_faces = bounding_boxes.shape[0]
                     if nrof_faces>0:
                         det = bounding_boxes[:,0:4]
@@ -80,7 +83,7 @@ def main(args):
                         if nrof_faces>1:
                             bounding_box_size = (det[:,2]-det[:,0])*(det[:,3]-det[:,1])
                             img_center = img_size / 2
-                            offsets = np.vstack([ (det[:,0]+det[:,2])/2-img_center[0], (det[:,1]+det[:,3])/2-img_center[1] ])
+                            offsets = np.vstack([ (det[:,0]+det[:,2])/2-img_center[1], (det[:,1]+det[:,3])/2-img_center[0] ])
                             offset_dist_squared = np.sum(np.power(offsets,2.0),0)
                             index = np.argmax(bounding_box_size-offset_dist_squared*2.0) # some extra weight on the centering
                             det = det[index,:]
@@ -88,13 +91,13 @@ def main(args):
                         bb = np.zeros(4, dtype=np.int32)
                         bb[0] = np.maximum(det[0]-args.margin/2, 0)
                         bb[1] = np.maximum(det[1]-args.margin/2, 0)
-                        bb[2] = np.minimum(det[2]+args.margin/2, img_size[0])
-                        bb[3] = np.minimum(det[3]+args.margin/2, img_size[1])
+                        bb[2] = np.minimum(det[2]+args.margin/2, img_size[1])
+                        bb[3] = np.minimum(det[3]+args.margin/2, img_size[0])
                         cropped = img[bb[1]:bb[3],bb[0]:bb[2],:]
                         scaled = misc.imresize(cropped, (args.image_size, args.image_size), interp='bilinear')
-                        print(image_path)
+                        print('%s: %d %d %d %d' % (output_filename, bb[0], bb[1], bb[2], bb[3]))
                         nrof_successfully_aligned += 1
-                        misc.imsave(output_filename, scaled)
+                        #misc.imsave(output_filename, scaled)
                     else:
                         print('Unable to align "%s"' % image_path)
                             
