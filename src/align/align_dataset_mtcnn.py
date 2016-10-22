@@ -8,11 +8,11 @@ from scipy import misc
 import sys
 import os
 import argparse
-import random
 import tensorflow as tf
 import numpy as np
 import facenet
 import align.detect_face
+#import random
 
 def main(args):
     output_dir = os.path.expanduser(args.output_dir)
@@ -95,9 +95,9 @@ def main(args):
                         bb[3] = np.minimum(det[3]+args.margin/2, img_size[0])
                         cropped = img[bb[1]:bb[3],bb[0]:bb[2],:]
                         scaled = misc.imresize(cropped, (args.image_size, args.image_size), interp='bilinear')
-                        print('%s: %d %d %d %d' % (output_filename, bb[0], bb[1], bb[2], bb[3]))
+                        #print('%s: %d %d %d %d' % (output_filename, bb[0], bb[1], bb[2], bb[3]))
                         nrof_successfully_aligned += 1
-                        #misc.imsave(output_filename, scaled)
+                        misc.imsave(output_filename, scaled)
                     else:
                         print('Unable to align "%s"' % image_path)
                             
