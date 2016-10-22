@@ -506,6 +506,7 @@ def generateBoundingBox(imap, reg, scale, t):
         dx2 = np.flipud(dx2)
         dy2 = np.flipud(dy2)
     score = imap[(y,x)]
+    qqq1 = io.loadmat('nms1.mat')
     reg = np.transpose(np.vstack([ dx1[(y,x)], dy1[(y,x)], dx2[(y,x)], dy2[(y,x)] ]))  #     reg=[dx1(a) dy1(a) dx2(a) dy2(a)];
     if reg.size==0:   #     if isempty(reg)
         # *** not checked ***
