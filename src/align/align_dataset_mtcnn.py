@@ -98,6 +98,10 @@ def main(args):
                         errorMessage = '{}: {}'.format(image_path, e)
                         print(errorMessage)
                     else:
+                        if img.ndim<2:
+                            print('Unable to align "%s"' % image_path)
+                            text_file.write('%s\n' % (output_filename))
+                            continue
                         if img.ndim == 2:
                             img = facenet.to_rgb(img)
                         img = img[:,:,0:3]
