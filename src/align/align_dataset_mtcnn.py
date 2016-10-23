@@ -76,7 +76,6 @@ def main(args):
     bounding_boxes_filename = os.path.join(output_dir, 'bounding_boxes.txt')
     with open(bounding_boxes_filename, "w") as text_file:
         nrof_images_total = 0
-        nrof_prealigned_images = 0
         nrof_successfully_aligned = 0
         for cls in dataset:
             output_class_dir = os.path.join(output_dir, cls.name)
@@ -129,7 +128,6 @@ def main(args):
                             
     print('Total number of images: %d' % nrof_images_total)
     print('Number of successfully aligned images: %d' % nrof_successfully_aligned)
-    print('Number of pre-aligned images: %d' % nrof_prealigned_images)
             
 
 def parse_arguments(argv):
