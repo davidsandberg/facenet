@@ -37,7 +37,6 @@ import random
 
 def main(args):
   
-    use_random_order = False
     output_dir = os.path.expanduser(args.output_dir)
     if not os.path.exists(output_dir):
         os.makedirs(output_dir)
@@ -45,12 +44,11 @@ def main(args):
     src_path,_ = os.path.split(os.path.realpath(__file__))
     facenet.store_revision_info(src_path, output_dir, ' '.join(sys.argv))
     dataset = facenet.get_dataset(args.input_dir)
-    if use_random_order:
-        random.shuffle(dataset)
     
     print('Creating networks and loading parameters')    
     with tf.Graph().as_default():
-        sess = tf.Session()
+        gpu_options = tf.GPUOptions(per_process_gpu_memory_fraction=args.gpu_memory_fraction)
+        sess = tf.Session(config=tf.ConfigProto(gpu_options=gpu_options, log_device_placement=False))
         with sess.as_default():
             with tf.variable_scope('pnet'):
                 data = tf.placeholder(tf.float32, (None,None,None,3), 'input')
@@ -73,15 +71,20 @@ def main(args):
     threshold = [ 0.6, 0.7, 0.7 ]  # three steps's threshold
     factor = 0.709 # scale factor
 
-    bounding_boxes_filename = os.path.join(output_dir, 'bounding_boxes.txt')
+    # Add a random key to the filename to allow alignment using multiple processes
+    random_key = np.random.randint(0, high=99999)
+    bounding_boxes_filename = os.path.join(output_dir, 'bounding_boxes_%05d.txt' % random_key)
+    
     with open(bounding_boxes_filename, "w") as text_file:
         nrof_images_total = 0
         nrof_successfully_aligned = 0
+        if args.random_order:
+            random.shuffle(dataset)
         for cls in dataset:
             output_class_dir = os.path.join(output_dir, cls.name)
             if not os.path.exists(output_class_dir):
                 os.makedirs(output_class_dir)
-                if use_random_order:
+                if args.random_order:
                     random.shuffle(cls.image_paths)
             for image_path in cls.image_paths:
                 nrof_images_total += 1
@@ -138,7 +141,11 @@ def parse_arguments(argv):
     parser.add_argument('--image_size', type=int,
         help='Image size (height, width) in pixels.', default=182)
     parser.add_argument('--margin', type=int,
-        help='Margin for the crop around the bounding box (height, width) in pixels.', default=12)
+        help='Margin for the crop around the bounding box (height, width) in pixels.', default=44)
+    parser.add_argument('--random_order', 
+        help='Shuffles the order of images to enable alignment using multiple processes.', action='store_true')
+    parser.add_argument('--gpu_memory_fraction', type=float,
+        help='Upper bound on the amount of GPU memory that will be used by the process.', default=1.0)
     return parser.parse_args(argv)
 
 if __name__ == '__main__':
