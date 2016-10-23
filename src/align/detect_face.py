@@ -29,9 +29,8 @@ from __future__ import print_function
 
 import numpy as np
 import tensorflow as tf
-from scipy import misc
-#from math import floor
-#import scipy.io as io
+from math import floor
+import cv2
 
 DEFAULT_PADDING = 'SAME'
 
@@ -377,8 +376,7 @@ def detect_face(img, minsize, pnet, rnet, onet, threshold, factor):
         scale=scales[j]
         hs=int(np.ceil(h*scale))
         ws=int(np.ceil(w*scale))
-        im_data = misc.imresize(img, (hs, ws), interp='bilinear')
-        #im_data = imResample2(img, (hs, ws), 'bilinear')
+        im_data = imresample(img, (hs, ws))
         im_data = (im_data-127.5)*0.0078125
         img_x = np.expand_dims(im_data, 0)
         img_y = np.transpose(img_x, (0,2,1,3))
@@ -417,8 +415,7 @@ def detect_face(img, minsize, pnet, rnet, onet, threshold, factor):
             tmp = np.zeros((int(tmph[k]),int(tmpw[k]),3))
             tmp[dy[k]-1:edy[k],dx[k]-1:edx[k],:] = img[y[k]-1:ey[k],x[k]-1:ex[k],:]
             if tmp.shape[0]>0 and tmp.shape[1]>0 or tmp.shape[0]==0 and tmp.shape[1]==0:
-                #tempimg[:,:,:,k] = imResample2(tmp, (24, 24), 'bilinear')
-                tempimg[:,:,:,k] = misc.imresize(tmp, (24, 24), interp='bilinear')
+                tempimg[:,:,:,k] = imresample(tmp, (24, 24))
             else:
                 return np.empty()
         tempimg = (tempimg-127.5)*0.0078125
@@ -446,8 +443,7 @@ def detect_face(img, minsize, pnet, rnet, onet, threshold, factor):
             tmp = np.zeros((int(tmph[k]),int(tmpw[k]),3))
             tmp[dy[k]-1:edy[k],dx[k]-1:edx[k],:] = img[y[k]-1:ey[k],x[k]-1:ex[k],:]
             if tmp.shape[0]>0 and tmp.shape[1]>0 or tmp.shape[0]==0 and tmp.shape[1]==0:
-                #tempimg[:,:,:,k] = imResample2(tmp, (48, 48), 'bilinear')
-                tempimg[:,:,:,k] = misc.imresize(tmp, (48, 48), interp='bilinear')
+                tempimg[:,:,:,k] = imresample(tmp, (48, 48))
             else:
                 return np.empty()
         tempimg = (tempimg-127.5)*0.0078125
@@ -596,18 +592,20 @@ def rerec(bboxA):
     bboxA[:,2:4] = bboxA[:,0:2] + np.transpose(np.tile(l,(2,1)))
     return bboxA
 
-#pylint: disable=unused-argument
-# def imResample2(img, sz, method):
-#     h=img.shape[0]
-#     w=img.shape[1]
-#     hs, ws = sz
-#     dx = float(w) / ws
-#     dy = float(h) / hs
-#     im_data = np.zeros((hs,ws,3))
-#     for a1 in range(0,hs):
-#         for a2 in range(0,ws):
-#             for a3 in range(0,3):
-#                 im_data[a1,a2,a3] = img[int(floor(a1*dy)),int(floor(a2*dx)),a3]
-#     return im_data
-
+def imresample(img, sz):
+    use_comparable_method = True
+    if use_comparable_method:
+        h=img.shape[0]
+        w=img.shape[1]
+        hs, ws = sz
+        dx = float(w) / ws
+        dy = float(h) / hs
+        im_data = np.zeros((hs,ws,3))
+        for a1 in range(0,hs):
+            for a2 in range(0,ws):
+                for a3 in range(0,3):
+                    im_data[a1,a2,a3] = img[int(floor(a1*dy)),int(floor(a2*dx)),a3]
+    else:
+        im_data = cv2.resize(img, sz, interpolation=cv2.INTER_AREA) #pylint: disable=no-member
+    return im_data
 
