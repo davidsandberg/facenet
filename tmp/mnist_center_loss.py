@@ -164,22 +164,66 @@ def main(argv=None):  # pylint: disable=unused-argument
                             stddev=0.1,
                             seed=SEED, dtype=data_type()))
     conv1_biases = tf.Variable(tf.zeros([32], dtype=data_type()))
+
+    conv1p_weights = tf.Variable(
+        tf.truncated_normal([5, 5, 32, 32],  # 5x5 filter, depth 32.
+                            stddev=0.1,
+                            seed=SEED, dtype=data_type()))
+    conv1p_biases = tf.Variable(tf.zeros([32], dtype=data_type()))
+
     conv2_weights = tf.Variable(tf.truncated_normal(
         [5, 5, 32, 64], stddev=0.1,
         seed=SEED, dtype=data_type()))
     conv2_biases = tf.Variable(tf.constant(0.1, shape=[64], dtype=data_type()))
+
+    conv2p_weights = tf.Variable(tf.truncated_normal(
+        [5, 5, 64, 64], stddev=0.1,
+        seed=SEED, dtype=data_type()))
+    conv2p_biases = tf.Variable(tf.constant(0.1, shape=[64], dtype=data_type()))
+
+    conv3_weights = tf.Variable(tf.truncated_normal(
+        [5, 5, 64, 128], stddev=0.1,
+        seed=SEED, dtype=data_type()))
+    conv3_biases = tf.Variable(tf.constant(0.1, shape=[128], dtype=data_type()))
+    
+    conv3p_weights = tf.Variable(tf.truncated_normal(
+        [5, 5, 128, 128], stddev=0.1,
+        seed=SEED, dtype=data_type()))
+    conv3p_biases = tf.Variable(tf.constant(0.1, shape=[128], dtype=data_type()))
+    
+    fc_size = 512
     fc1_weights = tf.Variable(  # fully connected, depth 512.
-        tf.truncated_normal([IMAGE_SIZE // 4 * IMAGE_SIZE // 4 * 64, 512],
+        tf.truncated_normal([2048, fc_size],
                             stddev=0.1,
                             seed=SEED,
                             dtype=data_type()))
-    fc1_biases = tf.Variable(tf.constant(0.1, shape=[512], dtype=data_type()))
-    fc2_weights = tf.Variable(tf.truncated_normal([512, NUM_LABELS],
+    fc1_biases = tf.Variable(tf.constant(0.1, shape=[fc_size], dtype=data_type()))
+    fc2_weights = tf.Variable(tf.truncated_normal([fc_size, NUM_LABELS],
                                                   stddev=0.1,
                                                   seed=SEED,
                                                   dtype=data_type()))
     fc2_biases = tf.Variable(tf.constant(
         0.1, shape=[NUM_LABELS], dtype=data_type()))
+    
+    
+# input: "data", 1000, 1, 28, 28
+# name: "conv1", 32, 5, 1, 2  # num_outputs, kernel_size, stride, pad
+# name: "prelu1"
+# name: "conv1+", 32, 5, 1, 2
+# name: "prelu1+"
+# name: "pool1", 2, 2  # kernel_size, stride
+# name: "conv2", 64, 5, 1, 2
+# name: "prelu2"
+# name: "conv2+", 64, 5, 1, 2
+# name: "prelu2+"
+# name: "pool2", 2, 2
+# name: "conv3", 128, 5, 1, 2
+# name: "prelu3"
+# name: "conv3+", 128, 5, 1, 2
+# name: "prelu3+"
+# name: "pool3", 3, 2
+# name: "ip1", 2 # num_output
+# name: "preluip1"
 
     # We will replicate the model structure for the training subgraph, as well
     # as the evaluation subgraphs, while sharing the trainable parameters.
@@ -188,42 +232,67 @@ def main(argv=None):  # pylint: disable=unused-argument
         # 2D convolution, with 'SAME' padding (i.e. the output feature map has
         # the same size as the input). Note that {strides} is a 4D array whose
         # shape matches the data layout: [image index, y, x, depth].
-        conv = tf.nn.conv2d(data,
+        net = tf.nn.conv2d(data,
                             conv1_weights,
                             strides=[1, 1, 1, 1],
                             padding='SAME')
         # Bias and rectified linear non-linearity.
-        relu = tf.nn.relu(tf.nn.bias_add(conv, conv1_biases))
+        net = tf.nn.relu(tf.nn.bias_add(net, conv1_biases))
+        net = tf.nn.conv2d(net,
+                            conv1p_weights,
+                            strides=[1, 1, 1, 1],
+                            padding='SAME')
+        # Bias and rectified linear non-linearity.
+        net = tf.nn.relu(tf.nn.bias_add(net, conv1p_biases))
         # Max pooling. The kernel size spec {ksize} also follows the layout of
         # the data. Here we have a pooling window of 2, and a stride of 2.
-        pool = tf.nn.max_pool(relu,
+        net = tf.nn.max_pool(net,
                               ksize=[1, 2, 2, 1],
                               strides=[1, 2, 2, 1],
                               padding='SAME')
-        conv = tf.nn.conv2d(pool,
+        net = tf.nn.conv2d(net,
                             conv2_weights,
                             strides=[1, 1, 1, 1],
                             padding='SAME')
-        relu = tf.nn.relu(tf.nn.bias_add(conv, conv2_biases))
-        pool = tf.nn.max_pool(relu,
+        net = tf.nn.relu(tf.nn.bias_add(net, conv2_biases))
+        net = tf.nn.conv2d(net,
+                            conv2p_weights,
+                            strides=[1, 1, 1, 1],
+                            padding='SAME')
+        net = tf.nn.relu(tf.nn.bias_add(net, conv2p_biases))
+        net = tf.nn.max_pool(net,
                               ksize=[1, 2, 2, 1],
+                              strides=[1, 2, 2, 1],
+                              padding='SAME')
+        net = tf.nn.conv2d(net,
+                            conv3_weights,
+                            strides=[1, 1, 1, 1],
+                            padding='SAME')
+        net = tf.nn.relu(tf.nn.bias_add(net, conv3_biases))
+        net = tf.nn.conv2d(net,
+                            conv3p_weights,
+                            strides=[1, 1, 1, 1],
+                            padding='SAME')
+        net = tf.nn.relu(tf.nn.bias_add(net, conv3p_biases))
+        net = tf.nn.max_pool(net,
+                              ksize=[1, 3, 3, 1],
                               strides=[1, 2, 2, 1],
                               padding='SAME')
         # Reshape the feature map cuboid into a 2D matrix to feed it to the
         # fully connected layers.
-        pool_shape = pool.get_shape().as_list() #pylint: disable=no-member
-        reshape = tf.reshape(
-            pool,
+        pool_shape = net.get_shape().as_list() #pylint: disable=no-member
+        net = tf.reshape(
+            net,
             [pool_shape[0], pool_shape[1] * pool_shape[2] * pool_shape[3]])
         # Fully connected layer. Note that the '+' operation automatically
         # broadcasts the biases.
-        hidden = tf.nn.relu(tf.matmul(reshape, fc1_weights) + fc1_biases)
+        net = tf.nn.relu(tf.matmul(net, fc1_weights) + fc1_biases)
 
         # Add a 50% dropout during training only. Dropout also scales
         # activations such that no rescaling is needed at evaluation time.
         if train:
-            hidden = tf.nn.dropout(hidden, 0.5, seed=SEED)
-        return tf.matmul(hidden, fc2_weights) + fc2_biases
+            net = tf.nn.dropout(net, 0.5, seed=SEED)
+        return tf.matmul(net, fc2_weights) + fc2_biases
 
     # Training computation: logits + cross-entropy loss.
     logits = model(train_data_node, True)
@@ -322,3 +391,23 @@ def main(argv=None):  # pylint: disable=unused-argument
 
 if __name__ == '__main__':
     tf.app.run()
+
+
+# input: "data", 1000, 1, 28, 28
+# name: "conv1", 32, 5, 1, 2  # num_outputs, kernel_size, stride, pad
+# name: "prelu1"
+# name: "conv1+", 32, 5, 1, 2
+# name: "prelu1+"
+# name: "pool1", 2, 2  # kernel_size, stride
+# name: "conv2", 64, 5, 1, 2
+# name: "prelu2"
+# name: "conv2+", 64, 5, 1, 2
+# name: "prelu2+"
+# name: "pool2", 2, 2
+# name: "conv3", 128, 5, 1, 2
+# name: "prelu3"
+# name: "conv3+", 128, 5, 1, 2
+# name: "prelu3+"
+# name: "pool3", 3, 2
+# name: "ip1", 2 # num_output
+# name: "preluip1"
