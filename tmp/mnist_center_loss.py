@@ -30,6 +30,7 @@ import time
 import numpy
 from six.moves import urllib
 import tensorflow as tf
+import matplotlib.pyplot as plt
 
 SOURCE_URL = 'http://yann.lecun.com/exdb/mnist/'
 WORK_DIRECTORY = 'data'
@@ -231,10 +232,10 @@ def main(argv=None):  # pylint: disable=unused-argument
 
         hidden = tf.nn.relu(tf.matmul(hidden, fc1p_weights) + fc1p_biases)
 
-        return tf.matmul(hidden, fc2_weights) + fc2_biases
+        return tf.matmul(hidden, fc2_weights) + fc2_biases, hidden
 
     # Training computation: logits + cross-entropy loss.
-    logits = model(train_data_node, True)
+    logits, _ = model(train_data_node, True)
     loss = tf.reduce_mean(tf.nn.sparse_softmax_cross_entropy_with_logits(
         logits, train_labels_node))
   
@@ -263,7 +264,8 @@ def main(argv=None):  # pylint: disable=unused-argument
     train_prediction = tf.nn.softmax(logits)
   
     # Predictions for the test and validation, which we'll compute less often.
-    eval_prediction = tf.nn.softmax(model(eval_data))
+    eval_logits, eval_embeddings = model(eval_data)
+    eval_prediction = tf.nn.softmax(eval_logits)
   
     # Small utility function to evaluate a dataset by feeding batches of data to
     # {eval_data} and pulling the results from {eval_predictions}.
@@ -287,6 +289,25 @@ def main(argv=None):  # pylint: disable=unused-argument
                 predictions[begin:, :] = batch_predictions[begin - size:, :]
         return predictions
   
+    def calculate_embeddings(data, sess):
+        """Get all predictions for a dataset by running it in small batches."""
+        size = data.shape[0]
+        if size < EVAL_BATCH_SIZE:
+            raise ValueError("batch size for evals larger than dataset: %d" % size)
+        predictions = numpy.ndarray(shape=(size, 2), dtype=numpy.float32)
+        for begin in xrange(0, size, EVAL_BATCH_SIZE):
+            end = begin + EVAL_BATCH_SIZE
+            if end <= size:
+                predictions[begin:end, :] = sess.run(
+                    eval_embeddings,
+                    feed_dict={eval_data: data[begin:end, ...]})
+            else:
+                batch_predictions = sess.run(
+                    eval_embeddings,
+                    feed_dict={eval_data: data[-EVAL_BATCH_SIZE:, ...]})
+                predictions[begin:, :] = batch_predictions[begin - size:, :]
+        return predictions
+
     # Create a local session to run the training.
     start_time = time.time()
     with tf.Session() as sess:
@@ -326,6 +347,11 @@ def main(argv=None):  # pylint: disable=unused-argument
             print('test_error', test_error)
             assert test_error == 0.0, 'expected 0.0 test_error, got %.2f' % (
                 test_error,)
+            
+        train_embeddings = calculate_embeddings(train_data, sess)
+        plt.plot(train_embeddings[:,0], train_embeddings[:,1], '.')
+        plt.show()
+        xxx = 1
 
 
 if __name__ == '__main__':
