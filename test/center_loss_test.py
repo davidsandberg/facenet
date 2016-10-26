@@ -42,33 +42,36 @@ class CenterLossTest(unittest.TestCase):
             # Define center loss
             center_loss = tf.reduce_sum(tf.pow(tf.abs(logits - centers), 2.0))
             one_hot = tf.one_hot(labels, nrof_features, axis=1, dtype=tf.float32, name='one_hot')
-            center_diff = (tf.reduce_mean(logits*one_hot, 0) - centers)**2
-            center_diff_op = tf.train.GradientDescentOptimizer(alfa).minimize(center_diff)
+            center_diff = (tf.reduce_mean(logits*one_hot, 0) - centers)**2 * tf.reduce_mean(one_hot, 0)
+            center_diff_op = tf.train.GradientDescentOptimizer(alfa*0.9).minimize(center_diff)
+            cd = tf.reduce_mean(logits, 0) - centers
                 
             sess = tf.Session()
             with sess.as_default():
                 sess.run(tf.initialize_all_variables())
                 np.random.seed(seed=666)
-#                 x = np.random.random_integers(low=-10, high=10, size=(batch_size,nrof_features))
-#                 y = np.random.random_integers(low=0, high=3, size=(batch_size))
-
-                #x = np.ones(shape=(batch_size,nrof_features), dtype=np.float32) * center
                 x = np.transpose(np.matmul(np.expand_dims(np.arange(0.1,0.5,0.1),1), np.ones(shape=(1, batch_size))))
 
                 #center_loss_, centers_, one_hot_, fx_, num_, den_ = sess.run([center_loss, centers, one_hot, fx, num, den], feed_dict={logits:x, labels:y})
-                for i in range(0,10):
+                for i in range(0,50):
                     cls = i % nrof_features
-                    y = np.ones(shape=(batch_size), dtype=np.float32) * cls
-                    center_loss_, centers_, center_diff_, _ = sess.run([center_loss, centers, center_diff, center_diff_op], feed_dict={logits:x, labels:y})
+                    #y = np.ones(shape=(batch_size), dtype=np.float32) * cls
+                    y = np.zeros(shape=(batch_size), dtype=np.float32)
+                    y[:batch_size/2] = i % nrof_features
+                    y[batch_size/2:] = (i+2) % nrof_features
+                    center_loss_, centers_, center_diff_, cd_ = sess.run([center_loss, centers, center_diff, cd], feed_dict={logits:x, labels:y})
                     print(centers_)
                     print(center_diff_)
+                    print(cd_)
+                    print('')
+                    _ = sess.run(center_diff_op, feed_dict={logits:x, labels:y})
+                    center_loss_, centers_, center_diff_, cd_ = sess.run([center_loss, centers, center_diff, cd], feed_dict={logits:x, labels:y})
+                    print(centers_)
+                    print(center_diff_)
+                    print(cd_)
+                    print('')
                     xxx = 1
                 
-                print(x.transpose())
-                print(y)
-                
-                print(center_loss_)
-                print(centers_)
                       
 if __name__ == "__main__":
     unittest.main()
