@@ -31,7 +31,7 @@ class CenterLossTest(unittest.TestCase):
     def testCenterLoss(self):
         batch_size = 16
         nrof_features = 4
-        alfa = 0.5
+        alfa = 1.0
         
         with tf.Graph().as_default():
         
@@ -42,8 +42,8 @@ class CenterLossTest(unittest.TestCase):
             # Define center loss
             center_loss = tf.reduce_sum(tf.pow(tf.abs(logits - centers), 2.0))
             one_hot = tf.one_hot(labels, nrof_features, axis=1, dtype=tf.float32, name='one_hot')
-            center_diff = (tf.reduce_mean(logits*one_hot, 0) - centers)**2 * tf.reduce_mean(one_hot, 0)
-            center_diff_op = tf.train.GradientDescentOptimizer(alfa*0.9).minimize(center_diff)
+            center_diff = tf.reduce_mean((logits-centers)*one_hot,0)**2
+            center_diff_op = tf.train.GradientDescentOptimizer(alfa).minimize(center_diff)
             cd = tf.reduce_mean(logits, 0) - centers
                 
             sess = tf.Session()
