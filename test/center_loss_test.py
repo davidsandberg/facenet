@@ -42,9 +42,8 @@ class CenterLossTest(unittest.TestCase):
             # Define center loss
             center_loss = tf.reduce_sum(tf.pow(tf.abs(logits - centers), 2.0))
             one_hot = tf.one_hot(labels, nrof_features, axis=1, dtype=tf.float32, name='one_hot')
-            center_diff = tf.reduce_mean((logits-centers)*one_hot,0)**2
-            center_diff_op = tf.train.GradientDescentOptimizer(alfa).minimize(center_diff)
-            cd = tf.reduce_mean(logits, 0) - centers
+            centers_delta = tf.reduce_mean((centers-logits)*one_hot,0) / (1+tf.reduce_mean(one_hot,0))
+            update_centers = tf.assign(centers, tf.add(centers, -alfa*centers_delta))
                 
             sess = tf.Session()
             with sess.as_default():
@@ -59,16 +58,14 @@ class CenterLossTest(unittest.TestCase):
                     y = np.zeros(shape=(batch_size), dtype=np.float32)
                     y[:batch_size/2] = i % nrof_features
                     y[batch_size/2:] = (i+2) % nrof_features
-                    center_loss_, centers_, center_diff_, cd_ = sess.run([center_loss, centers, center_diff, cd], feed_dict={logits:x, labels:y})
+                    center_loss_, centers_ = sess.run([center_loss, centers], feed_dict={logits:x, labels:y})
+                    print(center_loss_)
                     print(centers_)
-                    print(center_diff_)
-                    print(cd_)
                     print('')
-                    _ = sess.run(center_diff_op, feed_dict={logits:x, labels:y})
-                    center_loss_, centers_, center_diff_, cd_ = sess.run([center_loss, centers, center_diff, cd], feed_dict={logits:x, labels:y})
+                    _ = sess.run(update_centers, feed_dict={logits:x, labels:y})
+                    center_loss_, centers_ = sess.run([center_loss, centers], feed_dict={logits:x, labels:y})
+                    print(center_loss_)
                     print(centers_)
-                    print(center_diff_)
-                    print(cd_)
                     print('')
                     xxx = 1
                 
