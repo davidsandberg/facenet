@@ -30,6 +30,7 @@ import time
 import numpy
 from six.moves import urllib
 import tensorflow as tf
+import numpy as np
 import matplotlib.pyplot as plt
 
 SOURCE_URL = 'http://yann.lecun.com/exdb/mnist/'
@@ -157,6 +158,8 @@ def main(argv=None):  # pylint: disable=unused-argument
         data_type(),
         shape=(EVAL_BATCH_SIZE, IMAGE_SIZE, IMAGE_SIZE, NUM_CHANNELS))
 
+    centers = tf.Variable(
+        tf.constant(0.0, shape=[NUM_LABELS], dtype=data_type()))
     # The variables below hold all the trainable weights. They are passed an
     # initial value which will be assigned when we call:
     # {tf.initialize_all_variables().run()}
@@ -230,14 +233,34 @@ def main(argv=None):  # pylint: disable=unused-argument
         if train:
             hidden = tf.nn.dropout(hidden, 0.5, seed=SEED)
 
-        hidden = tf.nn.relu(tf.matmul(hidden, fc1p_weights) + fc1p_biases)
+        #hidden = tf.nn.relu(tf.matmul(hidden, fc1p_weights) + fc1p_biases)
+        hidden = tf.matmul(hidden, fc1p_weights) + fc1p_biases
 
         return tf.matmul(hidden, fc2_weights) + fc2_biases, hidden
 
+#     def center_loss_op(logits, labels, centers):
+#         alfa = 1
+#         nrof_features = logits.get_shape()[1]
+#         #logits = tf.placeholder(tf.float32, shape=(batch_size, nrof_features), name='logits')
+#         #labels = tf.placeholder(tf.int32, shape=(batch_size,), name='labels')
+#         centers = tf.get_variable('centers', shape=(nrof_features), dtype=tf.float32,
+#             initializer=tf.constant_initializer(value=0.0, dtype=tf.float32))
+#         # Define center loss
+#         center_loss = tf.reduce_sum(tf.pow(tf.abs(logits - centers), 2.0))
+#         one_hot = tf.one_hot(labels, nrof_features, axis=1, dtype=tf.float32, name='one_hot')
+#         center_diff = tf.reduce_mean((logits-centers)*one_hot,0)**2
+#         center_diff_op = tf.train.GradientDescentOptimizer(alfa).minimize(center_diff)
+#         #cd = tf.reduce_mean(logits, 0) - centers
+# 
+#         return center_loss, center_diff_op, centers, center_diff
+  
     # Training computation: logits + cross-entropy loss.
     logits, _ = model(train_data_node, True)
     loss = tf.reduce_mean(tf.nn.sparse_softmax_cross_entropy_with_logits(
         logits, train_labels_node))
+#     beta = 0.001
+#     center_loss, center_diff_op, centers, center_diff = center_loss_op(logits, train_labels_node, centers)
+#     loss = xent_loss# + beta * center_loss
   
     # L2 regularization for the fully connected parameters.
     regularizers = (tf.nn.l2_loss(fc1_weights) + tf.nn.l2_loss(fc1_biases) +
@@ -266,7 +289,7 @@ def main(argv=None):  # pylint: disable=unused-argument
     # Predictions for the test and validation, which we'll compute less often.
     eval_logits, eval_embeddings = model(eval_data)
     eval_prediction = tf.nn.softmax(eval_logits)
-  
+    
     # Small utility function to evaluate a dataset by feeding batches of data to
     # {eval_data} and pulling the results from {eval_predictions}.
     # Saves memory and enables this to run on smaller GPUs.
@@ -349,7 +372,12 @@ def main(argv=None):  # pylint: disable=unused-argument
                 test_error,)
             
         train_embeddings = calculate_embeddings(train_data, sess)
-        plt.plot(train_embeddings[:,0], train_embeddings[:,1], '.')
+        
+        color_list = ['b', 'g', 'r', 'c', 'm', 'y', 'k', 'b', 'g', 'r', 'c' ]
+        plt.figure(1)
+        for n in range(0,10):
+            idx = np.where(train_labels==n)
+            plt.plot(train_embeddings[idx,0], train_embeddings[idx,1], color_list[n]+'.')
         plt.show()
         xxx = 1
 
