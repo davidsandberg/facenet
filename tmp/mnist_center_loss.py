@@ -32,6 +32,7 @@ from six.moves import urllib
 import tensorflow as tf
 import numpy as np
 import matplotlib.pyplot as plt
+from tensorflow.python.ops import control_flow_ops
 
 SOURCE_URL = 'http://yann.lecun.com/exdb/mnist/'
 WORK_DIRECTORY = 'data'
@@ -158,8 +159,6 @@ def main(argv=None):  # pylint: disable=unused-argument
         data_type(),
         shape=(EVAL_BATCH_SIZE, IMAGE_SIZE, IMAGE_SIZE, NUM_CHANNELS))
 
-    centers = tf.Variable(
-        tf.constant(0.0, shape=[NUM_LABELS], dtype=data_type()))
     # The variables below hold all the trainable weights. They are passed an
     # initial value which will be assigned when we call:
     # {tf.initialize_all_variables().run()}
@@ -190,6 +189,41 @@ def main(argv=None):  # pylint: disable=unused-argument
                                                   dtype=data_type()))
     fc2_biases = tf.Variable(tf.constant(
         0.1, shape=[NUM_LABELS], dtype=data_type()))
+    
+    def batch_norm(x, phase_train):
+        """
+        Batch normalization on convolutional maps.
+        Args:
+            x:           Tensor, 4D BHWD input maps
+            n_out:       integer, depth of input maps
+            phase_train: boolean tf.Variable, true indicates training phase
+            scope:       string, variable scope
+            affn:      whether to affn-transform outputs
+        Return:
+            normed:      batch-normalized maps
+        Ref: http://stackoverflow.com/questions/33949786/how-could-i-use-batch-normalization-in-tensorflow/33950177
+        """
+        name = 'batch_norm'
+        with tf.variable_scope(name):
+            phase_train = tf.convert_to_tensor(phase_train, dtype=tf.bool)
+            n_out = int(x.get_shape()[-1])
+            beta = tf.Variable(tf.constant(0.0, shape=[n_out], dtype=x.dtype),
+                               name=name+'/beta', trainable=True, dtype=x.dtype)
+            gamma = tf.Variable(tf.constant(1.0, shape=[n_out], dtype=x.dtype),
+                                name=name+'/gamma', trainable=True, dtype=x.dtype)
+          
+            batch_mean, batch_var = tf.nn.moments(x, [0], name='moments')
+            ema = tf.train.ExponentialMovingAverage(decay=0.9)
+            def mean_var_with_update():
+                ema_apply_op = ema.apply([batch_mean, batch_var])
+                with tf.control_dependencies([ema_apply_op]):
+                    return tf.identity(batch_mean), tf.identity(batch_var)
+            mean, var = control_flow_ops.cond(phase_train,
+                                              mean_var_with_update,
+                                              lambda: (ema.average(batch_mean), ema.average(batch_var)))
+            normed = tf.nn.batch_normalization(x, mean, var, beta, gamma, 1e-3)
+        return normed
+    
 
     # We will replicate the model structure for the training subgraph, as well
     # as the evaluation subgraphs, while sharing the trainable parameters.
@@ -233,34 +267,35 @@ def main(argv=None):  # pylint: disable=unused-argument
         if train:
             hidden = tf.nn.dropout(hidden, 0.5, seed=SEED)
 
-        #hidden = tf.nn.relu(tf.matmul(hidden, fc1p_weights) + fc1p_biases)
         hidden = tf.matmul(hidden, fc1p_weights) + fc1p_biases
 
         return tf.matmul(hidden, fc2_weights) + fc2_biases, hidden
 
-#     def center_loss_op(logits, labels, centers):
-#         alfa = 1
-#         nrof_features = logits.get_shape()[1]
-#         #logits = tf.placeholder(tf.float32, shape=(batch_size, nrof_features), name='logits')
-#         #labels = tf.placeholder(tf.int32, shape=(batch_size,), name='labels')
-#         centers = tf.get_variable('centers', shape=(nrof_features), dtype=tf.float32,
-#             initializer=tf.constant_initializer(value=0.0, dtype=tf.float32))
-#         # Define center loss
-#         center_loss = tf.reduce_sum(tf.pow(tf.abs(logits - centers), 2.0))
-#         one_hot = tf.one_hot(labels, nrof_features, axis=1, dtype=tf.float32, name='one_hot')
-#         center_diff = tf.reduce_mean((logits-centers)*one_hot,0)**2
-#         center_diff_op = tf.train.GradientDescentOptimizer(alfa).minimize(center_diff)
-#         #cd = tf.reduce_mean(logits, 0) - centers
-# 
-#         return center_loss, center_diff_op, centers, center_diff
+    def center_loss_op(logits, labels):
+        alfa = 0.5
+        nrof_features = logits.get_shape()[1]
+        centers = tf.get_variable('centers', shape=(nrof_features), dtype=tf.float32,
+            initializer=tf.constant_initializer(value=0.0, dtype=tf.float32), trainable=False)
+#         centers = tf.get_variable('centers', dtype=tf.float32,
+#             initializer=tf.random_uniform((int(nrof_features),), -0.01, 0.01, dtype=tf.float32), trainable=False)
+        # Define center loss
+        center_loss = tf.reduce_sum(tf.pow(tf.abs(logits - centers), 2.0))
+        one_hot = tf.one_hot(labels, nrof_features, axis=1, dtype=tf.float32, name='one_hot')
+        delta1 = tf.reduce_mean((centers-logits)*one_hot,0)
+        delta2 = 1+tf.reduce_mean(one_hot,0)
+        centers_delta = delta1 / delta2
+        update_centers = tf.assign_add(centers, -alfa*centers_delta)
+ 
+        return center_loss, update_centers, centers
   
     # Training computation: logits + cross-entropy loss.
-    logits, _ = model(train_data_node, True)
-    loss = tf.reduce_mean(tf.nn.sparse_softmax_cross_entropy_with_logits(
+    logits, hidden = model(train_data_node, True)
+    logits = batch_norm(logits, True)
+    xent_loss = tf.reduce_mean(tf.nn.sparse_softmax_cross_entropy_with_logits(
         logits, train_labels_node))
-#     beta = 0.001
-#     center_loss, center_diff_op, centers, center_diff = center_loss_op(logits, train_labels_node, centers)
-#     loss = xent_loss# + beta * center_loss
+    beta = 1e-6
+    center_loss, update_centers, centers = center_loss_op(hidden, train_labels_node)
+    loss = xent_loss + beta * center_loss
   
     # L2 regularization for the fully connected parameters.
     regularizers = (tf.nn.l2_loss(fc1_weights) + tf.nn.l2_loss(fc1_biases) +
@@ -349,16 +384,15 @@ def main(argv=None):  # pylint: disable=unused-argument
             feed_dict = {train_data_node: batch_data,
                          train_labels_node: batch_labels}
             # Run the graph and fetch some of the nodes.
-            _, l, lr, predictions = sess.run(
-                [optimizer, loss, learning_rate, train_prediction],
-                feed_dict=feed_dict)
+            #_, l, lr, predictions = sess.run([optimizer, loss, learning_rate, train_prediction], feed_dict=feed_dict)
+            _, _, cl, l, lr, predictions = sess.run([update_centers, optimizer, center_loss, loss, learning_rate, train_prediction], feed_dict=feed_dict)
             if step % EVAL_FREQUENCY == 0:
                 elapsed_time = time.time() - start_time
                 start_time = time.time()
                 print('Step %d (epoch %.2f), %.1f ms' %
                       (step, float(step) * BATCH_SIZE / train_size,
                        1000 * elapsed_time / EVAL_FREQUENCY))
-                print('Minibatch loss: %.3f, learning rate: %.6f' % (l, lr))
+                print('Minibatch loss: %.3f  %.3f, learning rate: %.6f' % (l, cl*beta, lr))
                 print('Minibatch error: %.1f%%' % error_rate(predictions, batch_labels))
                 print('Validation error: %.1f%%' % error_rate(
                     eval_in_batches(validation_data, sess), validation_labels))
@@ -376,7 +410,7 @@ def main(argv=None):  # pylint: disable=unused-argument
         color_list = ['b', 'g', 'r', 'c', 'm', 'y', 'k', 'b', 'g', 'r', 'c' ]
         plt.figure(1)
         for n in range(0,10):
-            idx = np.where(train_labels==n)
+            idx = np.where(train_labels[0:10000]==n)
             plt.plot(train_embeddings[idx,0], train_embeddings[idx,1], color_list[n]+'.')
         plt.show()
         xxx = 1
