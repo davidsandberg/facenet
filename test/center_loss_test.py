@@ -53,8 +53,6 @@ class CenterLossTest(unittest.TestCase):
 
                 #center_loss_, centers_, one_hot_, fx_, num_, den_ = sess.run([center_loss, centers, one_hot, fx, num, den], feed_dict={logits:x, labels:y})
                 for i in range(0,50):
-                    cls = i % nrof_features
-                    #y = np.ones(shape=(batch_size), dtype=np.float32) * cls
                     y = np.zeros(shape=(batch_size), dtype=np.float32)
                     y[:batch_size/2] = i % nrof_features
                     y[batch_size/2:] = (i+2) % nrof_features
@@ -67,7 +65,6 @@ class CenterLossTest(unittest.TestCase):
                     print(center_loss_)
                     print(centers_)
                     print('')
-                    xxx = 1
                 
                       
 if __name__ == "__main__":
