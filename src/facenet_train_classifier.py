@@ -112,6 +112,12 @@ def main(args):
         if args.decov_loss_factor>0.0:
             logits_decov_loss = facenet.decov_loss(logits) * args.decov_loss_factor
             tf.add_to_collection(tf.GraphKeys.REGULARIZATION_LOSSES, logits_decov_loss)
+            
+        # Add center loss
+        update_centers = tf.no_op('update_centers')
+        if args.center_loss_factor>0.0:
+            prelogits_center_loss, update_centers = facenet.center_loss(prelogits, label_batch, args.center_loss_alfa)
+            tf.add_to_collection(tf.GraphKeys.REGULARIZATION_LOSSES, prelogits_center_loss * args.center_loss_factor)
 
         embeddings = tf.nn.l2_normalize(prelogits, 1, 1e-10, name='embeddings')
         
@@ -160,7 +166,8 @@ def main(args):
                 epoch = step // args.epoch_size
                 # Train for one epoch
                 train(args, sess, epoch, phase_train_placeholder, learning_rate_placeholder, global_step, 
-                    total_loss, train_op, summary_op, summary_writer, regularization_losses, args.learning_rate_schedule_file)
+                    total_loss, train_op, summary_op, summary_writer, regularization_losses, args.learning_rate_schedule_file,
+                    update_centers)
 
                 # Evaluate on LFW
                 if args.lfw_dir:
@@ -186,7 +193,7 @@ def main(args):
     return model_dir
   
 def train(args, sess, epoch, phase_train_placeholder, learning_rate_placeholder, global_step, 
-      loss, train_op, summary_op, summary_writer, regularization_losses, learning_rate_schedule_file):
+      loss, train_op, summary_op, summary_writer, regularization_losses, learning_rate_schedule_file, update_centers):
     batch_number = 0
     
     if args.learning_rate>0.0:
@@ -200,7 +207,7 @@ def train(args, sess, epoch, phase_train_placeholder, learning_rate_placeholder,
         while batch_number < args.epoch_size:
             start_time = time.time()
             feed_dict = {phase_train_placeholder: True, learning_rate_placeholder: lr}
-            err, _, step, reg_loss = sess.run([loss, train_op, global_step, regularization_losses], feed_dict=feed_dict)
+            err, _, _, step, reg_loss = sess.run([loss, train_op, update_centers, global_step, regularization_losses], feed_dict=feed_dict)
             if (batch_number % 100 == 0):
                 summary_str, step = sess.run([summary_op, global_step], feed_dict=feed_dict)
                 summary_writer.add_summary(summary_str, global_step=step)
@@ -275,6 +282,10 @@ def parse_arguments(argv):
         help='L2 weight regularization.', default=0.0)
     parser.add_argument('--decov_loss_factor', type=float,
         help='DeCov loss factor.', default=0.0)
+    parser.add_argument('--center_loss_factor', type=float,
+        help='Center loss factor.', default=0.0)
+    parser.add_argument('--center_loss_alfa', type=float,
+        help='Center update rate for center loss.', default=0.5)
     parser.add_argument('--optimizer', type=str, choices=['ADAGRAD', 'ADADELTA', 'ADAM', 'RMSPROP', 'MOM'],
         help='The optimization algorithm to use', default='ADAGRAD')
     parser.add_argument('--learning_rate', type=float,

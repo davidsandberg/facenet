@@ -72,6 +72,21 @@ def decov_loss(xs):
     loss = 0.5*(corr_frob_sqr - corr_diag_sqr)
     return loss 
   
+def center_loss(logits, labels, alfa):
+    """Center loss based on the paper "A Discriminative Feature Learning Approach for Deep Face Recognition"
+       (http://ydwen.github.io/papers/WenECCV16.pdf)
+    """
+    nrof_features = logits.get_shape()[1]
+    centers = tf.get_variable('centers', shape=(nrof_features), dtype=tf.float32,
+        initializer=tf.constant_initializer(value=0.0, dtype=tf.float32), trainable=False)
+    loss = tf.nn.l2_loss(logits - centers)
+    one_hot = tf.one_hot(labels, nrof_features, axis=1, dtype=tf.float32, name='one_hot')
+    delta1 = tf.reduce_mean((centers-logits)*one_hot,0)
+    delta2 = 1+tf.reduce_mean(one_hot,0)
+    centers_delta = delta1 / delta2
+    update_centers = tf.assign_add(centers, -alfa*centers_delta)
+    return loss, update_centers
+
 def get_image_paths_and_labels(dataset):
     image_paths_flat = []
     labels_flat = []
