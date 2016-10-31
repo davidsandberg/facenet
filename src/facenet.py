@@ -453,9 +453,29 @@ def sample_random_people(dataset, nrof_images):
   
     return image_paths, labels
 
-def load_model(model_file):
-    saver = tf.train.import_meta_graph(os.path.expanduser(model_file+'.meta'))
-    saver.restore(tf.get_default_session(), os.path.expanduser(model_file))
+def load_model(model_dir, meta_file, ckpt_file):
+    model_dir_exp = os.path.expanduser(model_dir)
+    saver = tf.train.import_meta_graph(os.path.join(model_dir_exp, meta_file))
+    saver.restore(tf.get_default_session(), os.path.join(model_dir_exp, ckpt_file))
+    
+def get_model_filenames(model_dir):
+    files = os.listdir(model_dir)
+    meta_files = [s for s in files if s.endswith('.meta')]
+    if len(meta_files)==0:
+        raise ValueError('No meta file found in the model directory (%s)' % model_dir)
+    elif len(meta_files)>1:
+        raise ValueError('There should not be more than one meta file in the model directory (%s)' % model_dir)
+    meta_file = meta_files[0]
+    ckpt_files = [s for s in files if 'ckpt' in s]
+    if len(ckpt_files)==0:
+        raise ValueError('No checkpoint file found in the model directory (%s)' % model_dir)
+    elif len(ckpt_files)==1:
+        ckpt_file = ckpt_files[0]
+    else:
+        ckpt_iter = [(s,int(s.split('-')[-1])) for s in ckpt_files if 'ckpt' in s]
+        sorted_iter = sorted(ckpt_iter, key=lambda tup: tup[1])
+        ckpt_file = sorted_iter[-1][0]
+    return meta_file, ckpt_file
 
 def calculate_roc(thresholds, embeddings1, embeddings2, actual_issame, seed, nrof_folds=10):
     assert(embeddings1.shape[0] == embeddings2.shape[0])
@@ -575,3 +595,4 @@ def list_variables(filename):
     variable_map = reader.get_variable_to_shape_map()
     names = sorted(variable_map.keys())
     return names
+  

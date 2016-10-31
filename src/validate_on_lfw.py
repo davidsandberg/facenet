@@ -50,8 +50,11 @@ def main(args):
             paths, actual_issame = lfw.get_paths(os.path.expanduser(args.lfw_dir), pairs, args.lfw_file_ext)
 
             # Load the model
-            print('Loading model "%s"' % args.model_file)
-            facenet.load_model(args.model_file)
+            print('Model directory: %s' % args.model_dir)
+            meta_file, ckpt_file = facenet.get_model_filenames(os.path.expanduser(args.model_dir))
+            print('Metagraph file: %s' % meta_file)
+            print('Checkpoint file: %s' % ckpt_file)
+            facenet.load_model(args.model_dir, meta_file, ckpt_file)
             
             # Get input and output tensors
             images_placeholder = tf.get_default_graph().get_tensor_by_name("input:0")
@@ -68,18 +71,14 @@ def main(args):
 def parse_arguments(argv):
     parser = argparse.ArgumentParser()
     
-    parser.add_argument('--model_def', type=str, 
-        help='', 
-        default='models.inception_resnet_v1')
-    parser.add_argument('--model_file', type=str, 
-        help='File containing the model parameters as well as the model metagraph (with extension ".meta")', 
-        default='~/models/facenet/20160514-234418/model.ckpt-500000')
+    parser.add_argument('lfw_dir', type=str,
+        help='Path to the data directory containing aligned LFW face patches.')
+    parser.add_argument('model_dir', type=str, 
+        help='Directory containing the metagraph (.meta) file and the checkpoint (ckpt) file containing model parameters')
     parser.add_argument('--lfw_pairs', type=str,
         help='The file containing the pairs to use for validation.', default='../data/pairs.txt')
     parser.add_argument('--lfw_file_ext', type=str,
         help='The file extension for the LFW dataset.', default='png', choices=['jpg', 'png'])
-    parser.add_argument('--lfw_dir', type=str,
-        help='Path to the data directory containing aligned face patches.', default='~/datasets/lfw/lfw_realigned/')
     parser.add_argument('--lfw_nrof_folds', type=int,
         help='Number of folds to use for cross validation. Mainly used for testing.', default=10)
     parser.add_argument('--seed', type=int,
