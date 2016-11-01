@@ -346,8 +346,6 @@ def select_triplets_v1(embeddings, num_per_class, image_data, people_per_batch, 
     """ Select the triplets for training
     This is v1 of the triplet_selection function using pre-calculated distance matrix.
     """
-    start_time = time.time()
-    
     def dist(emb1, emb2):
         x = np.square(np.subtract(emb1, emb2))
         return np.sum(x, 0)
@@ -414,8 +412,6 @@ def select_triplets_v1(embeddings, num_per_class, image_data, people_per_batch, 
         emb_start_idx += n
 
     triplets = (as_arr, ps_arr, ns_arr)
-    duration = time.time() - start_time
-    print('select_triplets time: %.3f' %(duration))
 
     return triplets, nrof_random_negs, nrof_triplets
 
@@ -424,8 +420,6 @@ def select_triplets(embeddings, num_per_class, image_data, people_per_batch, alp
     This is v2 of the triplet_selection function. This version is about 15% improvement
     over the v1 implementation.
     """
-    start_time = time.time()
-  
     nrof_images = image_data.shape[0]
     # distance matrix
     dists = np.zeros((nrof_images, nrof_images))
@@ -508,8 +502,6 @@ def select_triplets(embeddings, num_per_class, image_data, people_per_batch, alp
                 sel_neg_idx = neg_idx
                 sel_neg_dist = dists[a_idx, sel_neg_idx]
             else:
-                print("dist : delta=%.3f, pos_dist=%.3f ,neg_dist=%.3f" % 
-                     (neg_dists[neg_idx], pos_dist, dists[a_idx, neg_idx]))
                 sel_neg_idx = emb_start_idx
                 while sel_neg_idx >= emb_start_idx and sel_neg_idx <= emb_start_idx + n - 1:
                     sel_neg_idx = (np.random.randint(1, max_int) % nrof_images) - 1
@@ -525,8 +517,6 @@ def select_triplets(embeddings, num_per_class, image_data, people_per_batch, alp
     # end: number of people per batch
 
     triplets = (as_arr, ps_arr, ns_arr)
-    duration = time.time() - start_time
-    print('select_triplets time: %.3f' %(duration))
 
     return triplets, nrof_random_negs, nrof_triplets
 
