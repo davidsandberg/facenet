@@ -284,8 +284,9 @@ def get_triplet_batch(triplets, batch_index, batch_size):
     batch = np.vstack([a, p, n])
     return batch
 
-def select_triplets(embeddings, num_per_class, image_data, people_per_batch, alpha):
-
+def select_triplets_orig(embeddings, num_per_class, image_data, people_per_batch, alpha):
+    """The original implementation
+    """
     def dist(emb1, emb2):
         x = np.square(np.subtract(emb1, emb2))
         return np.sum(x, 0)
@@ -339,6 +340,194 @@ def select_triplets(embeddings, num_per_class, image_data, people_per_batch, alp
     
     triplets = (as_arr, ps_arr, ns_arr)
     
+    return triplets, nrof_random_negs, nrof_triplets
+
+def select_triplets_v1(embeddings, num_per_class, image_data, people_per_batch, alpha):
+    """ Select the triplets for training
+    This is v1 of the triplet_selection function using pre-calculated distance matrix.
+    """
+    start_time = time.time()
+    
+    def dist(emb1, emb2):
+        x = np.square(np.subtract(emb1, emb2))
+        return np.sum(x, 0)
+  
+    nrof_images = image_data.shape[0]
+
+    # distance matrix
+    dists = np.zeros((nrof_images, nrof_images))
+    for i in np.arange(0, nrof_images):
+        dists[i] = np.sum(np.square(np.subtract(embeddings, embeddings[i])), 1)
+
+    nrof_triplets = nrof_images - people_per_batch
+    shp = [nrof_triplets, image_data.shape[1], image_data.shape[2], image_data.shape[3]]
+    as_arr = np.zeros(shp)
+    ps_arr = np.zeros(shp)
+    ns_arr = np.zeros(shp)
+    
+    trip_idx = 0
+    # shuffle the triplets index
+    shuffle = np.arange(nrof_triplets)
+    np.random.shuffle(shuffle)
+    emb_start_idx = 0
+    nrof_random_negs = 0
+
+    # Max int
+    maxInt = 2**32
+
+    for i in xrange(people_per_batch):
+        n = num_per_class[i]
+        for j in range(1,n):
+            a_idx = emb_start_idx
+            p_idx = emb_start_idx + j
+            as_arr[shuffle[trip_idx]] = image_data[a_idx]
+            ps_arr[shuffle[trip_idx]] = image_data[p_idx]
+      
+            # pos_dist = dist(embeddings[a_idx][:], embeddings[p_idx][:])
+            pos_dist = dists[a_idx, p_idx]
+            sel_neg_idx = emb_start_idx
+
+            while sel_neg_idx >= emb_start_idx and sel_neg_idx <= emb_start_idx + n - 1:
+                sel_neg_idx = (np.random.randint(1, maxInt) % nrof_images) - 1
+
+            #sel_neg_dist = dist(embeddings[a_idx][:], embeddings[sel_neg_idx][:])
+            sel_neg_dist = dists[a_idx, sel_neg_idx]
+
+            random_neg = True
+            for k in range(nrof_images):
+                # skip if the index is within the positive (same person) class range.
+                if k < emb_start_idx or k > emb_start_idx + n - 1:
+                    # neg_dist = dist(embeddings[a_idx][:], embeddings[k][:])
+                    neg_dist = dists[a_idx, k]
+                    if pos_dist < neg_dist and neg_dist < sel_neg_dist and np.abs(pos_dist - neg_dist) < alpha:
+                        random_neg = False
+                        sel_neg_dist = neg_dist
+                        sel_neg_idx = k
+
+            if random_neg:
+                nrof_random_negs += 1
+
+            ns_arr[shuffle[trip_idx]] = image_data[sel_neg_idx]
+            #print('Triplet %d: (%d, %d, %d), pos_dist=%2.3f, neg_dist=%2.3f, sel_neg_dist=%2.3f' % (trip_idx, a_idx, p_idx, sel_neg_idx, pos_dist, neg_dist, sel_neg_dist))
+            trip_idx += 1
+
+        emb_start_idx += n
+
+    triplets = (as_arr, ps_arr, ns_arr)
+    duration = time.time() - start_time
+    print('select_triplets time: %.3f' %(duration))
+
+    return triplets, nrof_random_negs, nrof_triplets
+
+def select_triplets(embeddings, num_per_class, image_data, people_per_batch, alpha):
+    """ Select the triplets for training
+    This is v2 of the triplet_selection function. This version is about 15% improvement
+    over the v1 implementation.
+    """
+    start_time = time.time()
+  
+    nrof_images = image_data.shape[0]
+    # distance matrix
+    dists = np.zeros((nrof_images, nrof_images))
+    # pre-calculate the distance matrix
+    for i in np.arange(0, nrof_images):
+        dists[i] = np.sum(np.square(np.subtract(embeddings, embeddings[i])), 1)
+
+    # number of triplets
+    nrof_triplets = nrof_images - people_per_batch
+    # shp = (1800-45, 96, 96, 3)
+    shp = [nrof_triplets, image_data.shape[1], image_data.shape[2], image_data.shape[3]]
+    # anchor
+    as_arr = np.zeros(shp)
+    # positive
+    ps_arr = np.zeros(shp)
+    # negative
+    ns_arr = np.zeros(shp)
+    
+    trip_idx = 0
+    # shuffle the triplets index
+    shuffle = np.arange(nrof_triplets)
+    np.random.shuffle(shuffle)
+    emb_start_idx = 0
+    nrof_random_negs = 0
+
+    # Max int
+    max_int = 2**32
+    # Max float
+    max_float = np.finfo(np.float32).max
+
+    for i in xrange(people_per_batch):
+        n = num_per_class[i]
+        # the first image in the class group is chosen as the anchor
+        # the rest for positive pairs
+        for j in range(1,n):
+            a_idx = emb_start_idx
+            p_idx = emb_start_idx + j
+            as_arr[shuffle[trip_idx]] = image_data[a_idx]
+            ps_arr[shuffle[trip_idx]] = image_data[p_idx]
+            #
+            pos_dist = dists[a_idx, p_idx]
+            #
+            # startring searching for the semi-hard negative
+            # 
+            # make a copy of the distance vector with the anchor, so the values won't
+            # be poluted.
+            neg_dists = np.copy(dists[a_idx,:])
+            # 
+            # Given the condition:
+            #     pos_dist < neg_dist              => neg_dist - pos_dist > 0
+            # and (it doesn't matter if abs is applied or not)
+            #     abs(neg_dist - pos_dist) < alpha => neg_dist - pos_dist < alpha
+            # The combined logic:
+            #   0 < (neg_dist - pos_dist) < alpha
+            neg_dists = neg_dists - pos_dist
+            #
+            # assign max_float as distance to these positive samples, so they won't become
+            # the targets for argmin
+            neg_dists[emb_start_idx:(emb_start_idx + n)].fill(max_float)
+            # 
+            # Thresholding the vector and assign a value.
+            # 10 is a randomly selected value that is relatively big as a nagative
+            # the valid range should be less then 1.0.
+            neg_dists[neg_dists <= 0.0] = 10.0
+            # 
+            # The index returned by argmin(neg_dists) is the simi-hard negative or
+            # the one that is closest to the simi-hard negative.
+            # Negative exemplars semi-hard:
+            #   ||a - p||2**2 < ||a - n||2**2, and those negatives lie inside 
+            #   the margin alpha=?
+            # What to use when none is found?
+            #
+            random_neg = True
+            neg_idx = np.argmin(neg_dists)
+            # this logic is implemented to be similar to the original one
+            # What is the drawback using the neg_idx that is the closer to the positive
+            # but outside of the alpha margin? 
+            if neg_dists[neg_idx] < alpha:
+                random_neg = False
+                sel_neg_idx = neg_idx
+                sel_neg_dist = dists[a_idx, sel_neg_idx]
+            else:
+                print("dist : delta=%.3f, pos_dist=%.3f ,neg_dist=%.3f" % 
+                     (neg_dists[neg_idx], pos_dist, dists[a_idx, neg_idx]))
+                sel_neg_idx = emb_start_idx
+                while sel_neg_idx >= emb_start_idx and sel_neg_idx <= emb_start_idx + n - 1:
+                    sel_neg_idx = (np.random.randint(1, max_int) % nrof_images) - 1
+                sel_neg_dist = dists[a_idx, sel_neg_idx]
+
+            ns_arr[shuffle[trip_idx]] = image_data[sel_neg_idx]
+            trip_idx += 1
+
+            if random_neg:
+                nrof_random_negs += 1
+
+        emb_start_idx += n
+    # end: number of people per batch
+
+    triplets = (as_arr, ps_arr, ns_arr)
+    duration = time.time() - start_time
+    print('select_triplets time: %.3f' %(duration))
+
     return triplets, nrof_random_negs, nrof_triplets
 
 def get_learning_rate_from_file(filename, epoch):
