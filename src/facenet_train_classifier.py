@@ -87,6 +87,7 @@ def main(args):
         print('Total number of examples: %d' % len(image_list))
         
         # Node for input images
+        image_batch.set_shape((None, args.image_size, args.image_size, 3))
         image_batch = tf.identity(image_batch, name='input')
         
         # Placeholder for the learning rate
