@@ -138,7 +138,7 @@ def main(args):
 
         # Build a Graph that trains the model with one batch of examples and updates the model parameters
         train_op = facenet.train(total_loss, global_step, args.optimizer, 
-            learning_rate, args.moving_average_decay, tf.all_variables())
+            learning_rate, args.moving_average_decay, tf.all_variables(), args.log_histograms)
 
         # Create a saver
         save_variables = list(set(tf.all_variables())-set([w])-set([b]))
@@ -170,6 +170,9 @@ def main(args):
                     total_loss, train_op, summary_op, summary_writer, regularization_losses, args.learning_rate_schedule_file,
                     update_centers)
 
+                # Save variables and the metagraph if it doesn't exist already
+                save_variables_and_metagraph(sess, saver, summary_writer, model_dir, subdir, step)
+
                 # Evaluate on LFW
                 if args.lfw_dir:
                     start_time = time.time()
@@ -188,8 +191,6 @@ def main(args):
                     with open(os.path.join(log_dir,'lfw_result.txt'),'at') as f:
                         f.write('%d\t%.5f\t%.5f\n' % (step, np.mean(accuracy), val))
 
-                # Save variables and the metagraph if it doesn't exist already
-                save_variables_and_metagraph(sess, saver, summary_writer, model_dir, subdir, step)
                 
     return model_dir
   
@@ -302,6 +303,8 @@ def parse_arguments(argv):
         help='Random seed.', default=666)
     parser.add_argument('--nrof_preprocess_threads', type=int,
         help='Number of preprocessing (data loading and augumentation) threads.', default=4)
+    parser.add_argument('--log_histograms', 
+        help='Enables logging of weight/bias histograms in tensorboard.', action='store_true')
     parser.add_argument('--learning_rate_schedule_file', type=str,
         help='File containing the learning rate schedule that is used when learning_rate is set to to -1.', default='../data/learning_rate_schedule.txt')
  
