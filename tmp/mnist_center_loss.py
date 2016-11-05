@@ -27,7 +27,6 @@ import os
 import sys
 import time
 
-import numpy
 from six.moves import urllib
 import tensorflow as tf
 import numpy as np
@@ -83,7 +82,7 @@ def extract_data(filename, num_images):
     with gzip.open(filename) as bytestream:
         bytestream.read(16)
         buf = bytestream.read(IMAGE_SIZE * IMAGE_SIZE * num_images * NUM_CHANNELS)
-        data = numpy.frombuffer(buf, dtype=numpy.uint8).astype(numpy.float32)
+        data = np.frombuffer(buf, dtype=np.uint8).astype(np.float32)
         data = (data - (PIXEL_DEPTH / 2.0)) / PIXEL_DEPTH
         data = data.reshape(num_images, IMAGE_SIZE, IMAGE_SIZE, NUM_CHANNELS)
         return data
@@ -95,16 +94,16 @@ def extract_labels(filename, num_images):
     with gzip.open(filename) as bytestream:
         bytestream.read(8)
         buf = bytestream.read(1 * num_images)
-        labels = numpy.frombuffer(buf, dtype=numpy.uint8).astype(numpy.int64)
+        labels = np.frombuffer(buf, dtype=np.uint8).astype(np.int64)
     return labels
 
 
 def fake_data(num_images):
     """Generate a fake dataset that matches the dimensions of MNIST."""
-    data = numpy.ndarray(
+    data = np.ndarray(
         shape=(num_images, IMAGE_SIZE, IMAGE_SIZE, NUM_CHANNELS),
-        dtype=numpy.float32)
-    labels = numpy.zeros(shape=(num_images,), dtype=numpy.int64)
+        dtype=np.float32)
+    labels = np.zeros(shape=(num_images,), dtype=np.int64)
     for image in range(num_images):
         label = image % 2
         data[image, :, :, 0] = label - 0.5
@@ -116,7 +115,7 @@ def error_rate(predictions, labels):
     """Return the error rate based on dense predictions and sparse labels."""
     return 100.0 - (
         100.0 *
-        numpy.sum(numpy.argmax(predictions, 1) == labels) /
+        np.sum(np.argmax(predictions, 1) == labels) /
         predictions.shape[0])
 
 
@@ -190,7 +189,7 @@ def main(argv=None):  # pylint: disable=unused-argument
     fc2_biases = tf.Variable(tf.constant(
         0.1, shape=[NUM_LABELS], dtype=data_type()))
     
-    def batch_norm(x, phase_train):
+    def batch_norm(x, phase_train):  #pylint: disable=unused-variable
         """
         Batch normalization on convolutional maps.
         Args:
@@ -331,7 +330,7 @@ def main(argv=None):  # pylint: disable=unused-argument
         size = data.shape[0]
         if size < EVAL_BATCH_SIZE:
             raise ValueError("batch size for evals larger than dataset: %d" % size)
-        predictions = numpy.ndarray(shape=(size, NUM_LABELS), dtype=numpy.float32)
+        predictions = np.ndarray(shape=(size, NUM_LABELS), dtype=np.float32)
         for begin in xrange(0, size, EVAL_BATCH_SIZE):
             end = begin + EVAL_BATCH_SIZE
             if end <= size:
@@ -350,7 +349,7 @@ def main(argv=None):  # pylint: disable=unused-argument
         size = data.shape[0]
         if size < EVAL_BATCH_SIZE:
             raise ValueError("batch size for evals larger than dataset: %d" % size)
-        predictions = numpy.ndarray(shape=(size, 2), dtype=numpy.float32)
+        predictions = np.ndarray(shape=(size, 2), dtype=np.float32)
         for begin in xrange(0, size, EVAL_BATCH_SIZE):
             end = begin + EVAL_BATCH_SIZE
             if end <= size:
@@ -411,7 +410,6 @@ def main(argv=None):  # pylint: disable=unused-argument
             idx = np.where(train_labels[0:10000]==n)
             plt.plot(train_embeddings[idx,0], train_embeddings[idx,1], color_list[n]+'.')
         plt.show()
-        xxx = 1
 
 
 if __name__ == '__main__':
