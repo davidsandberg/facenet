@@ -313,28 +313,24 @@ def select_triplets(embeddings, num_per_class, image_data, people_per_batch, alp
 
     for i in xrange(people_per_batch):
         n = num_per_class[i]
-        neg_dists_avg = 0
         for j in range(1,n):
             a_idx = emb_start_idx
             p_idx = emb_start_idx + j
             as_arr[shuffle[trip_idx]] = image_data[a_idx]
             ps_arr[shuffle[trip_idx]] = image_data[p_idx]
       
-            # pos_dist = dist(embeddings[a_idx][:], embeddings[p_idx][:])
             pos_dist = dists[a_idx, p_idx]
             sel_neg_idx = emb_start_idx
 
             while sel_neg_idx >= emb_start_idx and sel_neg_idx <= emb_start_idx + n - 1:
                 sel_neg_idx = (np.random.randint(1, maxInt) % nrof_images) - 1
 
-            #sel_neg_dist = dist(embeddings[a_idx][:], embeddings[sel_neg_idx][:])
             sel_neg_dist = dists[a_idx, sel_neg_idx]
 
             random_neg = True
             for k in range(nrof_images):
                 # skip if the index is within the positive (same person) class range.
                 if k < emb_start_idx or k > emb_start_idx + n - 1:
-                    # neg_dist = dist(embeddings[a_idx][:], embeddings[k][:])
                     neg_dist = dists[a_idx, k]
                     if pos_dist < neg_dist and neg_dist < sel_neg_dist and np.abs(pos_dist - neg_dist) < alpha:
                         random_neg = False
