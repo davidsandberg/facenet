@@ -45,8 +45,8 @@ def main(args):
         with tf.Session() as sess:
       
             # Load the model
-            print('Loading model "%s"' % args.model_file)
-            facenet.load_model(args.model_file)
+            print('Loading model "%s"' % args.meta_file)
+            facenet.load_model(args.model_dir, args.meta_file, args.ckpt_file)
     
             # Get input and output tensors
             images_placeholder = tf.get_default_graph().get_tensor_by_name("input:0")
@@ -75,8 +75,12 @@ def load_and_align_data(image_paths, image_size, align, landmarkIndices):
 def parse_arguments(argv):
     parser = argparse.ArgumentParser()
     
-    parser.add_argument('model_file', type=str, 
+    parser.add_argument('model_dir', type=str, 
+        help='Directory containing the meta_file and ckpt_file')
+    parser.add_argument('meta_file', type=str, 
         help='File containing the model parameters as well as the model metagraph (with extension ".meta")')
+    parser.add_argument('ckpt_file', type=str, 
+        help='Checkpoint file (with extention ".ckpt-XXXXX"')
     parser.add_argument('image1', type=str, help='First image to compare.')
     parser.add_argument('image2', type=str, help='Second image to compare.')
     parser.add_argument('--dlib_face_predictor', type=str,
