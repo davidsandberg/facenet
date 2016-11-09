@@ -31,6 +31,7 @@ import numpy as np
 import tensorflow as tf
 #from math import floor
 import cv2
+import os
 
 def layer(op):
     '''Decorator for composable network layers.'''
@@ -269,6 +270,25 @@ class ONet(Network):
 
         (self.feed('prelu5') #pylint: disable=no-value-for-parameter
              .fc(10, relu=False, name='conv6-3'))
+
+def create_mtcnn(sess, model_path):
+    with tf.variable_scope('pnet'):
+        data = tf.placeholder(tf.float32, (None,None,None,3), 'input')
+        pnet = PNet({'data':data})
+        pnet.load(os.path.join(model_path, 'det1.npy'), sess)
+    with tf.variable_scope('rnet'):
+        data = tf.placeholder(tf.float32, (None,24,24,3), 'input')
+        rnet = RNet({'data':data})
+        rnet.load(os.path.join(model_path, 'det2.npy'), sess)
+    with tf.variable_scope('onet'):
+        data = tf.placeholder(tf.float32, (None,48,48,3), 'input')
+        onet = ONet({'data':data})
+        onet.load(os.path.join(model_path, 'det3.npy'), sess)
+        
+    pnet_fun = lambda img : sess.run(('pnet/conv4-2/BiasAdd:0', 'pnet/prob1:0'), feed_dict={'pnet/input:0':img})
+    rnet_fun = lambda img : sess.run(('rnet/conv5-2/conv5-2:0', 'rnet/prob1:0'), feed_dict={'rnet/input:0':img})
+    onet_fun = lambda img : sess.run(('onet/conv6-2/conv6-2:0', 'onet/conv6-3/conv6-3:0', 'onet/prob1:0'), feed_dict={'onet/input:0':img})
+    return pnet_fun, rnet_fun, onet_fun
 
 def detect_face(img, minsize, pnet, rnet, onet, threshold, factor):
     # im: input image

@@ -137,9 +137,11 @@ class TrainTest(unittest.TestCase):
         facenet_train_classifier.main(args)
 
     def test_compare(self):
-        argv = ['../data/model/20160620-173927/model.ckpt-500000', 
-                '../data/images/Anthony_Hopkins_0001.png',
-                '../data/images/Anthony_Hopkins_0002.png' ]
+        argv = ['../data/model/20161030-023650/',
+                'model-20161030-023650.meta',
+                'model-20161030-023650.ckpt-80000',
+                '../data/images/Anthony_Hopkins_0001.jpg',
+                '../data/images/Anthony_Hopkins_0002.jpg' ]
         args = compare.parse_arguments(argv)
         compare.main(args)
 
