@@ -109,14 +109,14 @@ def read_images_from_disk(input_queue):
     return example, label
   
 def read_and_augument_data(image_list, label_list, image_size, batch_size, max_nrof_epochs, 
-        random_crop, random_flip, nrof_preprocess_threads):
+        random_crop, random_flip, nrof_preprocess_threads, shuffle=True):
     
     images = ops.convert_to_tensor(image_list, dtype=tf.string)
     labels = ops.convert_to_tensor(label_list, dtype=tf.int32)
     
     # Makes an input queue
     input_queue = tf.train.slice_input_producer([images, labels],
-        num_epochs=max_nrof_epochs, shuffle=True)
+        num_epochs=max_nrof_epochs, shuffle=shuffle)
 
     images_and_labels = []
     for _ in range(nrof_preprocess_threads):

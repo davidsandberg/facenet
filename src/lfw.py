@@ -30,25 +30,21 @@ from __future__ import print_function
 import os
 import numpy as np
 import facenet
-import math
+import time
 
-def validate(sess, paths, actual_issame, seed, batch_size, images_placeholder, phase_train_placeholder, embeddings, nrof_folds=10):
-
-    image_size = images_placeholder.get_shape()[1]
-    embedding_size = embeddings.get_shape()[1]
+def validate(sess, seed, batch_size, actual_issame, embeddings, labels, nrof_folds=10):
 
     # Run forward pass to calculate embeddings
     print('Runnning forward pass on LFW images')
-    nrof_images = len(paths)
-    nrof_batches = int(math.ceil(1.0*nrof_images / batch_size))
+    embedding_size = embeddings.get_shape()[1]
+    nrof_images = len(actual_issame)*2
+    nrof_batches = nrof_images // batch_size
     emb_array = np.zeros((nrof_images, embedding_size))
     for i in range(nrof_batches):
-        start_index = i*batch_size
-        end_index = min((i+1)*batch_size, nrof_images)
-        paths_batch = paths[start_index:end_index]
-        images = facenet.load_data(paths_batch, False, False, image_size)
-        feed_dict = { images_placeholder:images, phase_train_placeholder:True }
-        emb_array[start_index:end_index,:] = sess.run(embeddings, feed_dict=feed_dict)
+        t = time.time()
+        emb, lab = sess.run([embeddings, labels])
+        emb_array[lab] = emb
+        print('Batch %d in %.3f seconds' % (i, time.time()-t))
 
     # Calculate evaluation metrics
     thresholds = np.arange(0, 4, 0.01)
