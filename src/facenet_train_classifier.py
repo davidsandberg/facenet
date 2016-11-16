@@ -184,22 +184,8 @@ def main(args):
 
                 # Evaluate on LFW
                 if args.lfw_dir:
-                    start_time = time.time()
-                    _, _, accuracy, val, val_std, far = lfw.validate(sess, args.seed, 
-                        args.lfw_batch_size, actual_issame, eval_embeddings, eval_label_batch, nrof_folds=args.lfw_nrof_folds)
-                    print('Accuracy: %1.3f+-%1.3f' % (np.mean(accuracy), np.std(accuracy)))
-                    print('Validation rate: %2.5f+-%2.5f @ FAR=%2.5f' % (val, val_std, far))
-                    lfw_time = time.time() - start_time
-                    # Add validation loss and accuracy to summary
-                    summary = tf.Summary()
-                    #pylint: disable=maybe-no-member
-                    summary.value.add(tag='lfw/accuracy', simple_value=np.mean(accuracy))
-                    summary.value.add(tag='lfw/val_rate', simple_value=val)
-                    summary.value.add(tag='time/lfw', simple_value=lfw_time)
-                    summary_writer.add_summary(summary, step)
-                    with open(os.path.join(log_dir,'lfw_result.txt'),'at') as f:
-                        f.write('%d\t%.5f\t%.5f\n' % (step, np.mean(accuracy), val))
-
+                    evaluate(sess, eval_embeddings, eval_label_batch, actual_issame, args.lfw_batch_size, args.seed, 
+                        args.lfw_nrof_folds, log_dir, step, summary_writer)
                 
     return model_dir
   
@@ -211,8 +197,9 @@ def train(args, sess, epoch, learning_rate_placeholder, global_step,
         lr = args.learning_rate
     else:
         lr = facenet.get_learning_rate_from_file(learning_rate_schedule_file, epoch)
+
+    # Training loop
     while batch_number < args.epoch_size:
-        # Perform training on the selected triplets
         train_time = 0
         i = 0
         while batch_number < args.epoch_size:
@@ -234,7 +221,37 @@ def train(args, sess, epoch, learning_rate_placeholder, global_step,
         summary.value.add(tag='time/total', simple_value=train_time)
         summary_writer.add_summary(summary, step)
     return step
-  
+
+def evaluate(sess, embeddings, labels, actual_issame, batch_size, 
+        seed, nrof_folds, log_dir, step, summary_writer):
+    start_time = time.time()
+    # Run forward pass to calculate embeddings
+    print('Runnning forward pass on LFW images')
+    embedding_size = embeddings.get_shape()[1]
+    nrof_images = len(actual_issame)*2
+    nrof_batches = nrof_images // batch_size
+    emb_array = np.zeros((nrof_images, embedding_size))
+    for i in range(nrof_batches):
+        t = time.time()
+        emb, lab = sess.run([embeddings, labels])
+        emb_array[lab] = emb
+        print('Batch %d in %.3f seconds' % (i, time.time()-t))
+        
+    _, _, accuracy, val, val_std, far = lfw.evaluate(emb_array, seed, actual_issame, nrof_folds=nrof_folds)
+    
+    print('Accuracy: %1.3f+-%1.3f' % (np.mean(accuracy), np.std(accuracy)))
+    print('Validation rate: %2.5f+-%2.5f @ FAR=%2.5f' % (val, val_std, far))
+    lfw_time = time.time() - start_time
+    # Add validation loss and accuracy to summary
+    summary = tf.Summary()
+    #pylint: disable=maybe-no-member
+    summary.value.add(tag='lfw/accuracy', simple_value=np.mean(accuracy))
+    summary.value.add(tag='lfw/val_rate', simple_value=val)
+    summary.value.add(tag='time/lfw', simple_value=lfw_time)
+    summary_writer.add_summary(summary, step)
+    with open(os.path.join(log_dir,'lfw_result.txt'),'at') as f:
+        f.write('%d\t%.5f\t%.5f\n' % (step, np.mean(accuracy), val))
+
 def save_variables_and_metagraph(sess, saver, summary_writer, model_dir, model_name, step):
     # Save the model checkpoint
     print('Saving variables')

@@ -30,26 +30,12 @@ from __future__ import print_function
 import os
 import numpy as np
 import facenet
-import time
 
-def validate(sess, seed, batch_size, actual_issame, embeddings, labels, nrof_folds=10):
-
-    # Run forward pass to calculate embeddings
-    print('Runnning forward pass on LFW images')
-    embedding_size = embeddings.get_shape()[1]
-    nrof_images = len(actual_issame)*2
-    nrof_batches = nrof_images // batch_size
-    emb_array = np.zeros((nrof_images, embedding_size))
-    for i in range(nrof_batches):
-        t = time.time()
-        emb, lab = sess.run([embeddings, labels])
-        emb_array[lab] = emb
-        print('Batch %d in %.3f seconds' % (i, time.time()-t))
-
+def evaluate(embeddings, seed, actual_issame, nrof_folds=10):
     # Calculate evaluation metrics
     thresholds = np.arange(0, 4, 0.01)
-    embeddings1 = emb_array[0::2]
-    embeddings2 = emb_array[1::2]
+    embeddings1 = embeddings[0::2]
+    embeddings2 = embeddings[1::2]
     tpr, fpr, accuracy = facenet.calculate_roc(thresholds, embeddings1, embeddings2,
         np.asarray(actual_issame), seed, nrof_folds=nrof_folds)
     thresholds = np.arange(0, 4, 0.001)
