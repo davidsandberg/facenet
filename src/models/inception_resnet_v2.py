@@ -93,9 +93,11 @@ def block8(net, scale=1.0, activation_fn=tf.nn.relu, scope=None, reuse=None):
 def inference(images, keep_probability, phase_train=True, weight_decay=0.0, reuse=None):
     batch_norm_params = {
         # Decay for the moving averages.
-        'decay': 0.9997,
+        'decay': 0.99,
         # epsilon to prevent 0s in variance.
         'epsilon': 0.001,
+        # force in-place updates of mean and variance estimates
+        'updates_collections': None,
     }
     with slim.arg_scope([slim.conv2d],
                         weights_initializer=tf.truncated_normal_initializer(stddev=0.1),
