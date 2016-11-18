@@ -37,8 +37,7 @@ import importlib
 import argparse
 import facenet
 import lfw
-
-slim = tf.contrib.slim
+import tensorflow.contrib.slim as slim
 
 def main(args):
   
@@ -99,15 +98,9 @@ def main(args):
         # Build the inference graph
         prelogits, _ = network.inference(image_batch, args.keep_probability, 
             phase_train=phase_train_placeholder, weight_decay=args.weight_decay)
-        with tf.variable_scope('Logits'):
-            n = int(prelogits.get_shape()[1])
-            m = len(train_set)
-            w = tf.get_variable('w', shape=[n,m], dtype=tf.float32, 
-                initializer=tf.truncated_normal_initializer(stddev=0.1), 
-                regularizer=slim.l2_regularizer(args.weight_decay),
-                trainable=True)
-            b = tf.get_variable('b', [m], initializer=None, trainable=True)
-            logits = tf.matmul(prelogits, w) + b
+        with slim.arg_scope([slim.fully_connected], restore=False):
+            logits = slim.fully_connected(prelogits, len(train_set), activation_fn=None, stddev=0.1, 
+                weight_decay=args.weight_decay, scope='Logits', reuse=False)
 
         # Add DeCov regularization loss
         if args.decov_loss_factor>0.0:
@@ -141,8 +134,7 @@ def main(args):
             learning_rate, args.moving_average_decay, tf.all_variables(), args.log_histograms)
 
         # Create a saver
-        save_variables = list(set(tf.all_variables())-set([w])-set([b]))
-        saver = tf.train.Saver(save_variables, max_to_keep=3)
+        saver = tf.train.Saver(tf.all_variables(), max_to_keep=3)
 
         # Build the summary operation based on the TF collection of Summaries.
         summary_op = tf.merge_all_summaries()

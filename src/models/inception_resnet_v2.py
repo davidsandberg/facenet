@@ -24,8 +24,7 @@ from __future__ import division
 from __future__ import print_function
 
 import tensorflow as tf
-
-slim = tf.contrib.slim
+import tensorflow.contrib.slim as slim
 
 # Inception-Renset-A
 def block35(net, scale=1.0, activation_fn=tf.nn.relu, scope=None, reuse=None):

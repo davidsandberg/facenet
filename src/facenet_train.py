@@ -37,8 +37,7 @@ import importlib
 import argparse
 import facenet
 import lfw
-
-slim = tf.contrib.slim
+import tensorflow.contrib.slim as slim
 
 def main(args):
   
