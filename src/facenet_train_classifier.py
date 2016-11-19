@@ -94,9 +94,10 @@ def main(args):
         # Build the inference graph
         prelogits, _ = network.inference(image_batch, args.keep_probability, 
             phase_train=True, weight_decay=args.weight_decay)
-        with slim.arg_scope([slim.fully_connected], restore=False):
-            logits = slim.fully_connected(prelogits, len(train_set), activation_fn=None, stddev=0.1, 
-                weight_decay=args.weight_decay, scope='Logits', reuse=False)
+        logits = slim.fully_connected(prelogits, len(train_set), activation_fn=None, 
+                weights_initializer=tf.truncated_normal_initializer(stddev=0.1), 
+                weights_regularizer=slim.l2_regularizer(args.weight_decay),
+                scope='Logits', reuse=False)
 
         # Add DeCov regularization loss
         if args.decov_loss_factor>0.0:
