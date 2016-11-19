@@ -127,11 +127,10 @@ def reduction_b(net):
                         tower_conv2_2, tower_pool])
     return net
   
-#pylint: disable=unused-argument
 def inference(images, keep_probability, phase_train=True, weight_decay=0.0, reuse=None):
     batch_norm_params = {
         # Decay for the moving averages.
-        'decay': 0.99,
+        'decay': 0.995,
         # epsilon to prevent 0s in variance.
         'epsilon': 0.001,
         # force in-place updates of mean and variance estimates
