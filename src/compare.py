@@ -30,32 +30,53 @@ from scipy import misc
 import tensorflow as tf
 import numpy as np
 import sys
+import os
 import argparse
 import facenet
 import align.detect_face
 
 def main(args):
-    image_paths = [args.image1, args.image2]
 
-    images = load_and_align_data(image_paths, args.image_size, args.margin, args.gpu_memory_fraction)
+    images = load_and_align_data(args.image_files, args.image_size, args.margin, args.gpu_memory_fraction)
     with tf.Graph().as_default():
 
         with tf.Session() as sess:
       
             # Load the model
-            print('Loading model "%s"' % args.meta_file)
-            facenet.load_model(args.model_dir, args.meta_file, args.ckpt_file)
+            print('Model directory: %s' % args.model_dir)
+            meta_file, ckpt_file = facenet.get_model_filenames(os.path.expanduser(args.model_dir))
+            print('Metagraph file: %s' % meta_file)
+            print('Checkpoint file: %s' % ckpt_file)
+            facenet.load_model(args.model_dir, meta_file, ckpt_file)
     
             # Get input and output tensors
             images_placeholder = tf.get_default_graph().get_tensor_by_name("input:0")
-            phase_train_placeholder = tf.get_default_graph().get_tensor_by_name("phase_train:0")
             embeddings = tf.get_default_graph().get_tensor_by_name("embeddings:0")
 
             # Run forward pass to calculate embeddings
-            feed_dict = { images_placeholder: images, phase_train_placeholder: False }
+            feed_dict = { images_placeholder: images }
             emb = sess.run(embeddings, feed_dict=feed_dict)
-            dist = np.sqrt(np.mean(np.square(np.subtract(emb[0,:], emb[1,:]))))
-            print('Distance between the embeddings: %3.6f' % dist)
+            
+            nrof_images = len(args.image_files)
+
+            print('Images:')
+            for i in range(nrof_images):
+                print('%1d: %s' % (i, args.image_files[i]))
+            print('')
+            
+            # Print distance matrix
+            print('Distance matrix')
+            print('    ', end='')
+            for i in range(nrof_images):
+                print('    %1d     ' % i, end='')
+            print('')
+            for i in range(nrof_images):
+                print('%1d  ' % i, end='')
+                for j in range(nrof_images):
+                    dist = np.sqrt(np.sum(np.square(np.subtract(emb[i,:], emb[j,:]))))
+                    print('  %1.4f  ' % dist, end='')
+                print('')
+            
             
 def load_and_align_data(image_paths, image_size, margin, gpu_memory_fraction):
 
@@ -73,7 +94,7 @@ def load_and_align_data(image_paths, image_size, margin, gpu_memory_fraction):
     nrof_samples = len(image_paths)
     img_list = [None] * nrof_samples
     for i in xrange(nrof_samples):
-        img = misc.imread(image_paths[i])
+        img = misc.imread(os.path.expanduser(image_paths[i]))
         img_size = np.asarray(img.shape)[0:2]
         bounding_boxes, _ = align.detect_face.detect_face(img, minsize, pnet, rnet, onet, threshold, factor)
         det = np.squeeze(bounding_boxes[0,0:4])
@@ -94,12 +115,7 @@ def parse_arguments(argv):
     
     parser.add_argument('model_dir', type=str, 
         help='Directory containing the meta_file and ckpt_file')
-    parser.add_argument('meta_file', type=str, 
-        help='File containing the model parameters as well as the model metagraph (with extension ".meta")')
-    parser.add_argument('ckpt_file', type=str, 
-        help='Checkpoint file (with extention ".ckpt-XXXXX"')
-    parser.add_argument('image1', type=str, help='First image to compare.')
-    parser.add_argument('image2', type=str, help='Second image to compare.')
+    parser.add_argument('image_files', type=str, nargs='+', help='Images to compare')
     parser.add_argument('--image_size', type=int,
         help='Image size (height, width) in pixels.', default=160)
     parser.add_argument('--margin', type=int,
