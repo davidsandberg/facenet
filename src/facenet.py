@@ -72,7 +72,7 @@ def decov_loss(xs):
     loss = 0.5*(corr_frob_sqr - corr_diag_sqr)
     return loss 
   
-def center_loss(logits, labels, alfa):
+def center_loss(logits, labels, alfa, nrof_classes=None):
     """Center loss based on the paper "A Discriminative Feature Learning Approach for Deep Face Recognition"
        (http://ydwen.github.io/papers/WenECCV16.pdf)
     """
@@ -86,6 +86,18 @@ def center_loss(logits, labels, alfa):
     centers_delta = delta1 / delta2
     update_centers = tf.assign_add(centers, -alfa*centers_delta)
     return loss, update_centers
+
+def center_loss_new(logits, label, alfa, nrof_classes):
+    nrof_features = logits.get_shape()[1]
+    centers = tf.get_variable('centers', [nrof_classes, nrof_features], dtype=tf.float32,
+        initializer=tf.constant_initializer(0), trainable=False)
+    label = tf.reshape(label, [-1])
+    logits_batch = tf.gather(centers, label)
+    diff = (1 - alfa) * (logits_batch - logits)
+    centers = tf.scatter_sub(centers, label, diff)
+    centers_batch = tf.gather(centers, label)
+    loss = tf.nn.l2_loss(logits - centers_batch)
+    return loss, centers
 
 def get_image_paths_and_labels(dataset):
     image_paths_flat = []
@@ -501,6 +513,8 @@ def calculate_roc(thresholds, embeddings1, embeddings2, actual_issame, seed, nro
     
     diff = np.subtract(embeddings1, embeddings2)
     dist = np.sum(np.square(diff),1)
+    for i in range(0,dist.shape[0]):
+        print('%4d %d %.4f' % (i, actual_issame[i], dist[i]))
     
     for fold_idx, (train_set, test_set) in enumerate(folds):
         

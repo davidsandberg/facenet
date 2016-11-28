@@ -32,6 +32,7 @@ import tensorflow as tf
 import numpy as np
 import matplotlib.pyplot as plt
 from tensorflow.python.ops import control_flow_ops
+import facenet
 
 SOURCE_URL = 'http://yann.lecun.com/exdb/mnist/'
 WORK_DIRECTORY = 'data'
@@ -270,28 +271,14 @@ def main(argv=None):  # pylint: disable=unused-argument
 
         return tf.nn.relu(tf.matmul(hidden, fc2_weights) + fc2_biases), hidden
 
-    def center_loss_op(logits, labels):
-        alfa = 0.05
-        nrof_features = logits.get_shape()[1]
-        centers = tf.get_variable('centers', shape=(nrof_features), dtype=tf.float32,
-            initializer=tf.constant_initializer(value=0.0, dtype=tf.float32), trainable=False)
-        # Define center loss
-        #center_loss = tf.reduce_sum(tf.pow(tf.abs(logits - centers), 2.0))
-        center_loss = tf.nn.l2_loss(logits - centers)
-        one_hot = tf.one_hot(labels, nrof_features, axis=1, dtype=tf.float32, name='one_hot')
-        delta1 = tf.reduce_mean((centers-logits)*one_hot,0)
-        delta2 = 1+tf.reduce_mean(one_hot,0)
-        centers_delta = delta1 / delta2
-        update_centers = tf.assign_add(centers, -alfa*centers_delta)
-        return center_loss, update_centers
-  
     # Training computation: logits + cross-entropy loss.
     logits, hidden = model(train_data_node, True)
     #logits = batch_norm(logits, True)
     xent_loss = tf.reduce_mean(tf.nn.sparse_softmax_cross_entropy_with_logits(
         logits, train_labels_node))
-    beta = 1e-6
-    center_loss, update_centers = center_loss_op(hidden, train_labels_node)
+    beta = 1e-3
+    #center_loss, update_centers = center_loss_op(hidden, train_labels_node)
+    center_loss, centers = facenet.center_loss_new(hidden, train_labels_node, 0.95, NUM_LABELS)
     loss = xent_loss + beta * center_loss
   
     # L2 regularization for the fully connected parameters.
@@ -382,7 +369,7 @@ def main(argv=None):  # pylint: disable=unused-argument
                          train_labels_node: batch_labels}
             # Run the graph and fetch some of the nodes.
             #_, l, lr, predictions = sess.run([optimizer, loss, learning_rate, train_prediction], feed_dict=feed_dict)
-            _, _, cl, l, lr, predictions = sess.run([update_centers, optimizer, center_loss, loss, learning_rate, train_prediction], feed_dict=feed_dict)
+            _, cl, l, lr, predictions = sess.run([optimizer, center_loss, loss, learning_rate, train_prediction], feed_dict=feed_dict)
             if step % EVAL_FREQUENCY == 0:
                 elapsed_time = time.time() - start_time
                 start_time = time.time()
