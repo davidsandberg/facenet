@@ -36,8 +36,11 @@ import numpy as np
 import importlib
 import argparse
 import facenet
-import lfw
+#import lfw
 import tensorflow.contrib.slim as slim
+
+from tensorflow.python.ops import data_flow_ops
+from tensorflow.python.training import queue_runner
 
 def main(args):
   
@@ -63,31 +66,65 @@ def main(args):
     if args.pretrained_model:
         print('Pre-trained model: %s' % os.path.expanduser(args.pretrained_model))
     
-    if args.lfw_dir:
-        print('LFW directory: %s' % args.lfw_dir)
-        # Read the file containing the pairs used for testing
-        pairs = lfw.read_pairs(os.path.expanduser(args.lfw_pairs))
-        # Get the paths for the corresponding images
-        lfw_paths, actual_issame = lfw.get_paths(os.path.expanduser(args.lfw_dir), pairs, args.lfw_file_ext)
+#     if args.lfw_dir:
+#         print('LFW directory: %s' % args.lfw_dir)
+#         # Read the file containing the pairs used for testing
+#         pairs = lfw.read_pairs(os.path.expanduser(args.lfw_pairs))
+#         # Get the paths for the corresponding images
+#         lfw_paths, actual_issame = lfw.get_paths(os.path.expanduser(args.lfw_dir), pairs, args.lfw_file_ext)
         
     
     with tf.Graph().as_default():
         tf.set_random_seed(args.seed)
         global_step = tf.Variable(0, trainable=False)
 
-        # Placeholder for input images
-        images_placeholder = tf.placeholder(tf.float32, shape=(None, args.image_size, args.image_size, 3), name='input')
-
-        # Placeholder for phase_train
-        phase_train_placeholder = tf.placeholder(tf.bool, name='phase_train')
-
         # Placeholder for the learning rate
         learning_rate_placeholder = tf.placeholder(tf.float32, name='learning_rate')
+        
+        image_paths_placeholder = tf.placeholder(tf.string, shape=(None,), name='image_paths')
+        labels_placeholder = tf.placeholder(tf.int64, shape=(None,), name='labels')
+        
+        input_queue = data_flow_ops.FIFOQueue(capacity=1800,
+                                    dtypes=[tf.string, tf.int64],
+                                    shapes=[(), ()],
+                                    shared_name=None, name=None)
+        enqueue_op = input_queue.enqueue_many([image_paths_placeholder, labels_placeholder])
+        #queue_runner.add_queue_runner(queue_runner.QueueRunner(input_queue, [enqueue_op]))
+                
+        nrof_preprocess_threads = 4
+        image_size = 160
+        batch_size = 90
+        random_crop = False
+        random_flip = False
+        images_and_labels = []
+        for _ in range(nrof_preprocess_threads):
+            filename, label = input_queue.dequeue()
+            file_contents = tf.read_file(filename)
+            image = tf.image.decode_png(file_contents)
+            
+            if random_crop:
+                image = tf.random_crop(image, [image_size, image_size, 3])
+            else:
+                image = tf.image.resize_image_with_crop_or_pad(image, image_size, image_size)
+            if random_flip:
+                image = tf.image.random_flip_left_right(image)
+
+            #pylint: disable=no-member
+            image.set_shape((image_size, image_size, 3))
+            image = tf.image.per_image_whitening(image)
+            images_and_labels.append([image, label])
+    
+        image_batch, labels_batch = tf.train.batch_join(
+            images_and_labels, batch_size=batch_size,
+            capacity=4 * nrof_preprocess_threads * batch_size,
+            allow_smaller_final_batch=True)
 
         # Build the inference graph
-        prelogits, _ = network.inference(images_placeholder, args.keep_probability, 
-            phase_train=True, weight_decay=args.weight_decay)
-        pre_embeddings = slim.fully_connected(prelogits, 128, activation_fn=None, scope='Embeddings', reuse=False)
+#         prelogits, _ = network.inference(image_batch, args.keep_probability, 
+#             phase_train=True, weight_decay=args.weight_decay)
+#         pre_embeddings = slim.fully_connected(prelogits, 128, activation_fn=None, scope='Embeddings', reuse=False)
+        #pre_embeddings = tf.reduce_sum(image_batch, (2,3))
+        pre_embeddings = slim.fully_connected(tf.reduce_sum(image_batch, (2,3)), 128, activation_fn=None, scope='Embeddings', reuse=False)
 
         # Split example embeddings into anchor, positive and negative and calculate triplet loss
         embeddings = tf.nn.l2_normalize(pre_embeddings, 1, 1e-10, name='embeddings')
@@ -148,19 +185,19 @@ def main(args):
                 step = sess.run(global_step, feed_dict=None)
                 epoch = step // args.epoch_size
                 # Train for one epoch
-                step = train(args, sess, train_set, epoch, images_placeholder, 
-                    learning_rate_placeholder, global_step, embeddings, total_loss, train_op, summary_op, summary_writer)
-                if args.lfw_dir:
-                    _, _, accuracy, val, val_std, far = lfw.validate(sess, lfw_paths,
-                        actual_issame, args.seed, 60, images_placeholder, phase_train_placeholder, embeddings, nrof_folds=args.lfw_nrof_folds)
-                    print('Accuracy: %1.3f+-%1.3f' % (np.mean(accuracy), np.std(accuracy)))
-                    print('Validation rate: %2.5f+-%2.5f @ FAR=%2.5f' % (val, val_std, far))
-                    # Add validation loss and accuracy to summary
-                    summary = tf.Summary()
-                    #pylint: disable=maybe-no-member
-                    summary.value.add(tag='lfw/accuracy', simple_value=np.mean(accuracy))
-                    summary.value.add(tag='lfw/val_rate', simple_value=val)
-                    summary_writer.add_summary(summary, step)
+                step = train(args, sess, train_set, epoch, image_paths_placeholder, labels_placeholder, labels_batch,
+                    learning_rate_placeholder, enqueue_op, global_step, embeddings, total_loss, train_op, summary_op, summary_writer)
+#                 if args.lfw_dir:
+#                     _, _, accuracy, val, val_std, far = lfw.evaluate(sess, lfw_paths,
+#                         actual_issame, args.seed, 60, images_placeholder, phase_train_placeholder, embeddings, nrof_folds=args.lfw_nrof_folds)
+#                     print('Accuracy: %1.3f+-%1.3f' % (np.mean(accuracy), np.std(accuracy)))
+#                     print('Validation rate: %2.5f+-%2.5f @ FAR=%2.5f' % (val, val_std, far))
+#                     # Add validation loss and accuracy to summary
+#                     summary = tf.Summary()
+#                     #pylint: disable=maybe-no-member
+#                     summary.value.add(tag='lfw/accuracy', simple_value=np.mean(accuracy))
+#                     summary.value.add(tag='lfw/val_rate', simple_value=val)
+#                     summary_writer.add_summary(summary, step)
 
                 # Save the model checkpoint
                 print('Saving checkpoint')
@@ -169,8 +206,8 @@ def main(args):
     return model_dir
 
 
-def train(args, sess, dataset, epoch, images_placeholder, 
-          learning_rate_placeholder, global_step, embeddings, loss, train_op, summary_op, summary_writer):
+def train(args, sess, dataset, epoch, image_paths_placeholder, labels_placeholder, labels_batch,
+          learning_rate_placeholder, enqueue_op, global_step, embeddings, loss, train_op, summary_op, summary_writer):
     batch_number = 0
     
     if args.learning_rate>0.0:
@@ -178,57 +215,57 @@ def train(args, sess, dataset, epoch, images_placeholder,
     else:
         lr = facenet.get_learning_rate_from_file('../data/learning_rate_schedule.txt', epoch)
     while batch_number < args.epoch_size:
-        print('Loading training data')
-        # Sample people and load new data
-        start_time = time.time()
+        # Sample people randomly from the dataset
         image_paths, num_per_class = facenet.sample_people(dataset, args.people_per_batch, args.images_per_person)
-        image_data = facenet.load_data(image_paths, args.random_crop, args.random_flip, args.image_size)
-        load_time = time.time() - start_time
-        print('Loaded %d images in %.2f seconds' % (image_data.shape[0], load_time))
 
         print('Selecting suitable triplets for training')
         start_time = time.time()
-        emb_list = []
         
         # Run a forward pass for the sampled images
         nrof_examples_per_epoch = args.people_per_batch * args.images_per_person
         nrof_batches_per_epoch = int(np.floor(nrof_examples_per_epoch / args.batch_size))
-        for i in xrange(nrof_batches_per_epoch):
-            batch = facenet.get_batch(image_data, args.batch_size, i)
-            feed_dict = {images_placeholder: batch, learning_rate_placeholder: lr}
-            emb_list += sess.run([embeddings], feed_dict=feed_dict)
-        emb_array = np.vstack(emb_list)  # Stack the embeddings to a nrof_examples_per_epoch x 128 matrix
+        labels = range(nrof_examples_per_epoch)
+        sess.run(enqueue_op, {image_paths_placeholder: image_paths, labels_placeholder: labels})
+        emb_array = np.zeros((nrof_examples_per_epoch, 128))
+        for _ in xrange(nrof_batches_per_epoch):
+            emb, lab = sess.run([embeddings, labels_batch], feed_dict={learning_rate_placeholder: lr})
+            emb_array[lab] = emb
+
         # Select triplets based on the embeddings
         triplets, nrof_random_negs, nrof_triplets = facenet.select_triplets(
-            emb_array, num_per_class, image_data, args.people_per_batch, args.alpha)
+            emb_array, num_per_class, image_paths, args.people_per_batch, args.alpha)
         selection_time = time.time() - start_time
-        print('(nrof_random_negs, nrof_triplets) = (%d, %d): time=%.3f seconds' % (
-        nrof_random_negs, nrof_triplets, selection_time))
+        print('(nrof_random_negs, nrof_triplets) = (%d, %d): time=%.3f seconds' % 
+            (nrof_random_negs, nrof_triplets, selection_time))
 
         # Perform training on the selected triplets
-        train_time = 0
-        i = 0
-        while i * args.batch_size < nrof_triplets * 3 and batch_number < args.epoch_size:
-            start_time = time.time()
-            batch = facenet.get_triplet_batch(triplets, i, args.batch_size)
-            feed_dict = {images_placeholder: batch, learning_rate_placeholder: lr}
-            err, _, step = sess.run([loss, train_op, global_step], feed_dict=feed_dict)
-            if (batch_number % 100 == 0):
-                summary_str, step = sess.run([summary_op, global_step], feed_dict=feed_dict)
-                summary_writer.add_summary(summary_str, global_step=step)
-            duration = time.time() - start_time
-            print('Epoch: [%d][%d/%d]\tTime %.3f\tLoss %2.3f' %
-                  (epoch, batch_number+1, args.epoch_size, duration, err))
-            batch_number += 1
-            i += 1
-            train_time += duration
+#        sess.run(enqueue_op, {image_paths_placeholder: image_paths, labels_placeholder: labels})
+#         train_time = 0
+#         i = 0
+#         while i * args.batch_size < nrof_triplets * 3 and batch_number < args.epoch_size:
+#             start_time = time.time()
+#             batch = facenet.get_triplet_batch(triplets, i, args.batch_size)
+#             feed_dict = {images_placeholder: batch, learning_rate_placeholder: lr}
+#             err, _, step = sess.run([loss, train_op, global_step], feed_dict=feed_dict)
+#             if (batch_number % 100 == 0):
+#                 summary_str, step = sess.run([summary_op, global_step], feed_dict=feed_dict)
+#                 summary_writer.add_summary(summary_str, global_step=step)
+#             duration = time.time() - start_time
+#             print('Epoch: [%d][%d/%d]\tTime %.3f\tLoss %2.3f' %
+#                   (epoch, batch_number+1, args.epoch_size, duration, err))
+#             batch_number += 1
+#             i += 1
+#             train_time += duration
+        step = 0
+        print(sum(x is None for x in triplets[0]))
+        #[ x is None for x in triplets[0] ]
         # Add validation loss and accuracy to summary
         summary = tf.Summary()
         #pylint: disable=maybe-no-member
-        summary.value.add(tag='time/load', simple_value=load_time)
+#        summary.value.add(tag='time/load', simple_value=load_time)
         summary.value.add(tag='time/selection', simple_value=selection_time)
-        summary.value.add(tag='time/train', simple_value=train_time)
-        summary.value.add(tag='time/total', simple_value=load_time+selection_time+train_time)
+#         summary.value.add(tag='time/train', simple_value=train_time)
+#         summary.value.add(tag='time/total', simple_value=load_time+selection_time+train_time)
         summary_writer.add_summary(summary, step)
     return step
 

@@ -286,11 +286,11 @@ def get_triplet_batch(triplets, batch_index, batch_size):
     batch = np.vstack([a, p, n])
     return batch
 
-def select_triplets(embeddings, num_per_class, image_data, people_per_batch, alpha):
+def select_triplets(embeddings, num_per_class, image_paths, people_per_batch, alpha):
     """ Select the triplets for training
     This is v1 of the triplet_selection function using pre-calculated distance matrix.
     """
-    nrof_images = image_data.shape[0]
+    nrof_images = len(image_paths)
 
     # distance matrix
     dists = np.zeros((nrof_images, nrof_images))
@@ -298,15 +298,15 @@ def select_triplets(embeddings, num_per_class, image_data, people_per_batch, alp
         dists[i] = np.sum(np.square(np.subtract(embeddings, embeddings[i])), 1)
 
     nrof_triplets = nrof_images - people_per_batch
-    shp = [nrof_triplets, image_data.shape[1], image_data.shape[2], image_data.shape[3]]
-    as_arr = np.zeros(shp)
-    ps_arr = np.zeros(shp)
-    ns_arr = np.zeros(shp)
+    #shp = [nrof_triplets, image_paths.shape[1], image_paths.shape[2], image_paths.shape[3]]
+    as_arr = [None]*nrof_triplets
+    ps_arr = [None]*nrof_triplets
+    ns_arr = [None]*nrof_triplets
     
     trip_idx = 0
     # shuffle the triplets index
     shuffle = np.arange(nrof_triplets)
-    np.random.shuffle(shuffle)
+    #np.random.shuffle(shuffle)
     emb_start_idx = 0
     nrof_random_negs = 0
 
@@ -318,8 +318,8 @@ def select_triplets(embeddings, num_per_class, image_data, people_per_batch, alp
         for j in range(1,n):
             a_idx = emb_start_idx
             p_idx = emb_start_idx + j
-            as_arr[shuffle[trip_idx]] = image_data[a_idx]
-            ps_arr[shuffle[trip_idx]] = image_data[p_idx]
+            as_arr[shuffle[trip_idx]] = image_paths[a_idx]
+            ps_arr[shuffle[trip_idx]] = image_paths[p_idx]
       
             pos_dist = dists[a_idx, p_idx]
             sel_neg_idx = emb_start_idx
@@ -342,7 +342,7 @@ def select_triplets(embeddings, num_per_class, image_data, people_per_batch, alp
             if random_neg:
                 nrof_random_negs += 1
 
-            ns_arr[shuffle[trip_idx]] = image_data[sel_neg_idx]
+            ns_arr[shuffle[trip_idx]] = image_paths[sel_neg_idx]
             #print('Triplet %d: (%d, %d, %d), pos_dist=%2.3f, neg_dist=%2.3f, sel_neg_dist=%2.3f' % (trip_idx, a_idx, p_idx, sel_neg_idx, pos_dist, neg_dist, sel_neg_dist))
             trip_idx += 1
 
