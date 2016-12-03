@@ -34,6 +34,8 @@ import sys
 import tensorflow as tf
 import numpy as np
 import importlib
+import itertools
+import math
 import argparse
 import facenet
 #import lfw
@@ -84,12 +86,11 @@ def main(args):
         image_paths_placeholder = tf.placeholder(tf.string, shape=(None,), name='image_paths')
         labels_placeholder = tf.placeholder(tf.int64, shape=(None,), name='labels')
         
-        input_queue = data_flow_ops.FIFOQueue(capacity=1800,
+        input_queue = data_flow_ops.FIFOQueue(capacity=10000,
                                     dtypes=[tf.string, tf.int64],
                                     shapes=[(), ()],
                                     shared_name=None, name=None)
         enqueue_op = input_queue.enqueue_many([image_paths_placeholder, labels_placeholder])
-        #queue_runner.add_queue_runner(queue_runner.QueueRunner(input_queue, [enqueue_op]))
                 
         nrof_preprocess_threads = 4
         image_size = 160
@@ -98,21 +99,26 @@ def main(args):
         random_flip = False
         images_and_labels = []
         for _ in range(nrof_preprocess_threads):
-            filename, label = input_queue.dequeue()
-            file_contents = tf.read_file(filename)
-            image = tf.image.decode_png(file_contents)
-            
-            if random_crop:
-                image = tf.random_crop(image, [image_size, image_size, 3])
-            else:
-                image = tf.image.resize_image_with_crop_or_pad(image, image_size, image_size)
-            if random_flip:
-                image = tf.image.random_flip_left_right(image)
-
-            #pylint: disable=no-member
-            image.set_shape((image_size, image_size, 3))
-            image = tf.image.per_image_whitening(image)
-            images_and_labels.append([image, label])
+            for _ in range(3):
+                # This for-loop is to make sure that triplets are processed in the same thread (sequentially) 
+                #  and will therefore be consecutive in the generated batch            
+                filename, label = input_queue.dequeue()
+                file_contents = tf.read_file(filename)
+                image = tf.image.decode_png(file_contents)
+                
+                if random_crop:
+                    image = tf.random_crop(image, [image_size, image_size, 3])
+                else:
+                    image = tf.image.resize_image_with_crop_or_pad(image, image_size, image_size)
+                if random_flip:
+                    image = tf.image.random_flip_left_right(image)
+    
+                #pylint: disable=no-member
+                image.set_shape((image_size, image_size, 3))
+                image = tf.image.per_image_whitening(image)
+                # The images in the triplet should always be added consecutively but the
+                #  order of the triplets will be somewhat random
+                images_and_labels.append([image, label])
     
         image_batch, labels_batch = tf.train.batch_join(
             images_and_labels, batch_size=batch_size,
@@ -123,7 +129,6 @@ def main(args):
 #         prelogits, _ = network.inference(image_batch, args.keep_probability, 
 #             phase_train=True, weight_decay=args.weight_decay)
 #         pre_embeddings = slim.fully_connected(prelogits, 128, activation_fn=None, scope='Embeddings', reuse=False)
-        #pre_embeddings = tf.reduce_sum(image_batch, (2,3))
         pre_embeddings = slim.fully_connected(tf.reduce_sum(image_batch, (2,3)), 128, activation_fn=None, scope='Embeddings', reuse=False)
 
         # Split example embeddings into anchor, positive and negative and calculate triplet loss
@@ -225,6 +230,7 @@ def train(args, sess, dataset, epoch, image_paths_placeholder, labels_placeholde
         nrof_examples_per_epoch = args.people_per_batch * args.images_per_person
         nrof_batches_per_epoch = int(np.floor(nrof_examples_per_epoch / args.batch_size))
         labels = range(nrof_examples_per_epoch)
+        #image_paths_array = np.expand_dims(np.array(image_paths),1)
         sess.run(enqueue_op, {image_paths_placeholder: image_paths, labels_placeholder: labels})
         emb_array = np.zeros((nrof_examples_per_epoch, 128))
         for _ in xrange(nrof_batches_per_epoch):
@@ -232,8 +238,8 @@ def train(args, sess, dataset, epoch, image_paths_placeholder, labels_placeholde
             emb_array[lab] = emb
 
         # Select triplets based on the embeddings
-        triplets, nrof_random_negs, nrof_triplets = facenet.select_triplets(
-            emb_array, num_per_class, image_paths, args.people_per_batch, args.alpha)
+        triplets, nrof_random_negs, nrof_triplets = facenet.select_triplets(emb_array, num_per_class, 
+            image_paths, args.people_per_batch, args.alpha)
         selection_time = time.time() - start_time
         print('(nrof_random_negs, nrof_triplets) = (%d, %d): time=%.3f seconds' % 
             (nrof_random_negs, nrof_triplets, selection_time))
@@ -241,13 +247,19 @@ def train(args, sess, dataset, epoch, image_paths_placeholder, labels_placeholde
         # Perform training on the selected triplets
         # Need to make sure that triplets comes out of the network in the correct order
         #  or the triplet loss calculation will be wrong
-        # Sorting of 
-        sess.run(enqueue_op, {image_paths_placeholder: image_paths, labels_placeholder: labels})
+        # Sorting of images/embeddings based on index is needed
+        # Do we need a reading pipeline that reads triplets
+        
+        # NOTE: We should crop the triplets list to fit into an even number of batches
+        nrof_batches = int(math.floor(nrof_triplets*3/args.batch_size))
+        triplet_paths = list(itertools.chain(*triplets))
+        triplet_paths = triplet_paths[0:nrof_batches*args.batch_size]
+        labels = range(len(triplet_paths))
+        sess.run(enqueue_op, {image_paths_placeholder: triplet_paths, labels_placeholder: labels})
         train_time = 0
         i = 0
-        while i * args.batch_size < nrof_triplets * 3 and batch_number < args.epoch_size:
+        while i < nrof_batches:
             start_time = time.time()
-            batch = facenet.get_triplet_batch(triplets, i, args.batch_size)
             feed_dict = {learning_rate_placeholder: lr}
             err, _, step = sess.run([loss, train_op, global_step], feed_dict=feed_dict)
             duration = time.time() - start_time
@@ -256,7 +268,7 @@ def train(args, sess, dataset, epoch, image_paths_placeholder, labels_placeholde
             batch_number += 1
             i += 1
             train_time += duration
-        step = 0
+
         # Add validation loss and accuracy to summary
         summary = tf.Summary()
         #pylint: disable=maybe-no-member

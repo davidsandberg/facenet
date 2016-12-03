@@ -363,7 +363,7 @@ def select_triplets(embeddings, num_per_class, image_paths, people_per_batch, al
 
         emb_start_idx += n
 
-    return triplets, -1, -1
+    return triplets, -1, len(triplets)
 
 def get_learning_rate_from_file(filename, epoch):
     with open(filename, 'r') as f:
