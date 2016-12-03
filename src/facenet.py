@@ -38,6 +38,8 @@ from sklearn.cross_validation import KFold
 from scipy import interpolate
 from tensorflow.python.training import training
 
+import h5py
+
 
 def triplet_loss(anchor, positive, negative, alpha):
     """Calculate the triplet loss according to the FaceNet paper
@@ -290,67 +292,78 @@ def select_triplets(embeddings, num_per_class, image_paths, people_per_batch, al
     """ Select the triplets for training
     This is v1 of the triplet_selection function using pre-calculated distance matrix.
     """
-    nrof_images = len(image_paths)
-
-    # distance matrix
-    dists = np.zeros((nrof_images, nrof_images))
-    for i in np.arange(0, nrof_images):
-        dists[i] = np.sum(np.square(np.subtract(embeddings, embeddings[i])), 1)
-
-    nrof_triplets = nrof_images - people_per_batch
-    #shp = [nrof_triplets, image_paths.shape[1], image_paths.shape[2], image_paths.shape[3]]
-    as_arr = [None]*nrof_triplets
-    ps_arr = [None]*nrof_triplets
-    ns_arr = [None]*nrof_triplets
+    #nrof_images = len(image_paths)
+    #nrof_triplets = nrof_images - people_per_batch
     
     trip_idx = 0
-    # shuffle the triplets index
-    shuffle = np.arange(nrof_triplets)
-    #np.random.shuffle(shuffle)
     emb_start_idx = 0
-    nrof_random_negs = 0
-
-    # Max int
-    maxInt = 2**32
+    #nrof_random_negs = 0
+    
+    num_trips = 0
+#     myFile = h5py.File('/home/david/triplet1.h5', 'r')
+#     embeddings = myFile['embeddings'][...]
+#     num_per_class = myFile['num_per_class'][...]
+#     diff_ref = myFile['diff'][...]
+#     norms_ref = myFile['norms'][...]
+#     normsp_ref = myFile['normsp'][...]
+#     normsp2_ref = myFile['normsp2'][...]
+    np.random.seed(666)
+    triplet_embeddings = []
+    triplet_index = []
+    triplets = []
+    nrof_example_per_idx = np.zeros((embeddings.shape[0]))
+    random_idx = 0
 
     for i in xrange(people_per_batch):
-        n = num_per_class[i]
+        n = int(num_per_class[i])
         for j in range(1,n):
-            a_idx = emb_start_idx
-            p_idx = emb_start_idx + j
-            as_arr[shuffle[trip_idx]] = image_paths[a_idx]
-            ps_arr[shuffle[trip_idx]] = image_paths[p_idx]
+            a_idx = emb_start_idx + j - 1
+            diff = embeddings - embeddings[a_idx]  # numpy broadcast
+            norms = np.sum(np.square(diff), 1)
+            for pair in range(j, n): # For every possible positive pair.
+                p_idx = emb_start_idx + pair
       
-            pos_dist = dists[a_idx, p_idx]
-            sel_neg_idx = emb_start_idx
+                fff = np.linalg.norm(embeddings[a_idx]-embeddings[p_idx])
+                norms_p = norms - np.square(fff)
 
-            while sel_neg_idx >= emb_start_idx and sel_neg_idx <= emb_start_idx + n - 1:
-                sel_neg_idx = (np.random.randint(1, maxInt) % nrof_images) - 1
+                # Set the indices of the same class to the max so they are ignored.
+                norms_p[emb_start_idx:emb_start_idx+n] = np.max(norms_p)
 
-            sel_neg_dist = dists[a_idx, sel_neg_idx]
+                # Get indices of images within the margin.
+                all_neg = np.where(norms_p < alpha)[0]
 
-            random_neg = True
-            for k in range(nrof_images):
-                # skip if the index is within the positive (same person) class range.
-                if k < emb_start_idx or k > emb_start_idx + n - 1:
-                    neg_dist = dists[a_idx, k]
-                    if pos_dist < neg_dist and neg_dist < sel_neg_dist and np.abs(pos_dist - neg_dist) < alpha:
-                        random_neg = False
-                        sel_neg_dist = neg_dist
-                        sel_neg_idx = k
+                # Use only non-random triplets.
+                # Random triples (which are beyond the margin) will just produce gradient = 0,
+                # so the average gradient will decrease.
+                nrof_random_negs = all_neg.shape[0]
+                if nrof_random_negs>0:
+                        # selNegIdx = allNeg[math.random (table.getn(allNeg))]
+                    #n_idx = np.random.random_integers(0, nrof_random_negs-1)
+                    rnd_idx = (random_idx*10) % nrof_random_negs
+                    n_idx = all_neg[rnd_idx]
+                    random_idx += 1
 
-            if random_neg:
-                nrof_random_negs += 1
+                    # Add the embeding of each example.
+                    triplet_embeddings.append( (embeddings[a_idx], embeddings[p_idx], embeddings[n_idx]))
+                    # Add the original index of triplets.
+                    triplet_index.append((a_idx, p_idx, n_idx))
+                    triplets.append((image_paths[a_idx], image_paths[p_idx], image_paths[n_idx]))
+                    
+                    # Increase the number of times of using each example.
+                    nrof_example_per_idx[a_idx] += 1
+                    nrof_example_per_idx[p_idx] += 1
+                    nrof_example_per_idx[n_idx] += 1
 
-            ns_arr[shuffle[trip_idx]] = image_paths[sel_neg_idx]
-            #print('Triplet %d: (%d, %d, %d), pos_dist=%2.3f, neg_dist=%2.3f, sel_neg_dist=%2.3f' % (trip_idx, a_idx, p_idx, sel_neg_idx, pos_dist, neg_dist, sel_neg_dist))
-            trip_idx += 1
+                    #p_dist = np.linalg.norm(embeddings[a_idx]-embeddings[p_idx])
+                    #n_dist = np.linalg.norm(embeddings[a_idx]-embeddings[n_idx])
+                    #print('Triplet %d: (%d, %d, %d), pos_dist=%2.6f, neg_dist=%2.6f (%d, %d, %d, %d, %d)' % (trip_idx, a_idx, p_idx, n_idx, p_dist, n_dist, nrof_random_negs, rnd_idx, i, j, emb_start_idx))
+                    trip_idx += 1
+
+                num_trips += 1
 
         emb_start_idx += n
 
-    triplets = (as_arr, ps_arr, ns_arr)
-
-    return triplets, nrof_random_negs, nrof_triplets
+    return triplets, -1, -1
 
 def get_learning_rate_from_file(filename, epoch):
     with open(filename, 'r') as f:

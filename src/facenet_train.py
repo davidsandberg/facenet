@@ -239,26 +239,24 @@ def train(args, sess, dataset, epoch, image_paths_placeholder, labels_placeholde
             (nrof_random_negs, nrof_triplets, selection_time))
 
         # Perform training on the selected triplets
-#        sess.run(enqueue_op, {image_paths_placeholder: image_paths, labels_placeholder: labels})
-#         train_time = 0
-#         i = 0
-#         while i * args.batch_size < nrof_triplets * 3 and batch_number < args.epoch_size:
-#             start_time = time.time()
-#             batch = facenet.get_triplet_batch(triplets, i, args.batch_size)
-#             feed_dict = {images_placeholder: batch, learning_rate_placeholder: lr}
-#             err, _, step = sess.run([loss, train_op, global_step], feed_dict=feed_dict)
-#             if (batch_number % 100 == 0):
-#                 summary_str, step = sess.run([summary_op, global_step], feed_dict=feed_dict)
-#                 summary_writer.add_summary(summary_str, global_step=step)
-#             duration = time.time() - start_time
-#             print('Epoch: [%d][%d/%d]\tTime %.3f\tLoss %2.3f' %
-#                   (epoch, batch_number+1, args.epoch_size, duration, err))
-#             batch_number += 1
-#             i += 1
-#             train_time += duration
+        # Need to make sure that triplets comes out of the network in the correct order
+        #  or the triplet loss calculation will be wrong
+        # Sorting of 
+        sess.run(enqueue_op, {image_paths_placeholder: image_paths, labels_placeholder: labels})
+        train_time = 0
+        i = 0
+        while i * args.batch_size < nrof_triplets * 3 and batch_number < args.epoch_size:
+            start_time = time.time()
+            batch = facenet.get_triplet_batch(triplets, i, args.batch_size)
+            feed_dict = {learning_rate_placeholder: lr}
+            err, _, step = sess.run([loss, train_op, global_step], feed_dict=feed_dict)
+            duration = time.time() - start_time
+            print('Epoch: [%d][%d/%d]\tTime %.3f\tLoss %2.3f' %
+                  (epoch, batch_number+1, args.epoch_size, duration, err))
+            batch_number += 1
+            i += 1
+            train_time += duration
         step = 0
-        print(sum(x is None for x in triplets[0]))
-        #[ x is None for x in triplets[0] ]
         # Add validation loss and accuracy to summary
         summary = tf.Summary()
         #pylint: disable=maybe-no-member
@@ -306,9 +304,9 @@ def parse_arguments(argv):
     parser.add_argument('--image_size', type=int,
         help='Image size (height, width) in pixels.', default=96)
     parser.add_argument('--people_per_batch', type=int,
-        help='Number of people per batch.', default=45)
+        help='Number of people per batch.', default=15)
     parser.add_argument('--images_per_person', type=int,
-        help='Number of images per person.', default=40)
+        help='Number of images per person.', default=20)
     parser.add_argument('--epoch_size', type=int,
         help='Number of batches per epoch.', default=1000)
     parser.add_argument('--alpha', type=float,
