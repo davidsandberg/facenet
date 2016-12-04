@@ -38,7 +38,7 @@ import itertools
 import math
 import argparse
 import facenet
-#import lfw
+import lfw
 import tensorflow.contrib.slim as slim
 
 from tensorflow.python.ops import data_flow_ops
@@ -67,12 +67,12 @@ def main(args):
     if args.pretrained_model:
         print('Pre-trained model: %s' % os.path.expanduser(args.pretrained_model))
     
-#     if args.lfw_dir:
-#         print('LFW directory: %s' % args.lfw_dir)
-#         # Read the file containing the pairs used for testing
-#         pairs = lfw.read_pairs(os.path.expanduser(args.lfw_pairs))
-#         # Get the paths for the corresponding images
-#         lfw_paths, actual_issame = lfw.get_paths(os.path.expanduser(args.lfw_dir), pairs, args.lfw_file_ext)
+    if args.lfw_dir:
+        print('LFW directory: %s' % args.lfw_dir)
+        # Read the file containing the pairs used for testing
+        pairs = lfw.read_pairs(os.path.expanduser(args.lfw_pairs))
+        # Get the paths for the corresponding images
+        lfw_paths, actual_issame = lfw.get_paths(os.path.expanduser(args.lfw_dir), pairs, args.lfw_file_ext)
         
     
     with tf.Graph().as_default():
@@ -94,10 +94,6 @@ def main(args):
         enqueue_op = input_queue.enqueue_many([image_paths_placeholder, labels_placeholder])
                 
         nrof_preprocess_threads = 4
-        image_size = 160
-        triplet_batch_size = args.batch_size//3 # Number of triplets in a batch
-        random_crop = False
-        random_flip = False
         images_and_labels = []
         for _ in range(nrof_preprocess_threads):
             filenames, label = input_queue.dequeue()
@@ -106,21 +102,22 @@ def main(args):
                 file_contents = tf.read_file(filename)
                 image = tf.image.decode_png(file_contents)
                 
-                if random_crop:
-                    image = tf.random_crop(image, [image_size, image_size, 3])
+                if args.random_crop:
+                    image = tf.random_crop(image, [args.image_size, args.image_size, 3])
                 else:
-                    image = tf.image.resize_image_with_crop_or_pad(image, image_size, image_size)
-                if random_flip:
+                    image = tf.image.resize_image_with_crop_or_pad(image, args.image_size, args.image_size)
+                if args.random_flip:
                     image = tf.image.random_flip_left_right(image)
     
                 #pylint: disable=no-member
-                image.set_shape((image_size, image_size, 3))
+                image.set_shape((args.image_size, args.image_size, 3))
                 images.append(tf.image.per_image_whitening(image))
             images_and_labels.append([images, label])
     
         image_batch, labels_batch = tf.train.batch_join(
-            images_and_labels, batch_size=batch_size_placeholder, shapes=[(image_size, image_size, 3), ()], enqueue_many=True,
-            capacity=4 * nrof_preprocess_threads * triplet_batch_size,
+            images_and_labels, batch_size=batch_size_placeholder, 
+            shapes=[(args.image_size, args.image_size, 3), ()], enqueue_many=True,
+            capacity=4 * nrof_preprocess_threads * args.batch_size,
             allow_smaller_final_batch=True)
 
         # Build the inference graph
@@ -188,62 +185,93 @@ def main(args):
                 step = sess.run(global_step, feed_dict=None)
                 epoch = step // args.epoch_size
                 # Train for one epoch
-                step = train(args, sess, train_set, epoch, image_paths_placeholder, labels_placeholder, labels_batch,
+                train(args, sess, train_set, epoch, image_paths_placeholder, labels_placeholder, labels_batch,
                     learning_rate_placeholder, batch_size_placeholder, enqueue_op, input_queue, global_step, 
-                    embeddings, total_loss, train_op, summary_op, summary_writer)
-#                 if args.lfw_dir:
-#                     _, _, accuracy, val, val_std, far = lfw.evaluate(sess, lfw_paths,
-#                         actual_issame, args.seed, 60, images_placeholder, phase_train_placeholder, embeddings, nrof_folds=args.lfw_nrof_folds)
-#                     print('Accuracy: %1.3f+-%1.3f' % (np.mean(accuracy), np.std(accuracy)))
-#                     print('Validation rate: %2.5f+-%2.5f @ FAR=%2.5f' % (val, val_std, far))
-#                     # Add validation loss and accuracy to summary
-#                     summary = tf.Summary()
-#                     #pylint: disable=maybe-no-member
-#                     summary.value.add(tag='lfw/accuracy', simple_value=np.mean(accuracy))
-#                     summary.value.add(tag='lfw/val_rate', simple_value=val)
-#                     summary_writer.add_summary(summary, step)
+                    embeddings, total_loss, train_op, summary_op, summary_writer, args.learning_rate_schedule_file)
 
-                # Save the model checkpoint
-                print('Saving checkpoint')
-                checkpoint_path = os.path.join(model_dir, 'model.ckpt')
-                saver.save(sess, checkpoint_path, global_step=step)
+                # Save variables and the metagraph if it doesn't exist already
+                save_variables_and_metagraph(sess, saver, summary_writer, model_dir, subdir, step)
+
+                # Evaluate on LFW
+                if args.lfw_dir:
+                    evaluate(sess, lfw_paths, embeddings, labels_batch, image_paths_placeholder, labels_placeholder, 
+                            batch_size_placeholder, learning_rate_placeholder, enqueue_op, actual_issame, args.batch_size, 
+                            args.seed, args.lfw_nrof_folds, log_dir, step, summary_writer)
+
     return model_dir
+
+def evaluate(sess, image_paths, embeddings, labels_batch, image_paths_placeholder, labels_placeholder, 
+        batch_size_placeholder, learning_rate_placeholder, enqueue_op, actual_issame, batch_size, 
+        seed, nrof_folds, log_dir, step, summary_writer):
+    start_time = time.time()
+    # Run forward pass to calculate embeddings
+    print('Running forward pass on LFW images: ', end='')
+    
+    nrof_images = len(actual_issame)*2
+    assert(len(image_paths)==nrof_images)
+    labels_array = np.reshape(np.arange(nrof_images),(-1,3))
+    image_paths_array = np.reshape(np.expand_dims(np.array(image_paths),1), (-1,3))
+    sess.run(enqueue_op, {image_paths_placeholder: image_paths_array, labels_placeholder: labels_array})
+    emb_array = np.zeros((nrof_images, 128))
+    nrof_batches = int(np.ceil(nrof_images / batch_size))
+    label_check_array = np.zeros((nrof_images,))
+    for i in xrange(nrof_batches):
+        batch_size = min(nrof_images-i*batch_size, batch_size)
+        emb, lab = sess.run([embeddings, labels_batch], feed_dict={batch_size_placeholder: batch_size, learning_rate_placeholder: 0.0})
+        emb_array[lab,:] = emb
+        label_check_array[lab] = 1
+    print('%.3f' % (time.time()-start_time))
+    
+    assert(np.all(label_check_array==1))
+    
+    _, _, accuracy, val, val_std, far = lfw.evaluate(emb_array, seed, actual_issame, nrof_folds=nrof_folds)
+    
+    print('Accuracy: %1.3f+-%1.3f' % (np.mean(accuracy), np.std(accuracy)))
+    print('Validation rate: %2.5f+-%2.5f @ FAR=%2.5f' % (val, val_std, far))
+    lfw_time = time.time() - start_time
+    # Add validation loss and accuracy to summary
+    summary = tf.Summary()
+    #pylint: disable=maybe-no-member
+    summary.value.add(tag='lfw/accuracy', simple_value=np.mean(accuracy))
+    summary.value.add(tag='lfw/val_rate', simple_value=val)
+    summary.value.add(tag='time/lfw', simple_value=lfw_time)
+    summary_writer.add_summary(summary, step)
+    with open(os.path.join(log_dir,'lfw_result.txt'),'at') as f:
+        f.write('%d\t%.5f\t%.5f\n' % (step, np.mean(accuracy), val))
 
 
 def train(args, sess, dataset, epoch, image_paths_placeholder, labels_placeholder, labels_batch,
           learning_rate_placeholder, batch_size_placeholder, enqueue_op, input_queue, global_step, 
-          embeddings, loss, train_op, summary_op, summary_writer):
+          embeddings, loss, train_op, summary_op, summary_writer, learning_rate_schedule_file):
     batch_number = 0
     
     if args.learning_rate>0.0:
         lr = args.learning_rate
     else:
-        lr = facenet.get_learning_rate_from_file('../data/learning_rate_schedule.txt', epoch)
+        lr = facenet.get_learning_rate_from_file(learning_rate_schedule_file, epoch)
     while batch_number < args.epoch_size:
         # Sample people randomly from the dataset
-        image_paths, num_per_class = facenet.sample_people(dataset, args.people_per_batch, args.images_per_person)
+        image_paths, num_per_class = sample_people(dataset, args.people_per_batch, args.images_per_person)
 
         print('Running forward pass on sampled images: ', end='')
         start_time = time.time()
         
         # Run a forward pass for the sampled images
-        batch_size_forward_pass = 200
         nrof_examples = args.people_per_batch * args.images_per_person
-        #assert('Number of images needs to be an integer multiple of the batch size', nrof_examples % args.batch_size == 0)
         labels_array = np.reshape(np.arange(nrof_examples),(-1,3))
         image_paths_array = np.reshape(np.expand_dims(np.array(image_paths),1), (-1,3))
         sess.run(enqueue_op, {image_paths_placeholder: image_paths_array, labels_placeholder: labels_array})
         emb_array = np.zeros((nrof_examples, 128))
-        nrof_batches = int(np.ceil(nrof_examples / batch_size_forward_pass))
+        nrof_batches = int(np.ceil(nrof_examples / args.batch_size))
         for i in xrange(nrof_batches):
-            batch_size = min(nrof_examples-i*batch_size_forward_pass, batch_size_forward_pass)
+            batch_size = min(nrof_examples-i*args.batch_size, args.batch_size)
             emb, lab = sess.run([embeddings, labels_batch], feed_dict={batch_size_placeholder: batch_size, learning_rate_placeholder: lr})
             emb_array[lab,:] = emb
         print('%.3f' % (time.time()-start_time))
 
         # Select triplets based on the embeddings
         print('Selecting suitable triplets for training')
-        triplets, nrof_random_negs, nrof_triplets = facenet.select_triplets(emb_array, num_per_class, 
+        triplets, nrof_random_negs, nrof_triplets = select_triplets(emb_array, num_per_class, 
             image_paths, args.people_per_batch, args.alpha)
         selection_time = time.time() - start_time
         print('(nrof_random_negs, nrof_triplets) = (%d, %d): time=%.3f seconds' % 
@@ -272,6 +300,9 @@ def train(args, sess, dataset, epoch, image_paths_placeholder, labels_placeholde
             i += 1
             train_time += duration
 
+        # TODO: Here we should assert that the FIFOs are empty.
+        #  But for this we would need access to the batch_join FIFO
+        
         # Add validation loss and accuracy to summary
         summary = tf.Summary()
         #pylint: disable=maybe-no-member
@@ -281,7 +312,118 @@ def train(args, sess, dataset, epoch, image_paths_placeholder, labels_placeholde
 #         summary.value.add(tag='time/total', simple_value=load_time+selection_time+train_time)
         summary_writer.add_summary(summary, step)
     return step
+  
+def select_triplets(embeddings, num_per_class, image_paths, people_per_batch, alpha):
+    """ Select the triplets for training
+    """
+    trip_idx = 0
+    emb_start_idx = 0
+    
+    num_trips = 0
+    triplet_embeddings = []
+    triplet_index = []
+    triplets = []
+    nrof_example_per_idx = np.zeros((embeddings.shape[0]))
 
+    for i in xrange(people_per_batch):
+        n = int(num_per_class[i])
+        for j in range(1,n):
+            a_idx = emb_start_idx + j - 1
+            diff = embeddings - embeddings[a_idx]  # numpy broadcast
+            norms = np.sum(np.square(diff), 1)
+            for pair in range(j, n): # For every possible positive pair.
+                p_idx = emb_start_idx + pair
+      
+                fff = np.linalg.norm(embeddings[a_idx]-embeddings[p_idx])
+                norms_p = norms - np.square(fff)
+
+                # Set the indices of the same class to the max so they are ignored.
+                norms_p[emb_start_idx:emb_start_idx+n] = np.max(norms_p)
+
+                # Get indices of images within the margin.
+                all_neg = np.where(norms_p < alpha)[0]
+
+                # Use only non-random triplets.
+                # Random triples (which are beyond the margin) will just produce gradient = 0,
+                # so the average gradient will decrease.
+                nrof_random_negs = all_neg.shape[0]
+                if nrof_random_negs>0:
+                    rnd_idx = np.random.randint(0, nrof_random_negs-1)
+                    n_idx = all_neg[rnd_idx]
+
+                    # Add the embeding of each example.
+                    triplet_embeddings.append( (embeddings[a_idx], embeddings[p_idx], embeddings[n_idx]))
+                    # Add the original index of triplets.
+                    triplet_index.append((a_idx, p_idx, n_idx))
+                    triplets.append((image_paths[a_idx], image_paths[p_idx], image_paths[n_idx]))
+                    
+                    # Increase the number of times of using each example.
+                    nrof_example_per_idx[a_idx] += 1
+                    nrof_example_per_idx[p_idx] += 1
+                    nrof_example_per_idx[n_idx] += 1
+
+                    #p_dist = np.linalg.norm(embeddings[a_idx]-embeddings[p_idx])
+                    #n_dist = np.linalg.norm(embeddings[a_idx]-embeddings[n_idx])
+                    #print('Triplet %d: (%d, %d, %d), pos_dist=%2.6f, neg_dist=%2.6f (%d, %d, %d, %d, %d)' % (trip_idx, a_idx, p_idx, n_idx, p_dist, n_dist, nrof_random_negs, rnd_idx, i, j, emb_start_idx))
+                    trip_idx += 1
+
+                num_trips += 1
+
+        emb_start_idx += n
+    np.random.shuffle(triplets)
+    return triplets, -1, len(triplets)
+
+def sample_people(dataset, people_per_batch, images_per_person):
+    nrof_images = people_per_batch * images_per_person
+  
+    # Sample classes from the dataset
+    nrof_classes = len(dataset)
+    class_indices = np.arange(nrof_classes)
+    np.random.shuffle(class_indices)
+    
+    i = 0
+    image_paths = []
+    num_per_class = []
+    sampled_class_indices = []
+    # Sample images from these classes until we have enough
+    while len(image_paths)<nrof_images:
+        class_index = class_indices[i]
+        nrof_images_in_class = len(dataset[class_index])
+        image_indices = np.arange(nrof_images_in_class)
+        np.random.shuffle(image_indices)
+        nrof_images_from_class = min(nrof_images_in_class, images_per_person, nrof_images-len(image_paths))
+        idx = image_indices[0:nrof_images_from_class]
+        image_paths_for_class = [dataset[class_index].image_paths[j] for j in idx]
+        sampled_class_indices += [class_index]*nrof_images_from_class
+        image_paths += image_paths_for_class
+        num_per_class.append(nrof_images_from_class)
+        i+=1
+  
+    return image_paths, num_per_class
+  
+def save_variables_and_metagraph(sess, saver, summary_writer, model_dir, model_name, step):
+    # Save the model checkpoint
+    print('Saving variables')
+    start_time = time.time()
+    checkpoint_path = os.path.join(model_dir, 'model-%s.ckpt' % model_name)
+    saver.save(sess, checkpoint_path, global_step=step, write_meta_graph=False)
+    save_time_variables = time.time() - start_time
+    print('Variables saved in %.2f seconds' % save_time_variables)
+    metagraph_filename = os.path.join(model_dir, 'model-%s.meta' % model_name)
+    save_time_metagraph = 0  
+    if not os.path.exists(metagraph_filename):
+        print('Saving metagraph')
+        start_time = time.time()
+        saver.export_meta_graph(metagraph_filename)
+        save_time_metagraph = time.time() - start_time
+        print('Metagraph saved in %.2f seconds' % save_time_metagraph)
+    summary = tf.Summary()
+    #pylint: disable=maybe-no-member
+    summary.value.add(tag='time/save_variables', simple_value=save_time_variables)
+    summary.value.add(tag='time/save_metagraph', simple_value=save_time_metagraph)
+    summary_writer.add_summary(summary, step)
+  
+  
 def get_learning_rate_from_file(filename, epoch):
     with open(filename, 'r') as f:
         for line in f.readlines():
@@ -331,10 +473,6 @@ def parse_arguments(argv):
          'If the size of the images in the data directory is equal to image_size no cropping is performed', action='store_true')
     parser.add_argument('--random_flip', 
         help='Performs random horizontal flipping of training images.', action='store_true')
-    parser.add_argument('--pool_type', type=str,
-        help='The type of pooling to use for some of the inception layers', default='MAX', choices=['MAX', 'L2'])
-    parser.add_argument('--use_lrn', 
-        help='Enables Local Response Normalization after the first layers of the inception network.', action='store_true')
     parser.add_argument('--keep_probability', type=float,
         help='Keep probability of dropout for the fully connected layer(s).', default=1.0)
     parser.add_argument('--weight_decay', type=float,
@@ -352,7 +490,9 @@ def parse_arguments(argv):
         help='Exponential decay for tracking of training parameters.', default=0.9999)
     parser.add_argument('--seed', type=int,
         help='Random seed.', default=666)
- 
+    parser.add_argument('--learning_rate_schedule_file', type=str,
+        help='File containing the learning rate schedule that is used when learning_rate is set to to -1.', default='../data/learning_rate_schedule.txt')
+
     # Parameters for validation on LFW
     parser.add_argument('--lfw_pairs', type=str,
         help='The file containing the pairs to use for validation.', default='../data/pairs.txt')

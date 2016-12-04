@@ -288,83 +288,6 @@ def get_triplet_batch(triplets, batch_index, batch_size):
     batch = np.vstack([a, p, n])
     return batch
 
-def select_triplets(embeddings, num_per_class, image_paths, people_per_batch, alpha):
-    """ Select the triplets for training
-    This is v1 of the triplet_selection function using pre-calculated distance matrix.
-    """
-    #nrof_images = len(image_paths)
-    #nrof_triplets = nrof_images - people_per_batch
-    
-    trip_idx = 0
-    emb_start_idx = 0
-    #nrof_random_negs = 0
-    
-    num_trips = 0
-#     myFile = h5py.File('/home/david/triplet1.h5', 'r')
-#     embeddings = myFile['embeddings'][...]
-#     num_per_class = myFile['num_per_class'][...]
-#     diff_ref = myFile['diff'][...]
-#     norms_ref = myFile['norms'][...]
-#     normsp_ref = myFile['normsp'][...]
-#     normsp2_ref = myFile['normsp2'][...]
-    np.random.seed(666)
-    triplet_embeddings = []
-    triplet_index = []
-    triplets = []
-    nrof_example_per_idx = np.zeros((embeddings.shape[0]))
-    random_idx = 0
-
-    for i in xrange(people_per_batch):
-        n = int(num_per_class[i])
-        for j in range(1,n):
-            a_idx = emb_start_idx + j - 1
-            diff = embeddings - embeddings[a_idx]  # numpy broadcast
-            norms = np.sum(np.square(diff), 1)
-            for pair in range(j, n): # For every possible positive pair.
-                p_idx = emb_start_idx + pair
-      
-                fff = np.linalg.norm(embeddings[a_idx]-embeddings[p_idx])
-                norms_p = norms - np.square(fff)
-
-                # Set the indices of the same class to the max so they are ignored.
-                norms_p[emb_start_idx:emb_start_idx+n] = np.max(norms_p)
-
-                # Get indices of images within the margin.
-                all_neg = np.where(norms_p < alpha)[0]
-
-                # Use only non-random triplets.
-                # Random triples (which are beyond the margin) will just produce gradient = 0,
-                # so the average gradient will decrease.
-                nrof_random_negs = all_neg.shape[0]
-                if nrof_random_negs>0:
-                        # selNegIdx = allNeg[math.random (table.getn(allNeg))]
-                    #n_idx = np.random.random_integers(0, nrof_random_negs-1)
-                    rnd_idx = (random_idx*10) % nrof_random_negs
-                    n_idx = all_neg[rnd_idx]
-                    random_idx += 1
-
-                    # Add the embeding of each example.
-                    triplet_embeddings.append( (embeddings[a_idx], embeddings[p_idx], embeddings[n_idx]))
-                    # Add the original index of triplets.
-                    triplet_index.append((a_idx, p_idx, n_idx))
-                    triplets.append((image_paths[a_idx], image_paths[p_idx], image_paths[n_idx]))
-                    
-                    # Increase the number of times of using each example.
-                    nrof_example_per_idx[a_idx] += 1
-                    nrof_example_per_idx[p_idx] += 1
-                    nrof_example_per_idx[n_idx] += 1
-
-                    #p_dist = np.linalg.norm(embeddings[a_idx]-embeddings[p_idx])
-                    #n_dist = np.linalg.norm(embeddings[a_idx]-embeddings[n_idx])
-                    #print('Triplet %d: (%d, %d, %d), pos_dist=%2.6f, neg_dist=%2.6f (%d, %d, %d, %d, %d)' % (trip_idx, a_idx, p_idx, n_idx, p_dist, n_dist, nrof_random_negs, rnd_idx, i, j, emb_start_idx))
-                    trip_idx += 1
-
-                num_trips += 1
-
-        emb_start_idx += n
-
-    return triplets, -1, len(triplets)
-
 def get_learning_rate_from_file(filename, epoch):
     with open(filename, 'r') as f:
         for line in f.readlines():
@@ -430,52 +353,6 @@ def split_dataset(dataset, split_ratio, mode):
     else:
         raise ValueError('Invalid train/test split mode "%s"' % mode)
     return train_set, test_set
-
-def sample_people(dataset, people_per_batch, images_per_person):
-    nrof_images = people_per_batch * images_per_person
-  
-    # Sample classes from the dataset
-    nrof_classes = len(dataset)
-    class_indices = np.arange(nrof_classes)
-    np.random.shuffle(class_indices)
-    
-    i = 0
-    image_paths = []
-    num_per_class = []
-    sampled_class_indices = []
-    # Sample images from these classes until we have enough
-    while len(image_paths)<nrof_images:
-        class_index = class_indices[i]
-        nrof_images_in_class = len(dataset[class_index])
-        image_indices = np.arange(nrof_images_in_class)
-        np.random.shuffle(image_indices)
-        nrof_images_from_class = min(nrof_images_in_class, images_per_person, nrof_images-len(image_paths))
-        idx = image_indices[0:nrof_images_from_class]
-        image_paths_for_class = [dataset[class_index].image_paths[j] for j in idx]
-        sampled_class_indices += [class_index]*nrof_images_from_class
-        image_paths += image_paths_for_class
-        num_per_class.append(nrof_images_from_class)
-        i+=1
-  
-    return image_paths, num_per_class
-  
-def sample_random_people(dataset, nrof_images):
-    # Create flattened dataset with image paths and labels
-    image_paths_flat = []
-    labels_flat = []
-    for i in range(len(dataset)):
-        image_paths_flat += dataset[i].image_paths
-        labels_flat += [i] * len(dataset[i].image_paths)
-        
-    # Take nrof_images samples from the flattened dataset
-    image_paths = []
-    labels = []
-    for i in range(nrof_images):
-        x = np.random.randint(0, len(image_paths_flat))
-        image_paths.append(image_paths_flat[x])
-        labels.append(labels_flat[x])
-  
-    return image_paths, labels
 
 def load_model(model_dir, meta_file, ckpt_file):
     model_dir_exp = os.path.expanduser(model_dir)
