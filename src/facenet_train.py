@@ -114,22 +114,22 @@ def main(args):
                 #pylint: disable=no-member
                 image.set_shape((image_size, image_size, 3))
                 images.append(tf.image.per_image_whitening(image))
-            images_and_labels.append([tf.pack(images), label])
+            images_and_labels.append([images, label])
     
         image_batch, labels_batch = tf.train.batch_join(
-            images_and_labels, batch_size=triplet_batch_size,
+            images_and_labels, batch_size=args.batch_size, shapes=[(image_size, image_size, 3), ()], enqueue_many=True,
             capacity=4 * nrof_preprocess_threads * triplet_batch_size,
             allow_smaller_final_batch=True)
 
         # Build the inference graph
-#         prelogits, _ = network.inference(image_batch, args.keep_probability, 
-#             phase_train=True, weight_decay=args.weight_decay)
-#         pre_embeddings = slim.fully_connected(prelogits, 128, activation_fn=None, scope='Embeddings', reuse=False)
-        pre_embeddings = slim.fully_connected(tf.reduce_sum(image_batch, (2,3)), 128, activation_fn=None, scope='Embeddings', reuse=False)
+        prelogits, _ = network.inference(image_batch, args.keep_probability, 
+            phase_train=True, weight_decay=args.weight_decay)
+        pre_embeddings = slim.fully_connected(prelogits, 128, activation_fn=None, scope='Embeddings', reuse=False)
+#         pre_embeddings = slim.fully_connected(tf.reduce_sum(image_batch, (2,3)), 128, activation_fn=None, scope='Embeddings', reuse=False)
 
         # Split example embeddings into anchor, positive and negative and calculate triplet loss
         embeddings = tf.nn.l2_normalize(pre_embeddings, 1, 1e-10, name='embeddings')
-        anchor, positive, negative = tf.unpack(embeddings, 3, 1)
+        anchor, positive, negative = tf.unpack(tf.reshape(embeddings, [3,-1,128]), 3, 0)
         triplet_loss = facenet.triplet_loss(anchor, positive, negative, args.alpha)
         
         learning_rate = tf.train.exponential_decay(learning_rate_placeholder, global_step,
