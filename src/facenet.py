@@ -38,7 +38,7 @@ from sklearn.cross_validation import KFold
 from scipy import interpolate
 from tensorflow.python.training import training
 
-import h5py
+#import h5py
 
 
 def triplet_loss(anchor, positive, negative, alpha):
