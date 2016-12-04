@@ -82,6 +82,8 @@ def main(args):
         # Placeholder for the learning rate
         learning_rate_placeholder = tf.placeholder(tf.float32, name='learning_rate')
         
+        batch_size_placeholder = tf.placeholder(tf.int32, name='batch_size')
+        
         image_paths_placeholder = tf.placeholder(tf.string, shape=(None,3), name='image_paths')
         labels_placeholder = tf.placeholder(tf.int64, shape=(None,3), name='labels')
         
@@ -117,7 +119,7 @@ def main(args):
             images_and_labels.append([images, label])
     
         image_batch, labels_batch = tf.train.batch_join(
-            images_and_labels, batch_size=args.batch_size, shapes=[(image_size, image_size, 3), ()], enqueue_many=True,
+            images_and_labels, batch_size=batch_size_placeholder, shapes=[(image_size, image_size, 3), ()], enqueue_many=True,
             capacity=4 * nrof_preprocess_threads * triplet_batch_size,
             allow_smaller_final_batch=True)
 
@@ -187,7 +189,8 @@ def main(args):
                 epoch = step // args.epoch_size
                 # Train for one epoch
                 step = train(args, sess, train_set, epoch, image_paths_placeholder, labels_placeholder, labels_batch,
-                    learning_rate_placeholder, enqueue_op, input_queue, global_step, embeddings, total_loss, train_op, summary_op, summary_writer)
+                    learning_rate_placeholder, batch_size_placeholder, enqueue_op, input_queue, global_step, 
+                    embeddings, total_loss, train_op, summary_op, summary_writer)
 #                 if args.lfw_dir:
 #                     _, _, accuracy, val, val_std, far = lfw.evaluate(sess, lfw_paths,
 #                         actual_issame, args.seed, 60, images_placeholder, phase_train_placeholder, embeddings, nrof_folds=args.lfw_nrof_folds)
@@ -208,7 +211,8 @@ def main(args):
 
 
 def train(args, sess, dataset, epoch, image_paths_placeholder, labels_placeholder, labels_batch,
-          learning_rate_placeholder, enqueue_op, input_queue, global_step, embeddings, loss, train_op, summary_op, summary_writer):
+          learning_rate_placeholder, batch_size_placeholder, enqueue_op, input_queue, global_step, 
+          embeddings, loss, train_op, summary_op, summary_writer):
     batch_number = 0
     
     if args.learning_rate>0.0:
@@ -223,22 +227,19 @@ def train(args, sess, dataset, epoch, image_paths_placeholder, labels_placeholde
         start_time = time.time()
         
         # Run a forward pass for the sampled images
-        nrof_examples_per_epoch = args.people_per_batch * args.images_per_person
-        assert('Number of images needs to be an integer multiple of the batch size', nrof_examples_per_epoch % args.batch_size == 0)
-        nrof_batches_per_epoch = int(np.floor(nrof_examples_per_epoch / (args.batch_size)))
-        #print('Nrof embeddings: %d' % len(image_paths))
-        labels_array = np.reshape(np.arange(nrof_examples_per_epoch),(-1,3))
+        batch_size_forward_pass = 200
+        nrof_examples = args.people_per_batch * args.images_per_person
+        #assert('Number of images needs to be an integer multiple of the batch size', nrof_examples % args.batch_size == 0)
+        labels_array = np.reshape(np.arange(nrof_examples),(-1,3))
         image_paths_array = np.reshape(np.expand_dims(np.array(image_paths),1), (-1,3))
         sess.run(enqueue_op, {image_paths_placeholder: image_paths_array, labels_placeholder: labels_array})
-        emb_array = np.zeros((nrof_examples_per_epoch, 128))
-        for _ in xrange(nrof_batches_per_epoch):
-            #print(sess.run(input_queue.size()))
-            emb, lab = sess.run([embeddings, labels_batch], feed_dict={learning_rate_placeholder: lr})
-            #print('max label: %d' % np.max(lab))
-            emb_array[lab.flatten(),:] = np.reshape(emb, (args.batch_size,-1))
-            #print(lab.flatten())
+        emb_array = np.zeros((nrof_examples, 128))
+        nrof_batches = int(np.ceil(nrof_examples / batch_size_forward_pass))
+        for i in xrange(nrof_batches):
+            batch_size = min(nrof_examples-i*batch_size_forward_pass, batch_size_forward_pass)
+            emb, lab = sess.run([embeddings, labels_batch], feed_dict={batch_size_placeholder: batch_size, learning_rate_placeholder: lr})
+            emb_array[lab,:] = emb
         print('%.3f' % (time.time()-start_time))
-        #print(sess.run(input_queue.size()))
 
         # Select triplets based on the embeddings
         print('Selecting suitable triplets for training')
@@ -249,31 +250,24 @@ def train(args, sess, dataset, epoch, image_paths_placeholder, labels_placeholde
             (nrof_random_negs, nrof_triplets, selection_time))
 
         # Perform training on the selected triplets
-        # Need to make sure that triplets comes out of the network in the correct order
-        #  or the triplet loss calculation will be wrong
-        # Sorting of images/embeddings based on index is needed
-        # Do we need a reading pipeline that reads triplets
-        
-        # NOTE: We should crop the triplets list to fit into an even number of batches
         nrof_batches = int(math.floor(nrof_triplets*3/args.batch_size))
         triplet_paths = list(itertools.chain(*triplets))
         triplet_paths = triplet_paths[0:nrof_batches*args.batch_size]
-        #labels = range(len(triplet_paths))
         print('Nrof paths: %d' % len(triplet_paths))
-        print(sess.run(input_queue.size()))
         labels_array = np.reshape(np.arange(len(triplet_paths)),(-1,3))
         triplet_paths_array = np.reshape(np.expand_dims(np.array(triplet_paths),1), (-1,3))
         sess.run(enqueue_op, {image_paths_placeholder: triplet_paths_array, labels_placeholder: labels_array})
-        print(sess.run(input_queue.size()))
+        nrof_examples = len(triplet_paths)
         train_time = 0
         i = 0
         while i < nrof_batches:
             start_time = time.time()
-            feed_dict = {learning_rate_placeholder: lr}
-            err, _, step, lab = sess.run([loss, train_op, global_step, labels_batch], feed_dict=feed_dict)
+            batch_size = min(nrof_examples-i*args.batch_size, args.batch_size)
+            feed_dict = {batch_size_placeholder: batch_size, learning_rate_placeholder: lr}
+            err, _, step = sess.run([loss, train_op, global_step], feed_dict=feed_dict)
             duration = time.time() - start_time
-            print('Epoch: [%d][%d/%d]\tTime %.3f\tLoss %2.3f' %
-                  (epoch, batch_number+1, args.epoch_size, duration, err))
+            print('Epoch: [%d][%d/%d]\tTime %.3f\tLoss %2.3f\t%d' %
+                  (epoch, batch_number+1, args.epoch_size, duration, err, batch_size))
             batch_number += 1
             i += 1
             train_time += duration
