@@ -84,6 +84,8 @@ def main(args):
         
         batch_size_placeholder = tf.placeholder(tf.int32, name='batch_size')
         
+        phase_train_placeholder = tf.placeholder(tf.bool, name='phase_train')
+        
         image_paths_placeholder = tf.placeholder(tf.string, shape=(None,3), name='image_paths')
         labels_placeholder = tf.placeholder(tf.int64, shape=(None,3), name='labels')
         
@@ -92,7 +94,7 @@ def main(args):
                                     shapes=[(3,), (3,)],
                                     shared_name=None, name=None)
         enqueue_op = input_queue.enqueue_many([image_paths_placeholder, labels_placeholder])
-                
+        
         nrof_preprocess_threads = 4
         images_and_labels = []
         for _ in range(nrof_preprocess_threads):
@@ -122,7 +124,7 @@ def main(args):
 
         # Build the inference graph
         prelogits, _ = network.inference(image_batch, args.keep_probability, 
-            phase_train=True, weight_decay=args.weight_decay)
+            phase_train=phase_train_placeholder, weight_decay=args.weight_decay)
         pre_embeddings = slim.fully_connected(prelogits, 128, activation_fn=None, scope='Embeddings', reuse=False)
         embedding_size = 1792
 #         pre_embeddings = slim.fully_connected(tf.reduce_sum(image_batch, (2,3)), 128, activation_fn=None, scope='Embeddings', reuse=False)
@@ -179,6 +181,7 @@ def main(args):
         with sess.as_default():
 
             if args.pretrained_model:
+                print('Restoring pretrained model: %s' % args.pretrained_model)
                 restore_saver.restore(sess, os.path.expanduser(args.pretrained_model))
 
             # Training and validation loop
@@ -188,7 +191,7 @@ def main(args):
                 epoch = step // args.epoch_size
                 # Train for one epoch
                 train(args, sess, train_set, epoch, image_paths_placeholder, labels_placeholder, labels_batch,
-                    learning_rate_placeholder, batch_size_placeholder, enqueue_op, input_queue, global_step, 
+                    batch_size_placeholder, learning_rate_placeholder, phase_train_placeholder, enqueue_op, input_queue, global_step, 
                     embeddings, total_loss, train_op, summary_op, summary_writer, args.learning_rate_schedule_file,
                     embedding_size)
 
@@ -198,13 +201,13 @@ def main(args):
                 # Evaluate on LFW
                 if args.lfw_dir:
                     evaluate(sess, lfw_paths, embeddings, labels_batch, image_paths_placeholder, labels_placeholder, 
-                            batch_size_placeholder, learning_rate_placeholder, enqueue_op, actual_issame, args.batch_size, 
+                            batch_size_placeholder, learning_rate_placeholder, phase_train_placeholder, enqueue_op, actual_issame, args.batch_size, 
                             args.seed, args.lfw_nrof_folds, log_dir, step, summary_writer, embedding_size)
 
     return model_dir
 
 def evaluate(sess, image_paths, embeddings, labels_batch, image_paths_placeholder, labels_placeholder, 
-        batch_size_placeholder, learning_rate_placeholder, enqueue_op, actual_issame, batch_size, 
+        batch_size_placeholder, learning_rate_placeholder, phase_train_placeholder, enqueue_op, actual_issame, batch_size, 
         seed, nrof_folds, log_dir, step, summary_writer, embedding_size):
     start_time = time.time()
     # Run forward pass to calculate embeddings
@@ -220,7 +223,8 @@ def evaluate(sess, image_paths, embeddings, labels_batch, image_paths_placeholde
     label_check_array = np.zeros((nrof_images,))
     for i in xrange(nrof_batches):
         batch_size = min(nrof_images-i*batch_size, batch_size)
-        emb, lab = sess.run([embeddings, labels_batch], feed_dict={batch_size_placeholder: batch_size, learning_rate_placeholder: 0.0})
+        emb, lab = sess.run([embeddings, labels_batch], feed_dict={batch_size_placeholder: batch_size,
+            learning_rate_placeholder: 0.0, phase_train_placeholder: False})
         emb_array[lab,:] = emb
         label_check_array[lab] = 1
     print('%.3f' % (time.time()-start_time))
@@ -244,7 +248,7 @@ def evaluate(sess, image_paths, embeddings, labels_batch, image_paths_placeholde
 
 
 def train(args, sess, dataset, epoch, image_paths_placeholder, labels_placeholder, labels_batch,
-          learning_rate_placeholder, batch_size_placeholder, enqueue_op, input_queue, global_step, 
+          batch_size_placeholder, learning_rate_placeholder, phase_train_placeholder, enqueue_op, input_queue, global_step, 
           embeddings, loss, train_op, summary_op, summary_writer, learning_rate_schedule_file,
           embedding_size):
     batch_number = 0
@@ -273,7 +277,8 @@ def train(args, sess, dataset, epoch, image_paths_placeholder, labels_placeholde
         nrof_batches = int(np.ceil(nrof_examples / args.batch_size))
         for i in xrange(nrof_batches):
             batch_size = min(nrof_examples-i*args.batch_size, args.batch_size)
-            emb, lab = sess.run([embeddings, labels_batch], feed_dict={batch_size_placeholder: batch_size, learning_rate_placeholder: lr})
+            emb, lab = sess.run([embeddings, labels_batch], feed_dict={batch_size_placeholder: batch_size, 
+                learning_rate_placeholder: lr, phase_train_placeholder: False})
             emb_array[lab,:] = emb
         print('%.3f' % (time.time()-start_time))
 
@@ -300,7 +305,8 @@ def train(args, sess, dataset, epoch, image_paths_placeholder, labels_placeholde
         while i < nrof_batches:
             start_time = time.time()
             batch_size = min(nrof_examples-i*args.batch_size, args.batch_size)
-            feed_dict = {batch_size_placeholder: batch_size, learning_rate_placeholder: lr}
+            qqq = 1
+            feed_dict = {batch_size_placeholder: batch_size, learning_rate_placeholder: 0.0, phase_train_placeholder: False}
             err, _, step, emb, lab = sess.run([loss, train_op, global_step, embeddings, labels_batch], feed_dict=feed_dict)
             emb_array[lab,:] = emb
             duration = time.time() - start_time
@@ -314,7 +320,7 @@ def train(args, sess, dataset, epoch, image_paths_placeholder, labels_placeholde
         neg_dist_sqr = np.sum(np.square(emb_array[0::3,:]-emb_array[2::3,:]),1)
         
         for i in range(0,nrof_examples//3):
-            print('%d  pos_dist_sqr: %.5f  neg_dist_sqr: %.5f' % (i, pos_dist_sqr[i], neg_dist_sqr[i]))
+            print('%d  pos_dist_sqr: %.6f  neg_dist_sqr: %.6f' % (i, pos_dist_sqr[i], neg_dist_sqr[i]))
             
         yyy = 1
 
