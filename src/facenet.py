@@ -53,7 +53,7 @@ def triplet_loss(anchor, positive, negative, alpha):
       the triplet loss according to the FaceNet paper as a float tensor.
     """
     with tf.variable_scope('triplet_loss'):
-        pos_dist = tf.reduce_sum(tf.square(tf.sub(anchor, positive)), 1)  # Summing over distances in each batch
+        pos_dist = tf.reduce_sum(tf.square(tf.sub(anchor, positive)), 1)
         neg_dist = tf.reduce_sum(tf.square(tf.sub(anchor, negative)), 1)
         
         basic_loss = tf.add(tf.sub(pos_dist,neg_dist), alpha)
