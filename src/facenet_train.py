@@ -35,7 +35,6 @@ import tensorflow as tf
 import numpy as np
 import importlib
 import itertools
-import math
 import argparse
 import facenet
 import lfw
@@ -89,7 +88,7 @@ def main(args):
         image_paths_placeholder = tf.placeholder(tf.string, shape=(None,3), name='image_paths')
         labels_placeholder = tf.placeholder(tf.int64, shape=(None,3), name='labels')
         
-        input_queue = data_flow_ops.FIFOQueue(capacity=10000,
+        input_queue = data_flow_ops.FIFOQueue(capacity=100000,
                                     dtypes=[tf.string, tf.int64],
                                     shapes=[(3,), (3,)],
                                     shared_name=None, name=None)
@@ -125,13 +124,12 @@ def main(args):
         # Build the inference graph
         prelogits, _ = network.inference(image_batch, args.keep_probability, 
             phase_train=phase_train_placeholder, weight_decay=args.weight_decay)
-        pre_embeddings = slim.fully_connected(prelogits, 128, activation_fn=None, scope='Embeddings', reuse=False)
-        embedding_size = 1792
-#         pre_embeddings = slim.fully_connected(tf.reduce_sum(image_batch, (2,3)), 128, activation_fn=None, scope='Embeddings', reuse=False)
+        pre_embeddings = slim.fully_connected(prelogits, args.embedding_size, activation_fn=None, scope='Embeddings', reuse=False)
+        #embedding_size = 1792
 
-        # Split example embeddings into anchor, positive and negative and calculate triplet loss
-        embeddings = tf.nn.l2_normalize(prelogits, 1, 1e-10, name='embeddings')
-        anchor, positive, negative = tf.unpack(tf.reshape(embeddings, [-1,3,embedding_size]), 3, 1)
+        embeddings = tf.nn.l2_normalize(pre_embeddings, 1, 1e-10, name='embeddings')
+        # Split embeddings into anchor, positive and negative and calculate triplet loss
+        anchor, positive, negative = tf.unpack(tf.reshape(embeddings, [-1,3,args.embedding_size]), 3, 1)
         triplet_loss = facenet.triplet_loss(anchor, positive, negative, args.alpha)
         
         learning_rate = tf.train.exponential_decay(learning_rate_placeholder, global_step,
@@ -146,12 +144,12 @@ def main(args):
         restore_vars = []
         update_gradient_vars = []
         if args.pretrained_model:
+            update_gradient_vars = tf.all_variables()
             for var in tf.all_variables():
                 if not 'Embeddings/' in var.op.name:
                     restore_vars.append(var)
-                else:
+                #else:
                     #update_gradient_vars.append(var)
-                    update_gradient_vars = tf.all_variables()
         else:
             restore_vars = tf.all_variables()
             update_gradient_vars = tf.all_variables()
@@ -193,7 +191,7 @@ def main(args):
                 train(args, sess, train_set, epoch, image_paths_placeholder, labels_placeholder, labels_batch,
                     batch_size_placeholder, learning_rate_placeholder, phase_train_placeholder, enqueue_op, input_queue, global_step, 
                     embeddings, total_loss, train_op, summary_op, summary_writer, args.learning_rate_schedule_file,
-                    embedding_size, anchor, positive, negative, triplet_loss)
+                    args.embedding_size, anchor, positive, negative, triplet_loss)
 
                 # Save variables and the metagraph if it doesn't exist already
                 save_variables_and_metagraph(sess, saver, summary_writer, model_dir, subdir, step)
@@ -202,7 +200,7 @@ def main(args):
                 if args.lfw_dir:
                     evaluate(sess, lfw_paths, embeddings, labels_batch, image_paths_placeholder, labels_placeholder, 
                             batch_size_placeholder, learning_rate_placeholder, phase_train_placeholder, enqueue_op, actual_issame, args.batch_size, 
-                            args.seed, args.lfw_nrof_folds, log_dir, step, summary_writer, embedding_size)
+                            args.seed, args.lfw_nrof_folds, log_dir, step, summary_writer, args.embedding_size)
 
     return model_dir
 
@@ -221,14 +219,8 @@ def train(args, sess, dataset, epoch, image_paths_placeholder, labels_placeholde
         # Sample people randomly from the dataset
         image_paths, num_per_class = sample_people(dataset, args.people_per_batch, args.images_per_person)
         
-#         image_paths[0::3] = image_paths[0]
-#         image_paths[1::3] = image_paths[1]
-#         image_paths[2::3] = image_paths[2]
-
         print('Running forward pass on sampled images: ', end='')
         start_time = time.time()
-        
-        # Run a forward pass for the sampled images
         nrof_examples = args.people_per_batch * args.images_per_person
         labels_array = np.reshape(np.arange(nrof_examples),(-1,3))
         image_paths_array = np.reshape(np.expand_dims(np.array(image_paths),1), (-1,3))
@@ -238,7 +230,7 @@ def train(args, sess, dataset, epoch, image_paths_placeholder, labels_placeholde
         for i in xrange(nrof_batches):
             batch_size = min(nrof_examples-i*args.batch_size, args.batch_size)
             emb, lab = sess.run([embeddings, labels_batch], feed_dict={batch_size_placeholder: batch_size, 
-                learning_rate_placeholder: lr, phase_train_placeholder: False})
+                learning_rate_placeholder: 0.0, phase_train_placeholder: False})
             emb_array[lab,:] = emb
         print('%.3f' % (time.time()-start_time))
 
@@ -250,7 +242,6 @@ def train(args, sess, dataset, epoch, image_paths_placeholder, labels_placeholde
         print('(nrof_random_negs, nrof_triplets) = (%d, %d): time=%.3f seconds' % 
             (nrof_random_negs, nrof_triplets, selection_time))
 
-        args.batch_size = 3
         # Perform training on the selected triplets
         nrof_batches = int(np.ceil(nrof_triplets*3/args.batch_size))
         triplet_paths = list(itertools.chain(*triplets))
@@ -264,38 +255,27 @@ def train(args, sess, dataset, epoch, image_paths_placeholder, labels_placeholde
         i = 0
         emb_array = np.zeros((nrof_examples, embedding_size))
         loss_array = np.zeros((nrof_triplets,))
-        tl_array = np.zeros((nrof_triplets,))
-        a_array = np.zeros((nrof_triplets, embedding_size))
-        p_array = np.zeros((nrof_triplets, embedding_size))
-        n_array = np.zeros((nrof_triplets, embedding_size))
         while i < nrof_batches:
             start_time = time.time()
             batch_size = min(nrof_examples-i*args.batch_size, args.batch_size)
-            qqq = 1
-            feed_dict = {batch_size_placeholder: batch_size, learning_rate_placeholder: 0.0, phase_train_placeholder: False}
-            err, _, step, emb, lab, a, p, n, tl = sess.run([loss, train_op, global_step, embeddings, labels_batch, anchor, positive, negative, triplet_loss], feed_dict=feed_dict)
+            feed_dict = {batch_size_placeholder: batch_size, learning_rate_placeholder: lr, phase_train_placeholder: True}
+            err, _, step, emb, lab = sess.run([loss, train_op, global_step, embeddings, labels_batch], feed_dict=feed_dict)
             emb_array[lab,:] = emb
             loss_array[i] = err
-            a_array[i] = a
-            p_array[i] = p
-            n_array[i] = n
-            tl_array[i] = tl
             duration = time.time() - start_time
-            print('Epoch: [%d][%d/%d]\tTime %.3f\tLoss %2.3f\t%d' %
-                  (epoch, batch_number+1, args.epoch_size, duration, err, batch_size))
+            print('Epoch: [%d][%d/%d]\tTime %.3f\tLoss %2.3f' %
+                  (epoch, batch_number+1, args.epoch_size, duration, err))
             batch_number += 1
             i += 1
             train_time += duration
             
-        pos_dist_sqr = np.sum(np.square(emb_array[0::3,:]-emb_array[1::3,:]),1)
-        neg_dist_sqr = np.sum(np.square(emb_array[0::3,:]-emb_array[2::3,:]),1)
-        np_loss = np.maximum(0.0, pos_dist_sqr - neg_dist_sqr + args.alpha)
+#         pos_dist_sqr = np.sum(np.square(emb_array[0::3,:]-emb_array[1::3,:]),1)
+#         neg_dist_sqr = np.sum(np.square(emb_array[0::3,:]-emb_array[2::3,:]),1)
+#        np_loss = np.maximum(0.0, pos_dist_sqr - neg_dist_sqr + args.alpha)
         
-        for i in range(0,nrof_examples//3):
-            print('%d  pos_dist_sqr: %.6f  neg_dist_sqr: %.6f' % (i, pos_dist_sqr[i], neg_dist_sqr[i]))
+#         for i in range(0,nrof_examples//3):
+#             print('%d  pos_dist_sqr: %.6f  neg_dist_sqr: %.6f' % (i, pos_dist_sqr[i], neg_dist_sqr[i]))
             
-        yyy = 1
-
         # TODO: Here we should assert that the FIFOs are empty.
         #  But for this we would need access to the batch_join FIFO
         
@@ -332,15 +312,15 @@ def select_triplets(embeddings, num_per_class, image_paths, people_per_batch, al
                     rnd_idx = np.random.randint(nrof_random_negs)
                     n_idx = all_neg[rnd_idx]
                     triplets.append((image_paths[a_idx], image_paths[p_idx], image_paths[n_idx]))
-                    print('Triplet %d: (%d, %d, %d), pos_dist=%2.6f, neg_dist=%2.6f (%d, %d, %d, %d, %d)' % 
-                        (trip_idx, a_idx, p_idx, n_idx, pos_dist_sqr, neg_dists_sqr[n_idx], nrof_random_negs, rnd_idx, i, j, emb_start_idx))
+                    #print('Triplet %d: (%d, %d, %d), pos_dist=%2.6f, neg_dist=%2.6f (%d, %d, %d, %d, %d)' % 
+                    #    (trip_idx, a_idx, p_idx, n_idx, pos_dist_sqr, neg_dists_sqr[n_idx], nrof_random_negs, rnd_idx, i, j, emb_start_idx))
                     trip_idx += 1
 
                 num_trips += 1
 
         emb_start_idx += n
-    xxx = 1
-    #np.random.shuffle(triplets)
+
+    np.random.shuffle(triplets)
     return triplets, num_trips, len(triplets)
 
 def sample_people(dataset, people_per_batch, images_per_person):
@@ -471,13 +451,15 @@ def parse_arguments(argv):
     parser.add_argument('--image_size', type=int,
         help='Image size (height, width) in pixels.', default=96)
     parser.add_argument('--people_per_batch', type=int,
-        help='Number of people per batch.', default=15)
+        help='Number of people per batch.', default=45)
     parser.add_argument('--images_per_person', type=int,
-        help='Number of images per person.', default=20)
+        help='Number of images per person.', default=40)
     parser.add_argument('--epoch_size', type=int,
         help='Number of batches per epoch.', default=1000)
     parser.add_argument('--alpha', type=float,
         help='Positive to negative triplet distance margin.', default=0.2)
+    parser.add_argument('--embedding_size', type=float,
+        help='Dimensionality of the embedding.', default=128)
     parser.add_argument('--random_crop', 
         help='Performs random cropping of training images. If false, the center image_size pixels from the training images are used. ' +
          'If the size of the images in the data directory is equal to image_size no cropping is performed', action='store_true')
