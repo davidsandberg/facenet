@@ -289,24 +289,32 @@ def train(args, sess, dataset, epoch, image_paths_placeholder, labels_placeholde
         summary_writer.add_summary(summary, step)
     return step
   
-def select_triplets(embeddings, num_per_class, image_paths, people_per_batch, alpha):
+def select_triplets(embeddings, nrof_images_per_class, image_paths, people_per_batch, alpha):
     """ Select the triplets for training
     """
     trip_idx = 0
     emb_start_idx = 0
     num_trips = 0
     triplets = []
+    
+    # VGG Face: Choosing good triplets is crucial and should strike a balance between
+    #  selecting informative (i.e. challenging) examples and swamping training with examples that
+    #  are too hard. This is achieve by extending each pair (a, p) to a triplet (a, p, n) by sampling
+    #  the image n at random, but only between the ones that violate the triplet loss margin. The
+    #  latter is a form of hard-negative mining, but it is not as aggressive (and much cheaper) than
+    #  choosing the maximally violating example, as often done in structured output learning.
 
     for i in xrange(people_per_batch):
-        n = int(num_per_class[i])
-        for j in xrange(1,n):
+        nrof_images = int(nrof_images_per_class[i])
+        for j in xrange(1,nrof_images):
             a_idx = emb_start_idx + j - 1
             neg_dists_sqr = np.sum(np.square(embeddings[a_idx] - embeddings), 1)
-            for pair in xrange(j, n): # For every possible positive pair.
+            for pair in xrange(j, nrof_images): # For every possible positive pair.
                 p_idx = emb_start_idx + pair
                 pos_dist_sqr = np.sum(np.square(embeddings[a_idx]-embeddings[p_idx]))
-                neg_dists_sqr[emb_start_idx:emb_start_idx+n] = np.NaN
-                all_neg = np.where(np.logical_and(neg_dists_sqr-pos_dist_sqr<alpha, pos_dist_sqr<neg_dists_sqr))[0]
+                neg_dists_sqr[emb_start_idx:emb_start_idx+nrof_images] = np.NaN
+                #all_neg = np.where(np.logical_and(neg_dists_sqr-pos_dist_sqr<alpha, pos_dist_sqr<neg_dists_sqr))[0]  # FaceNet selection
+                all_neg = np.where(neg_dists_sqr-pos_dist_sqr<alpha)[0] # VGG Face selecction
                 nrof_random_negs = all_neg.shape[0]
                 if nrof_random_negs>0:
                     rnd_idx = np.random.randint(nrof_random_negs)
@@ -318,7 +326,7 @@ def select_triplets(embeddings, num_per_class, image_paths, people_per_batch, al
 
                 num_trips += 1
 
-        emb_start_idx += n
+        emb_start_idx += nrof_images
 
     np.random.shuffle(triplets)
     return triplets, num_trips, len(triplets)
