@@ -106,7 +106,7 @@ def main(args):
             
         # Add center loss
         if args.center_loss_factor>0.0:
-            prelogits_center_loss, _ = facenet.center_loss_new(prelogits, label_batch, args.center_loss_alfa, nrof_classes)
+            prelogits_center_loss, _ = facenet.center_loss(prelogits, label_batch, args.center_loss_alfa, nrof_classes)
             tf.add_to_collection(tf.GraphKeys.REGULARIZATION_LOSSES, prelogits_center_loss * args.center_loss_factor)
 
         learning_rate = tf.train.exponential_decay(learning_rate_placeholder, global_step,

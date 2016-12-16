@@ -27,7 +27,7 @@ import os
 import sys
 import time
 
-from six.moves import urllib
+from six.moves import urllib  # @UnresolvedImport
 import tensorflow as tf
 import numpy as np
 import matplotlib.pyplot as plt
@@ -278,7 +278,7 @@ def main(argv=None):  # pylint: disable=unused-argument
         logits, train_labels_node))
     beta = 1e-3
     #center_loss, update_centers = center_loss_op(hidden, train_labels_node)
-    center_loss, centers = facenet.center_loss_new(hidden, train_labels_node, 0.95, NUM_LABELS)
+    center_loss, _ = facenet.center_loss(hidden, train_labels_node, 0.95, NUM_LABELS)
     loss = xent_loss + beta * center_loss
   
     # L2 regularization for the fully connected parameters.

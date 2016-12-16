@@ -72,31 +72,18 @@ def decov_loss(xs):
     loss = 0.5*(corr_frob_sqr - corr_diag_sqr)
     return loss 
   
-def center_loss(logits, labels, alfa, nrof_classes=None):
+def center_loss(features, label, alfa, nrof_classes):
     """Center loss based on the paper "A Discriminative Feature Learning Approach for Deep Face Recognition"
        (http://ydwen.github.io/papers/WenECCV16.pdf)
     """
-    nrof_features = logits.get_shape()[1]
-    centers = tf.get_variable('centers', shape=(nrof_features), dtype=tf.float32,
-        initializer=tf.constant_initializer(value=0.0, dtype=tf.float32), trainable=False)
-    loss = tf.nn.l2_loss(logits - centers)
-    one_hot = tf.one_hot(labels, nrof_features, axis=1, dtype=tf.float32, name='one_hot')
-    delta1 = tf.reduce_mean((centers-logits)*one_hot,0)
-    delta2 = 1+tf.reduce_mean(one_hot,0)
-    centers_delta = delta1 / delta2
-    update_centers = tf.assign_add(centers, -alfa*centers_delta)
-    return loss, update_centers
-
-def center_loss_new(logits, label, alfa, nrof_classes):
-    nrof_features = logits.get_shape()[1]
+    nrof_features = features.get_shape()[1]
     centers = tf.get_variable('centers', [nrof_classes, nrof_features], dtype=tf.float32,
         initializer=tf.constant_initializer(0), trainable=False)
     label = tf.reshape(label, [-1])
-    logits_batch = tf.gather(centers, label)
-    diff = (1 - alfa) * (logits_batch - logits)
-    centers = tf.scatter_sub(centers, label, diff)
     centers_batch = tf.gather(centers, label)
-    loss = tf.nn.l2_loss(logits - centers_batch)
+    diff = (1 - alfa) * (centers_batch - features)
+    centers = tf.scatter_sub(centers, label, diff)
+    loss = tf.nn.l2_loss(features - centers_batch)
     return loss, centers
 
 def get_image_paths_and_labels(dataset):
