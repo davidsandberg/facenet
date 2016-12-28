@@ -82,7 +82,8 @@ def main(args):
 
         # Read data and apply label preserving distortions
         image_batch, label_batch = facenet.read_and_augument_data(image_list, label_list, args.image_size,
-            args.batch_size, args.max_nrof_epochs, args.random_crop, args.random_flip, args.nrof_preprocess_threads)
+            args.batch_size, args.max_nrof_epochs, args.random_crop, args.random_flip, args.random_rotate, 
+            args.nrof_preprocess_threads)
         print('Total number of classes: %d' % nrof_classes)
         print('Total number of examples: %d' % len(image_list))
         
@@ -132,7 +133,7 @@ def main(args):
         lfw_label_list = range(0,len(lfw_paths))
         assert (len(lfw_paths) % args.lfw_batch_size == 0), "The number of images in the LFW test set need to be divisible by the lfw_batch_size"
         eval_image_batch, eval_label_batch = facenet.read_and_augument_data(lfw_paths, lfw_label_list, args.image_size,
-            args.lfw_batch_size, None, False, False, args.nrof_preprocess_threads, shuffle=False)
+            args.lfw_batch_size, None, False, False, False, args.nrof_preprocess_threads, shuffle=False)
         # Node for input images
         eval_image_batch.set_shape((None, args.image_size, args.image_size, 3))
         eval_image_batch = tf.identity(eval_image_batch, name='input')
@@ -295,6 +296,8 @@ def parse_arguments(argv):
          'If the size of the images in the data directory is equal to image_size no cropping is performed', action='store_true')
     parser.add_argument('--random_flip', 
         help='Performs random horizontal flipping of training images.', action='store_true')
+    parser.add_argument('--random_rotate', 
+        help='Performs random rotations of training images.', action='store_true')
     parser.add_argument('--keep_probability', type=float,
         help='Keep probability of dropout for the fully connected layer(s).', default=1.0)
     parser.add_argument('--weight_decay', type=float,

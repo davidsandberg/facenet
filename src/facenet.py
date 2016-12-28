@@ -107,8 +107,12 @@ def read_images_from_disk(input_queue):
     example = tf.image.decode_png(file_contents, channels=3)
     return example, label
   
+def random_rotate_image(image):
+    angle = np.random.uniform(low=-10.0, high=10.0)
+    return misc.imrotate(image, angle, 'bicubic')
+  
 def read_and_augument_data(image_list, label_list, image_size, batch_size, max_nrof_epochs, 
-        random_crop, random_flip, nrof_preprocess_threads, shuffle=True):
+        random_crop, random_flip, random_rotate, nrof_preprocess_threads, shuffle=True):
     
     images = ops.convert_to_tensor(image_list, dtype=tf.string)
     labels = ops.convert_to_tensor(label_list, dtype=tf.int32)
@@ -120,6 +124,8 @@ def read_and_augument_data(image_list, label_list, image_size, batch_size, max_n
     images_and_labels = []
     for _ in range(nrof_preprocess_threads):
         image, label = read_images_from_disk(input_queue)
+        if random_rotate:
+            image = tf.py_func(random_rotate_image, [image], tf.uint8)
         if random_crop:
             image = tf.random_crop(image, [image_size, image_size, 3])
         else:
