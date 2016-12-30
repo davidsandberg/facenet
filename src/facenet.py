@@ -38,6 +38,8 @@ from sklearn.cross_validation import KFold
 from scipy import interpolate
 from tensorflow.python.training import training
 
+#import h5py
+
 
 def triplet_loss(anchor, positive, negative, alpha):
     """Calculate the triplet loss according to the FaceNet paper
@@ -51,7 +53,7 @@ def triplet_loss(anchor, positive, negative, alpha):
       the triplet loss according to the FaceNet paper as a float tensor.
     """
     with tf.variable_scope('triplet_loss'):
-        pos_dist = tf.reduce_sum(tf.square(tf.sub(anchor, positive)), 1)  # Summing over distances in each batch
+        pos_dist = tf.reduce_sum(tf.square(tf.sub(anchor, positive)), 1)
         neg_dist = tf.reduce_sum(tf.square(tf.sub(anchor, negative)), 1)
         
         basic_loss = tf.add(tf.sub(pos_dist,neg_dist), alpha)
@@ -291,72 +293,6 @@ def get_triplet_batch(triplets, batch_index, batch_size):
     batch = np.vstack([a, p, n])
     return batch
 
-def select_triplets(embeddings, num_per_class, image_data, people_per_batch, alpha):
-    """ Select the triplets for training
-    This is v1 of the triplet_selection function using pre-calculated distance matrix.
-    """
-    nrof_images = image_data.shape[0]
-
-    # distance matrix
-    dists = np.zeros((nrof_images, nrof_images))
-    for i in np.arange(0, nrof_images):
-        dists[i] = np.sum(np.square(np.subtract(embeddings, embeddings[i])), 1)
-
-    nrof_triplets = nrof_images - people_per_batch
-    shp = [nrof_triplets, image_data.shape[1], image_data.shape[2], image_data.shape[3]]
-    as_arr = np.zeros(shp)
-    ps_arr = np.zeros(shp)
-    ns_arr = np.zeros(shp)
-    
-    trip_idx = 0
-    # shuffle the triplets index
-    shuffle = np.arange(nrof_triplets)
-    np.random.shuffle(shuffle)
-    emb_start_idx = 0
-    nrof_random_negs = 0
-
-    # Max int
-    maxInt = 2**32
-
-    for i in xrange(people_per_batch):
-        n = num_per_class[i]
-        for j in range(1,n):
-            a_idx = emb_start_idx
-            p_idx = emb_start_idx + j
-            as_arr[shuffle[trip_idx]] = image_data[a_idx]
-            ps_arr[shuffle[trip_idx]] = image_data[p_idx]
-      
-            pos_dist = dists[a_idx, p_idx]
-            sel_neg_idx = emb_start_idx
-
-            while sel_neg_idx >= emb_start_idx and sel_neg_idx <= emb_start_idx + n - 1:
-                sel_neg_idx = (np.random.randint(1, maxInt) % nrof_images) - 1
-
-            sel_neg_dist = dists[a_idx, sel_neg_idx]
-
-            random_neg = True
-            for k in range(nrof_images):
-                # skip if the index is within the positive (same person) class range.
-                if k < emb_start_idx or k > emb_start_idx + n - 1:
-                    neg_dist = dists[a_idx, k]
-                    if pos_dist < neg_dist and neg_dist < sel_neg_dist and np.abs(pos_dist - neg_dist) < alpha:
-                        random_neg = False
-                        sel_neg_dist = neg_dist
-                        sel_neg_idx = k
-
-            if random_neg:
-                nrof_random_negs += 1
-
-            ns_arr[shuffle[trip_idx]] = image_data[sel_neg_idx]
-            #print('Triplet %d: (%d, %d, %d), pos_dist=%2.3f, neg_dist=%2.3f, sel_neg_dist=%2.3f' % (trip_idx, a_idx, p_idx, sel_neg_idx, pos_dist, neg_dist, sel_neg_dist))
-            trip_idx += 1
-
-        emb_start_idx += n
-
-    triplets = (as_arr, ps_arr, ns_arr)
-
-    return triplets, nrof_random_negs, nrof_triplets
-
 def get_learning_rate_from_file(filename, epoch):
     with open(filename, 'r') as f:
         for line in f.readlines():
@@ -422,52 +358,6 @@ def split_dataset(dataset, split_ratio, mode):
     else:
         raise ValueError('Invalid train/test split mode "%s"' % mode)
     return train_set, test_set
-
-def sample_people(dataset, people_per_batch, images_per_person):
-    nrof_images = people_per_batch * images_per_person
-  
-    # Sample classes from the dataset
-    nrof_classes = len(dataset)
-    class_indices = np.arange(nrof_classes)
-    np.random.shuffle(class_indices)
-    
-    i = 0
-    image_paths = []
-    num_per_class = []
-    sampled_class_indices = []
-    # Sample images from these classes until we have enough
-    while len(image_paths)<nrof_images:
-        class_index = class_indices[i]
-        nrof_images_in_class = len(dataset[class_index])
-        image_indices = np.arange(nrof_images_in_class)
-        np.random.shuffle(image_indices)
-        nrof_images_from_class = min(nrof_images_in_class, images_per_person, nrof_images-len(image_paths))
-        idx = image_indices[0:nrof_images_from_class]
-        image_paths_for_class = [dataset[class_index].image_paths[j] for j in idx]
-        sampled_class_indices += [class_index]*nrof_images_from_class
-        image_paths += image_paths_for_class
-        num_per_class.append(nrof_images_from_class)
-        i+=1
-  
-    return image_paths, num_per_class
-  
-def sample_random_people(dataset, nrof_images):
-    # Create flattened dataset with image paths and labels
-    image_paths_flat = []
-    labels_flat = []
-    for i in range(len(dataset)):
-        image_paths_flat += dataset[i].image_paths
-        labels_flat += [i] * len(dataset[i].image_paths)
-        
-    # Take nrof_images samples from the flattened dataset
-    image_paths = []
-    labels = []
-    for i in range(nrof_images):
-        x = np.random.randint(0, len(image_paths_flat))
-        image_paths.append(image_paths_flat[x])
-        labels.append(labels_flat[x])
-  
-    return image_paths, labels
 
 def load_model(model_dir, meta_file, ckpt_file):
     model_dir_exp = os.path.expanduser(model_dir)
