@@ -396,8 +396,6 @@ def calculate_roc(thresholds, embeddings1, embeddings2, actual_issame, seed, nro
     
     diff = np.subtract(embeddings1, embeddings2)
     dist = np.sum(np.square(diff),1)
-    for i in range(0,dist.shape[0]):
-        print('%4d %d %.4f' % (i, actual_issame[i], dist[i]))
     
     for fold_idx, (train_set, test_set) in enumerate(folds):
         
