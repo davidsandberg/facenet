@@ -269,23 +269,10 @@ def train(args, sess, dataset, epoch, image_paths_placeholder, labels_placeholde
             i += 1
             train_time += duration
             
-#         pos_dist_sqr = np.sum(np.square(emb_array[0::3,:]-emb_array[1::3,:]),1)
-#         neg_dist_sqr = np.sum(np.square(emb_array[0::3,:]-emb_array[2::3,:]),1)
-#        np_loss = np.maximum(0.0, pos_dist_sqr - neg_dist_sqr + args.alpha)
-        
-#         for i in range(0,nrof_examples//3):
-#             print('%d  pos_dist_sqr: %.6f  neg_dist_sqr: %.6f' % (i, pos_dist_sqr[i], neg_dist_sqr[i]))
-            
-        # TODO: Here we should assert that the FIFOs are empty.
-        #  But for this we would need access to the batch_join FIFO
-        
         # Add validation loss and accuracy to summary
         summary = tf.Summary()
         #pylint: disable=maybe-no-member
-#        summary.value.add(tag='time/load', simple_value=load_time)
         summary.value.add(tag='time/selection', simple_value=selection_time)
-#         summary.value.add(tag='time/train', simple_value=train_time)
-#         summary.value.add(tag='time/total', simple_value=load_time+selection_time+train_time)
         summary_writer.add_summary(summary, step)
     return step
   
