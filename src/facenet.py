@@ -136,7 +136,7 @@ def read_and_augument_data(image_list, label_list, image_size, batch_size, max_n
             image = tf.image.random_flip_left_right(image)
         #pylint: disable=no-member
         image.set_shape((image_size, image_size, 3))
-        image = tf.image.per_image_whitening(image)
+        image = tf.image.per_image_standardization(image)
         images_and_labels.append([image, label])
 
     image_batch, label_batch = tf.train.batch_join(
@@ -167,8 +167,8 @@ def _add_loss_summaries(total_loss):
     for l in losses + [total_loss]:
         # Name each loss as '(raw)' and name the moving average version of the loss
         # as the original loss name.
-        tf.scalar_summary(l.op.name +' (raw)', l)
-        tf.scalar_summary(l.op.name, loss_averages.average(l))
+        tf.summary.scalar(l.op.name +' (raw)', l)
+        tf.summary.scalar(l.op.name, loss_averages.average(l))
   
     return loss_averages_op
 

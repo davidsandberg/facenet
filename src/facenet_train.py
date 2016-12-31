@@ -112,7 +112,7 @@ def main(args):
     
                 #pylint: disable=no-member
                 image.set_shape((args.image_size, args.image_size, 3))
-                images.append(tf.image.per_image_whitening(image))
+                images.append(tf.image.per_image_standardization(image))
             images_and_labels.append([images, label])
     
         image_batch, labels_batch = tf.train.batch_join(
@@ -134,7 +134,7 @@ def main(args):
         
         learning_rate = tf.train.exponential_decay(learning_rate_placeholder, global_step,
             args.learning_rate_decay_epochs*args.epoch_size, args.learning_rate_decay_factor, staircase=True)
-        tf.scalar_summary('learning_rate', learning_rate)
+        tf.summary.scalar('learning_rate', learning_rate)
 
         # Calculate the total losses
         regularization_losses = tf.get_collection(tf.GraphKeys.REGULARIZATION_LOSSES)
@@ -144,15 +144,15 @@ def main(args):
         restore_vars = []
         update_gradient_vars = []
         if args.pretrained_model:
-            update_gradient_vars = tf.all_variables()
-            for var in tf.all_variables():
+            update_gradient_vars = tf.global_variables()
+            for var in tf.global_variables():
                 if not 'Embeddings/' in var.op.name:
                     restore_vars.append(var)
                 #else:
                     #update_gradient_vars.append(var)
         else:
-            restore_vars = tf.all_variables()
-            update_gradient_vars = tf.all_variables()
+            restore_vars = tf.global_variables()
+            update_gradient_vars = tf.global_variables()
 
         # Build a Graph that trains the model with one batch of examples and updates the model parameters
         train_op = facenet.train(total_loss, global_step, args.optimizer, 
@@ -160,20 +160,20 @@ def main(args):
         
         # Create a saver
         restore_saver = tf.train.Saver(restore_vars)
-        saver = tf.train.Saver(tf.all_variables(), max_to_keep=3)
+        saver = tf.train.Saver(tf.global_variables(), max_to_keep=3)
 
         # Build the summary operation based on the TF collection of Summaries.
-        summary_op = tf.merge_all_summaries()
+        summary_op = tf.summary.merge_all()
 
         # Start running operations on the Graph.
         gpu_options = tf.GPUOptions(per_process_gpu_memory_fraction=args.gpu_memory_fraction)
         sess = tf.Session(config=tf.ConfigProto(gpu_options=gpu_options))        
 
         # Initialize variables
-        sess.run(tf.initialize_all_variables())
-        sess.run(tf.initialize_local_variables())
+        sess.run(tf.global_variables_initializer())
+        sess.run(tf.local_variables_initializer())
 
-        summary_writer = tf.train.SummaryWriter(log_dir, sess.graph)
+        summary_writer = tf.summary.FileWriter(log_dir, sess.graph)
         tf.train.start_queue_runners(sess=sess)
 
         with sess.as_default():

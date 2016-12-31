@@ -52,7 +52,7 @@ class CenterLossTest(unittest.TestCase):
                 
             sess = tf.Session()
             with sess.as_default():
-                sess.run(tf.initialize_all_variables())
+                sess.run(tf.global_variables_initializer())
                 np.random.seed(seed=666)
                 
                 for _ in range(0,100):

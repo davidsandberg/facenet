@@ -41,7 +41,7 @@ class BatchNormTest(unittest.TestCase):
         
         bn = models.network.batch_norm(x, phase_train)
         
-        init = tf.initialize_all_variables()
+        init = tf.global_variables_initializer()
         sess = tf.Session(config=tf.ConfigProto())
         sess.run(init)
   

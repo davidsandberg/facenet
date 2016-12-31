@@ -112,7 +112,7 @@ def main(args):
 
         learning_rate = tf.train.exponential_decay(learning_rate_placeholder, global_step,
             args.learning_rate_decay_epochs*args.epoch_size, args.learning_rate_decay_factor, staircase=True)
-        tf.scalar_summary('learning_rate', learning_rate)
+        tf.summary.scalar('learning_rate', learning_rate)
 
         # Calculate the average cross entropy loss across the batch
         cross_entropy = tf.nn.sparse_softmax_cross_entropy_with_logits(
@@ -126,7 +126,7 @@ def main(args):
 
         # Build a Graph that trains the model with one batch of examples and updates the model parameters
         train_op = facenet.train(total_loss, global_step, args.optimizer, 
-            learning_rate, args.moving_average_decay, tf.all_variables(), args.log_histograms)
+            learning_rate, args.moving_average_decay, tf.global_variables(), args.log_histograms)
         
         # Evaluation
         print('Building evaluation graph')
@@ -142,17 +142,17 @@ def main(args):
         eval_embeddings = tf.nn.l2_normalize(eval_prelogits, 1, 1e-10, name='embeddings')
 
         # Create a saver
-        saver = tf.train.Saver(tf.all_variables(), max_to_keep=3)
+        saver = tf.train.Saver(tf.global_variables(), max_to_keep=3)
 
         # Build the summary operation based on the TF collection of Summaries.
-        summary_op = tf.merge_all_summaries()
+        summary_op = tf.summary.merge_all()
 
         # Start running operations on the Graph.
         gpu_options = tf.GPUOptions(per_process_gpu_memory_fraction=args.gpu_memory_fraction)
         sess = tf.Session(config=tf.ConfigProto(gpu_options=gpu_options, log_device_placement=False))
-        sess.run(tf.initialize_all_variables())
-        sess.run(tf.initialize_local_variables())
-        summary_writer = tf.train.SummaryWriter(log_dir, sess.graph)
+        sess.run(tf.global_variables_initializer())
+        sess.run(tf.local_variables_initializer())
+        summary_writer = tf.summary.FileWriter(log_dir, sess.graph)
         tf.train.start_queue_runners(sess=sess)
 
         with sess.as_default():
