@@ -43,6 +43,8 @@ BATCH_SIZE = 64
 NUM_EPOCHS = 10
 EVAL_BATCH_SIZE = 64
 EVAL_FREQUENCY = 100  # Number of steps between evaluations.
+NOISE_FACTOR = 0.2
+BETA = 0.8
 
 
 tf.app.flags.DEFINE_boolean("self_test", False, "True if running a self test.")
@@ -142,6 +144,12 @@ def main(argv=None):  # pylint: disable=unused-argument
         validation_labels = train_labels[:VALIDATION_SIZE]
         train_data = train_data[VALIDATION_SIZE:, ...]
         train_labels = train_labels[VALIDATION_SIZE:]
+        nrof_training_examples = train_labels.shape[0]
+        nrof_changed_labels = int(nrof_training_examples*NOISE_FACTOR)
+        shuf = np.arange(0,nrof_training_examples)
+        np.random.shuffle(shuf)
+        change_idx = shuf[0:nrof_changed_labels]
+        train_labels[change_idx] = (train_labels[change_idx] + np.random.randint(1,9,size=(nrof_changed_labels,))) % NUM_LABELS
         num_epochs = NUM_EPOCHS
     train_size = train_labels.shape[0]
 
@@ -227,8 +235,22 @@ def main(argv=None):  # pylint: disable=unused-argument
 
     # Training computation: logits + cross-entropy loss.
     logits = model(train_data_node, True)
-    loss = tf.reduce_mean(tf.nn.sparse_softmax_cross_entropy_with_logits(
-        logits, train_labels_node))
+    
+    # t: observed noisy labels
+    # q: estimated class probabilities (output from softmax)
+    # z: argmax of q
+
+    t = tf.one_hot(train_labels_node, NUM_LABELS)
+    q = tf.nn.softmax(logits)
+    qqq = tf.arg_max(q, dimension=1)
+    z = tf.one_hot(qqq, NUM_LABELS)
+    #cross_entropy = -tf.reduce_sum(t*tf.log(q),reduction_indices=1)
+    cross_entropy = -tf.reduce_sum((BETA*t+(1-BETA)*z)*tf.log(q),reduction_indices=1)
+    
+    loss = tf.reduce_mean(cross_entropy)
+    
+#     loss = tf.reduce_mean(tf.nn.sparse_softmax_cross_entropy_with_logits(
+#         logits, train_labels_node))
   
     # L2 regularization for the fully connected parameters.
     regularizers = (tf.nn.l2_loss(fc1_weights) + tf.nn.l2_loss(fc1_biases) +
