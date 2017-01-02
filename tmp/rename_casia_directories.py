@@ -10,7 +10,7 @@ def main(args):
         for line in f:
             fields = line.split(' ')
             dir_name = fields[0]
-            class_name = fields[1].replace('\n', ' ').replace('\r', '')
+            class_name = fields[1].replace('\n', '').replace('\r', '')
             identity_map[dir_name] = class_name
             
     dataset_path_exp = os.path.expanduser(args.dataset_path)
