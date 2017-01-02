@@ -11,7 +11,10 @@ def main(args):
             fields = line.split(' ')
             dir_name = fields[0]
             class_name = fields[1].replace('\n', '').replace('\r', '')
-            identity_map[dir_name] = class_name
+            if class_name not in identity_map.values():
+                identity_map[dir_name] = class_name
+            else:
+                print('Duplicate class names: %s' % class_name)
             
     dataset_path_exp = os.path.expanduser(args.dataset_path)
     dirs = os.listdir(dataset_path_exp)
