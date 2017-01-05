@@ -38,6 +38,8 @@ import argparse
 import facenet
 import lfw
 import tensorflow.contrib.slim as slim
+import scipy.io as sio
+
 
 def main(args):
   
@@ -57,6 +59,7 @@ def main(args):
 
     np.random.seed(seed=args.seed)
     train_set = facenet.get_dataset(args.data_dir)
+    train_set = filter_dataset(train_set, '/home/david/casia_embeddings_tmp1.mat', args.percentile)
     nrof_classes = len(train_set)
     
     print('Model directory: %s' % model_dir)
@@ -180,6 +183,18 @@ def main(args):
                         args.lfw_nrof_folds, log_dir, step, summary_writer)
                 
     return model_dir
+  
+def filter_dataset(dataset, data_filename, percentile):
+    d = sio.loadmat(data_filename)
+    # Keep the classes with the X% lowest intra-class variance
+    hist, bin_edges = np.histogram(d['class_variance'], 100)
+    cdf = np.float32(np.cumsum(hist)) / np.sum(hist)
+    bin_centers = (bin_edges[:-1]+bin_edges[1:])/2
+    #plt.plot(bin_centers, cdf)
+    variance_threshold = np.interp(percentile, cdf, bin_centers)
+    indices = np.where(d['class_variance']<variance_threshold)[1]
+    filtered_dataset = [ dataset[idx] for idx in indices ]
+    return filtered_dataset
   
 def train(args, sess, epoch, learning_rate_placeholder, global_step, 
       loss, train_op, summary_op, summary_writer, regularization_losses, learning_rate_schedule_file):
@@ -327,6 +342,8 @@ def parse_arguments(argv):
         help='Enables logging of weight/bias histograms in tensorboard.', action='store_true')
     parser.add_argument('--learning_rate_schedule_file', type=str,
         help='File containing the learning rate schedule that is used when learning_rate is set to to -1.', default='../data/learning_rate_schedule.txt')
+    parser.add_argument('--percentile', type=float,
+        help='Keep only the percentile classes with the lowest intra-class variance.', default=1.0)
  
     # Parameters for validation on LFW
     parser.add_argument('--lfw_pairs', type=str,

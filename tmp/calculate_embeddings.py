@@ -33,13 +33,19 @@ import facenet
 import os
 import sys
 import time
-from tensorflow.python.platform import gfile
 import scipy.io as sio
+import importlib
+import math
 
 def main(args):
+    network = importlib.import_module(args.model_def, 'inference')
+  
+    model_dir = '/media/data/DeepLearning/models/facenet/20161231-150622'
+    model = os.path.join(os.path.expanduser(model_dir),'model-20161231-150622.ckpt-80000')
+
   
     train_set = facenet.get_dataset(args.dataset_dir)
-    train_set = train_set[0:10]
+    #train_set = train_set[0:50]
   
     with tf.Graph().as_default():
       
@@ -50,17 +56,17 @@ def main(args):
 
         image_batch, label_batch = facenet.read_and_augument_data(image_list, image_indices, args.image_size, args.batch_size, None, 
             False, False, False, nrof_preprocess_threads=4, shuffle=False)
+        prelogits, _ = network.inference(image_batch, 1.0, 
+            phase_train=False, weight_decay=0.0, reuse=False)
+        embeddings = tf.nn.l2_normalize(prelogits, 1, 1e-10, name='embeddings')
+        saver = tf.train.Saver(tf.global_variables())
+        
         with tf.Session() as sess:
+            saver.restore(sess, model)
             tf.train.start_queue_runners(sess=sess)
-            print('Loading graphdef: %s' % args.model_file)
-            with gfile.FastGFile(os.path.expanduser(args.model_file),'rb') as f:
-                graph_def = tf.GraphDef()
-                graph_def.ParseFromString(f.read())
-                embeddings = tf.import_graph_def(graph_def, input_map={'input':image_batch}, 
-                    return_elements=['embeddings:0'], name='import')[0]
                 
             embedding_size = int(embeddings.get_shape()[1])
-            nrof_batches = nrof_images // args.batch_size
+            nrof_batches = int(math.ceil(nrof_images / args.batch_size))
             emb_array = np.zeros((nrof_images, embedding_size))
             for i in range(nrof_batches):
                 t = time.time()
@@ -68,16 +74,36 @@ def main(args):
                 emb_array[lab,:] = emb
                 print('Batch %d in %.3f seconds' % (i, time.time()-t))
 
-            mdict = {'image_list':image_list, 'label_list': label_list, 'embeddings':emb_array}
+            nrof_classes = len(train_set)
+            class_variance = np.zeros((nrof_classes,))
+            class_center = np.zeros((nrof_classes,embedding_size))
+            class_names = [cls.name for cls in train_set]
+            label_array = np.array(label_list)
+            for cls in set(label_list):
+                idx = np.where(label_array==cls)[0]
+                center = np.mean(emb_array[idx,:], axis=0)
+                diffs = emb_array[idx,:] - center
+                dists_sqr = np.sum(np.square(diffs), axis=1)
+                class_variance[cls] = np.mean(dists_sqr)
+                class_center[cls,:] = center
+                
+            mdict = {'class_names':class_names, 'image_list':image_list, 'label_list':label_list, 'class_variance':class_variance, 'class_center':class_center }
             sio.savemat(args.mat_file_name, mdict)
+            
+#             nrof_embeddings_per_matrix = 50000
+#             nrof_matrices = int(math.ceil(nrof_images / nrof_embeddings_per_matrix))
+#             mdict = {'image_list':image_list, 'label_list': label_list }
+#             for i in range(nrof_matrices):
+#                 mdict['embeddings_%05d' % i] = emb_array[(i*nrof_embeddings_per_matrix):((i+1)*nrof_embeddings_per_matrix)]
+#             sio.savemat('casia_embeddings_test1.mat', mdict)
             
 def parse_arguments(argv):
     parser = argparse.ArgumentParser()
     
     parser.add_argument('dataset_dir', type=str,
         help='Path to the directory containing aligned dataset.')
-    parser.add_argument('model_file', type=str, 
-        help='The graphdef for the model to be evaluated as a protobuf (.pb) file')
+    parser.add_argument('model_def', type=str,
+        help='Model definition. Points to a module containing the definition of the inference graph.')
     parser.add_argument('mat_file_name', type=str,
         help='The name of the mat file to store the embeddings in.')
     parser.add_argument('--image_size', type=int,
