@@ -79,6 +79,7 @@ def main(args):
             class_center = np.zeros((nrof_classes,embedding_size))
             class_names = [cls.name for cls in train_set]
             label_array = np.array(label_list)
+            distance_to_center = np.ones((len(label_list),))*np.NaN
             for cls in set(label_list):
                 idx = np.where(label_array==cls)[0]
                 center = np.mean(emb_array[idx,:], axis=0)
@@ -86,8 +87,10 @@ def main(args):
                 dists_sqr = np.sum(np.square(diffs), axis=1)
                 class_variance[cls] = np.mean(dists_sqr)
                 class_center[cls,:] = center
+                distance_to_center[idx] = np.sqrt(dists_sqr)
                 
-            mdict = {'class_names':class_names, 'image_list':image_list, 'label_list':label_list, 'class_variance':class_variance, 'class_center':class_center }
+            mdict = {'class_names':class_names, 'image_list':image_list, 'label_list':label_list, 'class_variance':class_variance, 
+                  'class_center':class_center, 'distance_to_center':distance_to_center }
             sio.savemat(args.mat_file_name, mdict)
             
 #             nrof_embeddings_per_matrix = 50000

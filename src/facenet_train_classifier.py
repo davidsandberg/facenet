@@ -40,7 +40,6 @@ import lfw
 import tensorflow.contrib.slim as slim
 import scipy.io as sio
 
-
 def main(args):
   
     network = importlib.import_module(args.model_def, 'inference')
@@ -59,7 +58,7 @@ def main(args):
 
     np.random.seed(seed=args.seed)
     train_set = facenet.get_dataset(args.data_dir)
-    train_set = filter_dataset(train_set, '/home/david/casia_embeddings_tmp1.mat', args.percentile)
+    train_set = filter_dataset(train_set, '/home/david/casia_embeddings_tmp2.mat', args.filter_method, args.filter_percentile)
     nrof_classes = len(train_set)
     
     print('Model directory: %s' % model_dir)
@@ -184,16 +183,34 @@ def main(args):
                 
     return model_dir
   
-def filter_dataset(dataset, data_filename, percentile):
-    d = sio.loadmat(data_filename)
-    # Keep the classes with the X% lowest intra-class variance
-    hist, bin_edges = np.histogram(d['class_variance'], 100)
+def find_threshold(var, percentile):
+    hist, bin_edges = np.histogram(var, 100)
     cdf = np.float32(np.cumsum(hist)) / np.sum(hist)
     bin_centers = (bin_edges[:-1]+bin_edges[1:])/2
     #plt.plot(bin_centers, cdf)
-    variance_threshold = np.interp(percentile, cdf, bin_centers)
-    indices = np.where(d['class_variance']<variance_threshold)[1]
-    filtered_dataset = [ dataset[idx] for idx in indices ]
+    threshold = np.interp(percentile*0.01, cdf, bin_centers)
+    return threshold
+  
+def filter_dataset(dataset, data_filename, method, percentile):
+    d = sio.loadmat(data_filename)
+    if method=='':
+        filtered_dataset = dataset
+    if method=='intra_class_variance':
+        # Keep the classes with the X% lowest intra-class variance
+        variance_threshold = find_threshold(d['class_variance'], percentile)
+        indices = np.where(d['class_variance']<variance_threshold)[1]
+        filtered_dataset = [ dataset[idx] for idx in indices ]
+    elif method=='distance_to_class_center':
+        distance_to_center_threshold = find_threshold(d['distance_to_center'], percentile)
+        indices = np.where(d['distance_to_center']>=distance_to_center_threshold)[1]
+        filtered_dataset = dataset
+        for i in indices:
+            label = d['label_list'][0,i]
+            image = d['image_list'][i]
+            if image in filtered_dataset[label].image_paths:
+                filtered_dataset[label].image_paths.remove(image)
+    else:
+        raise('Filtering method "%s" not implemented' % method)
     return filtered_dataset
   
 def train(args, sess, epoch, learning_rate_placeholder, global_step, 
@@ -342,8 +359,10 @@ def parse_arguments(argv):
         help='Enables logging of weight/bias histograms in tensorboard.', action='store_true')
     parser.add_argument('--learning_rate_schedule_file', type=str,
         help='File containing the learning rate schedule that is used when learning_rate is set to to -1.', default='../data/learning_rate_schedule.txt')
-    parser.add_argument('--percentile', type=float,
-        help='Keep only the percentile classes with the lowest intra-class variance.', default=1.0)
+    parser.add_argument('--filter_method', type=str,
+        help='Type of dataset filtering to apply.', default='')
+    parser.add_argument('--filter_percentile', type=float,
+        help='Keep only the percentile classes with the lowest intra-class variance.', default=100.0)
  
     # Parameters for validation on LFW
     parser.add_argument('--lfw_pairs', type=str,
