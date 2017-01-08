@@ -33,7 +33,7 @@ import facenet
 import os
 import sys
 import time
-import scipy.io as sio
+import h5py
 import importlib
 import math
 
@@ -104,16 +104,13 @@ def main(args):
                         
                 print('Batch %d in %.3f seconds' % (i, time.time()-t))
                 
-#             qqq = sio.loadmat('/home/david/casia_embeddings_tmp2.mat')
-#             z2 = np.sum(nrof_examples_per_class[:cls])
-#             w1 = np.where(np.abs(qqq['class_center'][:cls] - class_center[:cls])>1e-6)
-#             w2 = np.where(np.abs(qqq['class_variance'][0,:cls] - class_variance[:cls])>1e-6)
-#             w3 = np.where(np.abs(qqq['distance_to_center'][0,:z2] - distance_to_center[:z2])>1e-6)
-            
+            print('Writing filtering data to %s' % args.data_file_name)
             mdict = {'class_names':class_names, 'image_list':image_list, 'label_list':label_list, 'class_variance':class_variance, 
                   'class_center':class_center, 'distance_to_center':distance_to_center }
-            sio.savemat(args.mat_file_name, mdict)
-            
+            with h5py.File(args.data_file_name, 'w') as f:
+                for key, value in mdict.iteritems():
+                    f.create_dataset(key, data=value)
+                        
 def parse_arguments(argv):
     parser = argparse.ArgumentParser()
     
@@ -121,8 +118,8 @@ def parse_arguments(argv):
         help='Path to the directory containing aligned dataset.')
     parser.add_argument('model_def', type=str,
         help='Model definition. Points to a module containing the definition of the inference graph.')
-    parser.add_argument('mat_file_name', type=str,
-        help='The name of the mat file to store the embeddings in.')
+    parser.add_argument('data_file_name', type=str,
+        help='The name of the file to store filtering data in.')
     parser.add_argument('--image_size', type=int,
         help='Image size.', default=160)
     parser.add_argument('--batch_size', type=int,

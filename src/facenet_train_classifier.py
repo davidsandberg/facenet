@@ -38,7 +38,7 @@ import argparse
 import facenet
 import lfw
 import tensorflow.contrib.slim as slim
-import scipy.io as sio
+import h5py
 
 def main(args):
   
@@ -58,7 +58,8 @@ def main(args):
 
     np.random.seed(seed=args.seed)
     train_set = facenet.get_dataset(args.data_dir)
-    train_set = filter_dataset(train_set, '/home/david/casia_embeddings_tmp2.mat', args.filter_method, args.filter_percentile)
+    train_set = filter_dataset(train_set, '/home/david/msceleb_embeddings_tmp1x.mat', args.filter_method, 
+        args.filter_percentile, args.filter_min_nrof_images_per_class)
     nrof_classes = len(train_set)
     
     print('Model directory: %s' % model_dir)
@@ -191,24 +192,36 @@ def find_threshold(var, percentile):
     threshold = np.interp(percentile*0.01, cdf, bin_centers)
     return threshold
   
-def filter_dataset(dataset, data_filename, method, percentile):
-    d = sio.loadmat(data_filename)
+def filter_dataset(dataset, data_filename, method, percentile, min_nrof_images_per_class):
     if method=='':
         filtered_dataset = dataset
     if method=='intra_class_variance':
-        # Keep the classes with the X% lowest intra-class variance
-        variance_threshold = find_threshold(d['class_variance'], percentile)
-        indices = np.where(d['class_variance']<variance_threshold)[1]
-        filtered_dataset = [ dataset[idx] for idx in indices ]
+        with h5py.File(data_filename,'r') as f:
+            # Keep the classes with the X% lowest intra-class variance
+            class_variance = np.array(f.get('class_variance'))
+            variance_threshold = find_threshold(class_variance, percentile)
+            indices = np.where(class_variance<variance_threshold)[1]
+            filtered_dataset = [ dataset[idx] for idx in indices ]
     elif method=='distance_to_class_center':
-        distance_to_center_threshold = find_threshold(d['distance_to_center'], percentile)
-        indices = np.where(d['distance_to_center']>=distance_to_center_threshold)[1]
-        filtered_dataset = dataset
-        for i in indices:
-            label = d['label_list'][0,i]
-            image = d['image_list'][i]
-            if image in filtered_dataset[label].image_paths:
-                filtered_dataset[label].image_paths.remove(image)
+        with h5py.File(data_filename,'r') as f:
+            distance_to_center = np.array(f.get('distance_to_center'))
+            label_list = np.array(f.get('label_list'))
+            image_list = np.array(f.get('image_list'))
+            distance_to_center_threshold = find_threshold(distance_to_center, percentile)
+            indices = np.where(distance_to_center>=distance_to_center_threshold)[0]
+            filtered_dataset = dataset
+            remove_labels = []
+            for i in indices:
+                label = label_list[i]
+                image = image_list[i]
+                if image in filtered_dataset[label].image_paths:
+                    filtered_dataset[label].image_paths.remove(image)
+                if len(filtered_dataset[label].image_paths)<min_nrof_images_per_class:
+                    remove_labels.append(label)
+            for i in set(remove_labels):
+                del(filtered_dataset[i])
+
+                
     else:
         raise('Filtering method "%s" not implemented' % method)
     return filtered_dataset
@@ -363,6 +376,8 @@ def parse_arguments(argv):
         help='Type of dataset filtering to apply.', default='')
     parser.add_argument('--filter_percentile', type=float,
         help='Keep only the percentile classes with the lowest intra-class variance.', default=100.0)
+    parser.add_argument('--filter_min_nrof_images_per_class', type=int,
+        help='Keep only the classes with this number of examples or more.', default=60)
  
     # Parameters for validation on LFW
     parser.add_argument('--lfw_pairs', type=str,
