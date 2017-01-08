@@ -67,38 +67,52 @@ def main(args):
                 
             embedding_size = int(embeddings.get_shape()[1])
             nrof_batches = int(math.ceil(nrof_images / args.batch_size))
-            emb_array = np.zeros((nrof_images, embedding_size))
-            for i in range(nrof_batches):
-                t = time.time()
-                emb, lab = sess.run([embeddings, label_batch])
-                emb_array[lab,:] = emb
-                print('Batch %d in %.3f seconds' % (i, time.time()-t))
-
             nrof_classes = len(train_set)
+            label_array = np.array(label_list)
+            class_names = [cls.name for cls in train_set]
+            nrof_examples_per_class = [ len(cls.image_paths) for cls in train_set ]
             class_variance = np.zeros((nrof_classes,))
             class_center = np.zeros((nrof_classes,embedding_size))
-            class_names = [cls.name for cls in train_set]
-            label_array = np.array(label_list)
             distance_to_center = np.ones((len(label_list),))*np.NaN
-            for cls in set(label_list):
-                idx = np.where(label_array==cls)[0]
-                center = np.mean(emb_array[idx,:], axis=0)
-                diffs = emb_array[idx,:] - center
-                dists_sqr = np.sum(np.square(diffs), axis=1)
-                class_variance[cls] = np.mean(dists_sqr)
-                class_center[cls,:] = center
-                distance_to_center[idx] = np.sqrt(dists_sqr)
+            emb_array = np.zeros((0,embedding_size))
+            idx_array = np.zeros((0,), dtype=np.int32)
+            lab_array = np.zeros((0,), dtype=np.int32)
+            index_arr = np.append(0, np.cumsum(nrof_examples_per_class))
+            for i in range(nrof_batches):
+                t = time.time()
+                emb, idx = sess.run([embeddings, label_batch])
+                emb_array = np.append(emb_array, emb, axis=0)
+                idx_array = np.append(idx_array, idx, axis=0)
+                lab_array = np.append(lab_array, label_array[idx], axis=0)
+                for cls in set(lab_array):
+                    cls_idx = np.where(lab_array==cls)[0]
+                    if cls_idx.shape[0]==nrof_examples_per_class[cls]:
+                        # We have calculated all the embeddings for this class
+                        i2 = np.argsort(idx_array[cls_idx])
+                        emb_class = emb_array[cls_idx,:]
+                        emb_sort = emb_class[i2,:]
+                        center = np.mean(emb_sort, axis=0)
+                        diffs = emb_sort - center
+                        dists_sqr = np.sum(np.square(diffs), axis=1)
+                        class_variance[cls] = np.mean(dists_sqr)
+                        class_center[cls,:] = center
+                        distance_to_center[index_arr[cls]:index_arr[cls+1]] = np.sqrt(dists_sqr)
+                        emb_array = np.delete(emb_array, cls_idx, axis=0)
+                        idx_array = np.delete(idx_array, cls_idx, axis=0)
+                        lab_array = np.delete(lab_array, cls_idx, axis=0)
+
+                        
+                print('Batch %d in %.3f seconds' % (i, time.time()-t))
                 
+#             qqq = sio.loadmat('/home/david/casia_embeddings_tmp2.mat')
+#             z2 = np.sum(nrof_examples_per_class[:cls])
+#             w1 = np.where(np.abs(qqq['class_center'][:cls] - class_center[:cls])>1e-6)
+#             w2 = np.where(np.abs(qqq['class_variance'][0,:cls] - class_variance[:cls])>1e-6)
+#             w3 = np.where(np.abs(qqq['distance_to_center'][0,:z2] - distance_to_center[:z2])>1e-6)
+            
             mdict = {'class_names':class_names, 'image_list':image_list, 'label_list':label_list, 'class_variance':class_variance, 
                   'class_center':class_center, 'distance_to_center':distance_to_center }
             sio.savemat(args.mat_file_name, mdict)
-            
-#             nrof_embeddings_per_matrix = 50000
-#             nrof_matrices = int(math.ceil(nrof_images / nrof_embeddings_per_matrix))
-#             mdict = {'image_list':image_list, 'label_list': label_list }
-#             for i in range(nrof_matrices):
-#                 mdict['embeddings_%05d' % i] = emb_array[(i*nrof_embeddings_per_matrix):((i+1)*nrof_embeddings_per_matrix)]
-#             sio.savemat('casia_embeddings_test1.mat', mdict)
             
 def parse_arguments(argv):
     parser = argparse.ArgumentParser()
