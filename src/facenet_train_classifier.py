@@ -129,17 +129,18 @@ def main(args):
             learning_rate, args.moving_average_decay, tf.global_variables(), args.log_histograms)
         
         # Evaluation
-        print('Building evaluation graph')
-        lfw_label_list = range(0,len(lfw_paths))
-        assert (len(lfw_paths) % args.lfw_batch_size == 0), "The number of images in the LFW test set need to be divisible by the lfw_batch_size"
-        eval_image_batch, eval_label_batch = facenet.read_and_augument_data(lfw_paths, lfw_label_list, args.image_size,
-            args.lfw_batch_size, None, False, False, False, args.nrof_preprocess_threads, shuffle=False)
-        # Node for input images
-        eval_image_batch.set_shape((None, args.image_size, args.image_size, 3))
-        eval_image_batch = tf.identity(eval_image_batch, name='input')
-        eval_prelogits, _ = network.inference(eval_image_batch, 1.0, 
-            phase_train=False, weight_decay=0.0, reuse=True)
-        eval_embeddings = tf.nn.l2_normalize(eval_prelogits, 1, 1e-10, name='embeddings')
+        if args.lfw_dir:
+            print('Building evaluation graph')
+            lfw_label_list = range(0,len(lfw_paths))
+            assert (len(lfw_paths) % args.lfw_batch_size == 0), "The number of images in the LFW test set need to be divisible by the lfw_batch_size"
+            eval_image_batch, eval_label_batch = facenet.read_and_augument_data(lfw_paths, lfw_label_list, args.image_size,
+                args.lfw_batch_size, None, False, False, False, args.nrof_preprocess_threads, shuffle=False)
+            # Node for input images
+            eval_image_batch.set_shape((None, args.image_size, args.image_size, 3))
+            eval_image_batch = tf.identity(eval_image_batch, name='input')
+            eval_prelogits, _ = network.inference(eval_image_batch, 1.0, 
+                phase_train=False, weight_decay=0.0, reuse=True)
+            eval_embeddings = tf.nn.l2_normalize(eval_prelogits, 1, 1e-10, name='embeddings')
 
         # Create a saver
         saver = tf.train.Saver(tf.global_variables(), max_to_keep=3)
