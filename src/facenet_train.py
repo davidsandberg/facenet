@@ -170,8 +170,8 @@ def main(args):
         sess = tf.Session(config=tf.ConfigProto(gpu_options=gpu_options))        
 
         # Initialize variables
-        sess.run(tf.global_variables_initializer())
-        sess.run(tf.local_variables_initializer())
+        sess.run(tf.global_variables_initializer(), feed_dict={phase_train_placeholder:True})
+        sess.run(tf.local_variables_initializer(), feed_dict={phase_train_placeholder:True})
 
         summary_writer = tf.summary.FileWriter(log_dir, sess.graph)
         tf.train.start_queue_runners(sess=sess)
@@ -230,7 +230,7 @@ def train(args, sess, dataset, epoch, image_paths_placeholder, labels_placeholde
         for i in xrange(nrof_batches):
             batch_size = min(nrof_examples-i*args.batch_size, args.batch_size)
             emb, lab = sess.run([embeddings, labels_batch], feed_dict={batch_size_placeholder: batch_size, 
-                learning_rate_placeholder: 0.0, phase_train_placeholder: False})
+                learning_rate_placeholder: lr, phase_train_placeholder: True})
             emb_array[lab,:] = emb
         print('%.3f' % (time.time()-start_time))
 
@@ -245,8 +245,6 @@ def train(args, sess, dataset, epoch, image_paths_placeholder, labels_placeholde
         # Perform training on the selected triplets
         nrof_batches = int(np.ceil(nrof_triplets*3/args.batch_size))
         triplet_paths = list(itertools.chain(*triplets))
-        #triplet_paths = triplet_paths[0:nrof_batches*args.batch_size]
-        print('Nrof paths: %d' % len(triplet_paths))
         labels_array = np.reshape(np.arange(len(triplet_paths)),(-1,3))
         triplet_paths_array = np.reshape(np.expand_dims(np.array(triplet_paths),1), (-1,3))
         sess.run(enqueue_op, {image_paths_placeholder: triplet_paths_array, labels_placeholder: labels_array})
