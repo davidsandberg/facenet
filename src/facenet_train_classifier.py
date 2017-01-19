@@ -58,7 +58,7 @@ def main(args):
 
     np.random.seed(seed=args.seed)
     train_set = facenet.get_dataset(args.data_dir)
-    train_set = filter_dataset(train_set, '/home/david/msceleb_embeddings_tmp1x.mat', args.filter_method, 
+    train_set = filter_dataset(train_set, '/home/david/msceleb_embeddings_tmp3.hdf', args.filter_method, 
         args.filter_percentile, args.filter_min_nrof_images_per_class)
     nrof_classes = len(train_set)
     
@@ -210,15 +210,17 @@ def filter_dataset(dataset, data_filename, method, percentile, min_nrof_images_p
             distance_to_center_threshold = find_threshold(distance_to_center, percentile)
             indices = np.where(distance_to_center>=distance_to_center_threshold)[0]
             filtered_dataset = dataset
-            remove_labels = []
+            removelist = []
             for i in indices:
                 label = label_list[i]
                 image = image_list[i]
                 if image in filtered_dataset[label].image_paths:
                     filtered_dataset[label].image_paths.remove(image)
                 if len(filtered_dataset[label].image_paths)<min_nrof_images_per_class:
-                    remove_labels.append(label)
-            for i in set(remove_labels):
+                    removelist.append(label)
+
+            ix = sorted(list(set(removelist)), reverse=True)
+            for i in ix:
                 del(filtered_dataset[i])
 
                 
