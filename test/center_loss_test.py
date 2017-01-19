@@ -41,7 +41,7 @@ class CenterLossTest(unittest.TestCase):
             labels = tf.placeholder(tf.int32, shape=(batch_size,), name='labels')
 
             # Define center loss
-            center_loss, centers = facenet.center_loss_new(features, labels, alfa, nrof_classes)
+            center_loss, centers = facenet.center_loss(features, labels, alfa, nrof_classes)
             
             label_to_center = np.array( [ 
                  [-3,-3],  [-3,-1],  [-3,1],  [-3,3],
