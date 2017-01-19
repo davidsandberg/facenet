@@ -37,6 +37,7 @@ import matplotlib.pyplot as plt
 from sklearn.cross_validation import KFold
 from scipy import interpolate
 from tensorflow.python.training import training
+import random
 
 #import h5py
 
@@ -88,13 +89,16 @@ def center_loss(features, label, alfa, nrof_classes):
     loss = tf.nn.l2_loss(features - centers_batch)
     return loss, centers
 
-def get_image_paths_and_labels(dataset):
+def get_image_paths_and_labels(dataset, shuffle=False):
     image_paths_flat = []
     labels_flat = []
     for i in range(len(dataset)):
         image_paths_flat += dataset[i].image_paths
         labels_flat += [i] * len(dataset[i].image_paths)
-    return image_paths_flat, labels_flat
+    idx = range(len(labels_flat))
+    if shuffle:
+        random.shuffle(idx)
+    return image_paths_flat[idx], labels_flat[idx]
 
 
 def read_images_from_disk(input_queue):

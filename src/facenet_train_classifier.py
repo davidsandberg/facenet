@@ -79,7 +79,7 @@ def main(args):
         global_step = tf.Variable(0, trainable=False)
         
         # Get a list of image paths and their labels
-        image_list, label_list = facenet.get_image_paths_and_labels(train_set)
+        image_list, label_list = facenet.get_image_paths_and_labels(train_set, shuffle=True)
 
         learning_rate_placeholder = tf.placeholder(tf.float32, name='learning_rate')
 
