@@ -506,19 +506,19 @@ def pad(total_boxes, w, h):
     ey = total_boxes[:,3].copy().astype(np.int32)
 
     tmp = np.where(ex>w)
-    edx[tmp] = np.expand_dims(-ex[tmp]+w+tmpw[tmp],1)
+    edx.flat[tmp] = np.expand_dims(-ex[tmp]+w+tmpw[tmp],1)
     ex[tmp] = w
     
     tmp = np.where(ey>h)
-    edy[tmp] = np.expand_dims(-ey[tmp]+h+tmph[tmp],1)
+    edy.flat[tmp] = np.expand_dims(-ey[tmp]+h+tmph[tmp],1)
     ey[tmp] = h
 
     tmp = np.where(x<1)
-    dx[tmp] = np.expand_dims(2-x[tmp],1)
+    dx.flat[tmp] = np.expand_dims(2-x[tmp],1)
     x[tmp] = 1
 
     tmp = np.where(y<1)
-    dy[tmp] = np.expand_dims(2-y[tmp],1)
+    dy.flat[tmp] = np.expand_dims(2-y[tmp],1)
     y[tmp] = 1
     
     return dy, edy, dx, edx, y, ey, x, ex, tmpw, tmph
