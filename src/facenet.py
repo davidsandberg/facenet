@@ -320,7 +320,7 @@ class ImageClass():
   
 def get_dataset(paths):
     dataset = []
-    for path in paths.split(':'):
+    for path in paths.split('|'):
         path_exp = os.path.expanduser(path)
         classes = os.listdir(path_exp)
         classes.sort()
