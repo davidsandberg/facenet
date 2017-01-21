@@ -87,13 +87,13 @@ def main(args):
         
         phase_train_placeholder = tf.placeholder(tf.bool, name='phase_train')
         
-        image_paths_placeholder = tf.placeholder(tf.string, shape=(None,2), name='image_paths')
+        image_paths_placeholder = tf.placeholder(tf.string, shape=(None,1), name='image_paths')
 
-        labels_placeholder = tf.placeholder(tf.int64, shape=(None,2), name='labels')
+        labels_placeholder = tf.placeholder(tf.int64, shape=(None,1), name='labels')
         
         input_queue = data_flow_ops.FIFOQueue(capacity=100000,
                                     dtypes=[tf.string, tf.int64],
-                                    shapes=[(2,), (2,)],
+                                    shapes=[(1,), (1,)],
                                     shared_name=None, name=None)
         enqueue_op = input_queue.enqueue_many([image_paths_placeholder, labels_placeholder])
         
@@ -213,9 +213,6 @@ def train(args, sess, epoch, image_list, label_list, enqueue_op, image_paths_pla
     else:
         lr = facenet.get_learning_rate_from_file(learning_rate_schedule_file, epoch)
 
-    # Training loop
-    train_time = 0
-    
     nrof_examples = len(image_list)
     nrof_examples_per_epoch = args.epoch_size*args.batch_size
     j = epoch*nrof_examples_per_epoch % nrof_examples
@@ -227,17 +224,20 @@ def train(args, sess, epoch, image_list, label_list, enqueue_op, image_paths_pla
         image_epoch = image_list[j:nrof_examples] + image_list[0:nrof_examples-j]
     
     # Enqueue one epoch of image paths and labels
-    labels_array = np.reshape(np.array(label_epoch),(-1,2))
-    image_paths_array = np.reshape(np.expand_dims(np.array(image_epoch),1), (-1,2))
+    labels_array = np.expand_dims(np.array(label_epoch),1)
+    image_paths_array = np.expand_dims(np.array(image_epoch),1)
     sess.run(enqueue_op, {image_paths_placeholder: image_paths_array, labels_placeholder: labels_array})
 
+    # Training loop
+    train_time = 0
     while batch_number < args.epoch_size:
         start_time = time.time()
         feed_dict = {learning_rate_placeholder: lr, phase_train_placeholder:True, batch_size_placeholder:args.batch_size}
-        err, _, step, reg_loss = sess.run([loss, train_op, global_step, regularization_losses], feed_dict=feed_dict)
         if (batch_number % 100 == 0):
-            summary_str, step = sess.run([summary_op, global_step], feed_dict=feed_dict)
+            err, _, step, reg_loss, summary_str = sess.run([loss, train_op, global_step, regularization_losses, summary_op], feed_dict=feed_dict)
             summary_writer.add_summary(summary_str, global_step=step)
+        else:
+            err, _, step, reg_loss = sess.run([loss, train_op, global_step, regularization_losses], feed_dict=feed_dict)
         duration = time.time() - start_time
         print('Epoch: [%d][%d/%d]\tTime %.3f\tLoss %2.3f\tRegLoss %2.3f' %
               (epoch, batch_number+1, args.epoch_size, duration, err, np.sum(reg_loss)))
@@ -257,8 +257,8 @@ def evaluate(sess, enqueue_op, image_paths_placeholder, labels_placeholder, phas
     print('Runnning forward pass on LFW images')
     
     # Enqueue one epoch of image paths and labels
-    labels_array = np.reshape(np.arange(0,len(image_paths)),(-1,2))
-    image_paths_array = np.reshape(np.expand_dims(np.array(image_paths),1), (-1,2))
+    labels_array = np.expand_dims(np.arange(0,len(image_paths)),1)
+    image_paths_array = np.expand_dims(np.array(image_paths),1)
     sess.run(enqueue_op, {image_paths_placeholder: image_paths_array, labels_placeholder: labels_array})
     
     embedding_size = embeddings.get_shape()[1]
@@ -266,7 +266,7 @@ def evaluate(sess, enqueue_op, image_paths_placeholder, labels_placeholder, phas
     nrof_batches = nrof_images // batch_size
     emb_array = np.zeros((nrof_images, embedding_size))
     for _ in range(nrof_batches):
-        feed_dict = {phase_train_placeholder:True, batch_size_placeholder:batch_size}
+        feed_dict = {phase_train_placeholder:False, batch_size_placeholder:batch_size}
         emb, lab = sess.run([embeddings, labels], feed_dict=feed_dict)
         emb_array[lab] = emb
         
