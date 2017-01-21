@@ -32,6 +32,11 @@ import tensorflow as tf
 #from math import floor
 import cv2
 import os
+import sys
+
+if (sys.version_info > (3, 0)):
+    # 'basestring' is undefined on Python 3
+    basestring = (str,bytes)
 
 def layer(op):
     '''Decorator for composable network layers.'''
@@ -81,12 +86,15 @@ class Network(object):
         session: The current TensorFlow session
         ignore_missing: If true, serialized weights for missing layers are ignored.
         '''
-        data_dict = np.load(data_path).item() #pylint: disable=no-member
+        if (sys.version_info > (3, 0)):
+            data_dict = np.load(data_path, encoding='bytes').item() #pylint: disable=no-member
+        else:
+            data_dict = np.load(data_path).item() #pylint: disable=no-member
         for op_name in data_dict:
             with tf.variable_scope(op_name, reuse=True):
-                for param_name, data in data_dict[op_name].iteritems():
+                for param_name, data in iter(data_dict[op_name].items()):
                     try:
-                        var = tf.get_variable(param_name)
+                        var = tf.get_variable(param_name.decode('utf-8'))
                         session.run(var.assign(data))
                     except ValueError:
                         if not ignore_missing:
