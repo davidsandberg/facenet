@@ -95,10 +95,11 @@ def get_image_paths_and_labels(dataset, shuffle=False):
     for i in range(len(dataset)):
         image_paths_flat += dataset[i].image_paths
         labels_flat += [i] * len(dataset[i].image_paths)
-    idx = range(len(labels_flat))
     if shuffle:
-        random.shuffle(idx)
-    return image_paths_flat[idx], labels_flat[idx]
+        shuffle_list = list(zip(image_paths_flat, labels_flat))
+        random.shuffle(shuffle_list)
+        image_paths_flat, labels_flat = zip(*shuffle_list)
+    return image_paths_flat, labels_flat
 
 
 def read_images_from_disk(input_queue):
