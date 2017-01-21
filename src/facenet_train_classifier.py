@@ -39,6 +39,7 @@ import facenet
 import lfw
 import tensorflow.contrib.slim as slim
 from tensorflow.python.ops import data_flow_ops
+import h5py
 
 def main(args):
   
@@ -58,6 +59,9 @@ def main(args):
 
     np.random.seed(seed=args.seed)
     train_set = facenet.get_dataset(args.data_dir)
+    if args.filter_filename:
+        train_set = filter_dataset(train_set, args.filter_filename, 
+            args.filter_percentile, args.filter_min_nrof_images_per_class)
     nrof_classes = len(train_set)
     
     print('Model directory: %s' % model_dir)
@@ -202,6 +206,37 @@ def main(args):
                     evaluate(sess, enqueue_op, image_paths_placeholder, labels_placeholder, phase_train_placeholder, batch_size_placeholder, 
                         embeddings, label_batch, lfw_paths, actual_issame, args.lfw_batch_size, args.seed, args.lfw_nrof_folds, log_dir, step, summary_writer)
     return model_dir
+  
+def find_threshold(var, percentile):
+    hist, bin_edges = np.histogram(var, 100)
+    cdf = np.float32(np.cumsum(hist)) / np.sum(hist)
+    bin_centers = (bin_edges[:-1]+bin_edges[1:])/2
+    #plt.plot(bin_centers, cdf)
+    threshold = np.interp(percentile*0.01, cdf, bin_centers)
+    return threshold
+  
+def filter_dataset(dataset, data_filename, percentile, min_nrof_images_per_class):
+    with h5py.File(data_filename,'r') as f:
+        distance_to_center = np.array(f.get('distance_to_center'))
+        label_list = np.array(f.get('label_list'))
+        image_list = np.array(f.get('image_list'))
+        distance_to_center_threshold = find_threshold(distance_to_center, percentile)
+        indices = np.where(distance_to_center>=distance_to_center_threshold)[0]
+        filtered_dataset = dataset
+        removelist = []
+        for i in indices:
+            label = label_list[i]
+            image = image_list[i]
+            if image in filtered_dataset[label].image_paths:
+                filtered_dataset[label].image_paths.remove(image)
+            if len(filtered_dataset[label].image_paths)<min_nrof_images_per_class:
+                removelist.append(label)
+
+        ix = sorted(list(set(removelist)), reverse=True)
+        for i in ix:
+            del(filtered_dataset[i])
+
+    return filtered_dataset
   
 def train(args, sess, epoch, image_list, label_list, enqueue_op, image_paths_placeholder, labels_placeholder, 
       learning_rate_placeholder, phase_train_placeholder, batch_size_placeholder, global_step, 
@@ -368,6 +403,12 @@ def parse_arguments(argv):
         help='Enables logging of weight/bias histograms in tensorboard.', action='store_true')
     parser.add_argument('--learning_rate_schedule_file', type=str,
         help='File containing the learning rate schedule that is used when learning_rate is set to to -1.', default='../data/learning_rate_schedule.txt')
+    parser.add_argument('--filter_filename', type=str,
+        help='File containing image data used for dataset filtering', default='')
+    parser.add_argument('--filter_percentile', type=float,
+        help='Keep only the percentile images closed to its class center', default=100.0)
+    parser.add_argument('--filter_min_nrof_images_per_class', type=int,
+        help='Keep only the classes with this number of examples or more', default=0)
  
     # Parameters for validation on LFW
     parser.add_argument('--lfw_pairs', type=str,

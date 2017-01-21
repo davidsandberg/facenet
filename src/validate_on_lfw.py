@@ -52,7 +52,10 @@ def main(args):
 
             # Load the model
             print('Model directory: %s' % args.model_dir)
-            meta_file, ckpt_file = facenet.get_model_filenames(os.path.expanduser(args.model_dir))
+            #meta_file, ckpt_file = facenet.get_model_filenames(os.path.expanduser(args.model_dir))
+            meta_file = os.path.join(os.path.expanduser(args.model_dir),'model-20161231-150622.meta')
+            ckpt_file = os.path.join(os.path.expanduser(args.model_dir),'model-20161231-150622.ckpt-80000')
+            
             print('Metagraph file: %s' % meta_file)
             print('Checkpoint file: %s' % ckpt_file)
             facenet.load_model(args.model_dir, meta_file, ckpt_file)

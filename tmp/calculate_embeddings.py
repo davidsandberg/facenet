@@ -33,13 +33,19 @@ import facenet
 import os
 import sys
 import time
-from tensorflow.python.platform import gfile
-import scipy.io as sio
+import h5py
+import importlib
+import math
 
 def main(args):
+    network = importlib.import_module(args.model_def, 'inference')
+  
+    model_dir = '/media/data/DeepLearning/models/facenet/20161231-150622'
+    model = os.path.join(os.path.expanduser(model_dir),'model-20161231-150622.ckpt-80000')
+
   
     train_set = facenet.get_dataset(args.dataset_dir)
-    train_set = train_set[0:10]
+    #train_set = train_set[0:50]
   
     with tf.Graph().as_default():
       
@@ -50,36 +56,70 @@ def main(args):
 
         image_batch, label_batch = facenet.read_and_augument_data(image_list, image_indices, args.image_size, args.batch_size, None, 
             False, False, False, nrof_preprocess_threads=4, shuffle=False)
+        prelogits, _ = network.inference(image_batch, 1.0, 
+            phase_train=False, weight_decay=0.0, reuse=False)
+        embeddings = tf.nn.l2_normalize(prelogits, 1, 1e-10, name='embeddings')
+        saver = tf.train.Saver(tf.global_variables())
+        
         with tf.Session() as sess:
+            saver.restore(sess, model)
             tf.train.start_queue_runners(sess=sess)
-            print('Loading graphdef: %s' % args.model_file)
-            with gfile.FastGFile(os.path.expanduser(args.model_file),'rb') as f:
-                graph_def = tf.GraphDef()
-                graph_def.ParseFromString(f.read())
-                embeddings = tf.import_graph_def(graph_def, input_map={'input':image_batch}, 
-                    return_elements=['embeddings:0'], name='import')[0]
                 
             embedding_size = int(embeddings.get_shape()[1])
-            nrof_batches = nrof_images // args.batch_size
-            emb_array = np.zeros((nrof_images, embedding_size))
+            nrof_batches = int(math.ceil(nrof_images / args.batch_size))
+            nrof_classes = len(train_set)
+            label_array = np.array(label_list)
+            class_names = [cls.name for cls in train_set]
+            nrof_examples_per_class = [ len(cls.image_paths) for cls in train_set ]
+            class_variance = np.zeros((nrof_classes,))
+            class_center = np.zeros((nrof_classes,embedding_size))
+            distance_to_center = np.ones((len(label_list),))*np.NaN
+            emb_array = np.zeros((0,embedding_size))
+            idx_array = np.zeros((0,), dtype=np.int32)
+            lab_array = np.zeros((0,), dtype=np.int32)
+            index_arr = np.append(0, np.cumsum(nrof_examples_per_class))
             for i in range(nrof_batches):
                 t = time.time()
-                emb, lab = sess.run([embeddings, label_batch])
-                emb_array[lab,:] = emb
-                print('Batch %d in %.3f seconds' % (i, time.time()-t))
+                emb, idx = sess.run([embeddings, label_batch])
+                emb_array = np.append(emb_array, emb, axis=0)
+                idx_array = np.append(idx_array, idx, axis=0)
+                lab_array = np.append(lab_array, label_array[idx], axis=0)
+                for cls in set(lab_array):
+                    cls_idx = np.where(lab_array==cls)[0]
+                    if cls_idx.shape[0]==nrof_examples_per_class[cls]:
+                        # We have calculated all the embeddings for this class
+                        i2 = np.argsort(idx_array[cls_idx])
+                        emb_class = emb_array[cls_idx,:]
+                        emb_sort = emb_class[i2,:]
+                        center = np.mean(emb_sort, axis=0)
+                        diffs = emb_sort - center
+                        dists_sqr = np.sum(np.square(diffs), axis=1)
+                        class_variance[cls] = np.mean(dists_sqr)
+                        class_center[cls,:] = center
+                        distance_to_center[index_arr[cls]:index_arr[cls+1]] = np.sqrt(dists_sqr)
+                        emb_array = np.delete(emb_array, cls_idx, axis=0)
+                        idx_array = np.delete(idx_array, cls_idx, axis=0)
+                        lab_array = np.delete(lab_array, cls_idx, axis=0)
 
-            mdict = {'image_list':image_list, 'label_list': label_list, 'embeddings':emb_array}
-            sio.savemat(args.mat_file_name, mdict)
-            
+                        
+                print('Batch %d in %.3f seconds' % (i, time.time()-t))
+                
+            print('Writing filtering data to %s' % args.data_file_name)
+            mdict = {'class_names':class_names, 'image_list':image_list, 'label_list':label_list, 'class_variance':class_variance, 
+                  'class_center':class_center, 'distance_to_center':distance_to_center }
+            with h5py.File(args.data_file_name, 'w') as f:
+                for key, value in mdict.iteritems():
+                    f.create_dataset(key, data=value)
+                        
 def parse_arguments(argv):
     parser = argparse.ArgumentParser()
     
     parser.add_argument('dataset_dir', type=str,
         help='Path to the directory containing aligned dataset.')
-    parser.add_argument('model_file', type=str, 
-        help='The graphdef for the model to be evaluated as a protobuf (.pb) file')
-    parser.add_argument('mat_file_name', type=str,
-        help='The name of the mat file to store the embeddings in.')
+    parser.add_argument('model_def', type=str,
+        help='Model definition. Points to a module containing the definition of the inference graph.')
+    parser.add_argument('data_file_name', type=str,
+        help='The name of the file to store filtering data in.')
     parser.add_argument('--image_size', type=int,
         help='Image size.', default=160)
     parser.add_argument('--batch_size', type=int,
