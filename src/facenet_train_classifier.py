@@ -83,7 +83,7 @@ def main(args):
         global_step = tf.Variable(0, trainable=False)
         
         # Get a list of image paths and their labels
-        image_list, label_list = facenet.get_image_paths_and_labels(train_set, shuffle=True)
+        image_list, label_list = facenet.get_image_paths_and_labels(train_set, shuffle=True, seed=args.seed)
 
         learning_rate_placeholder = tf.placeholder(tf.float32, name='learning_rate')
 
@@ -255,8 +255,8 @@ def train(args, sess, epoch, image_list, label_list, enqueue_op, image_paths_pla
         label_epoch = label_list[j:j+nrof_examples_per_epoch]
         image_epoch = image_list[j:j+nrof_examples_per_epoch]
     else:
-        label_epoch = label_list[j:nrof_examples] + label_list[0:nrof_examples-j]
-        image_epoch = image_list[j:nrof_examples] + image_list[0:nrof_examples-j]
+        label_epoch = label_list[j:nrof_examples] + label_list[0:nrof_examples_per_epoch-(nrof_examples-j)]
+        image_epoch = image_list[j:nrof_examples] + image_list[0:nrof_examples_per_epoch-(nrof_examples-j)]
     
     # Enqueue one epoch of image paths and labels
     labels_array = np.expand_dims(np.array(label_epoch),1)
@@ -303,6 +303,7 @@ def evaluate(sess, enqueue_op, image_paths_placeholder, labels_placeholder, phas
     for _ in range(nrof_batches):
         feed_dict = {phase_train_placeholder:False, batch_size_placeholder:batch_size}
         emb, lab = sess.run([embeddings, labels], feed_dict=feed_dict)
+        print(lab)
         emb_array[lab] = emb
         
     _, _, accuracy, val, val_std, far = lfw.evaluate(emb_array, seed, actual_issame, nrof_folds=nrof_folds)

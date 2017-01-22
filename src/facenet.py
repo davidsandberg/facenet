@@ -89,13 +89,15 @@ def center_loss(features, label, alfa, nrof_classes):
     loss = tf.nn.l2_loss(features - centers_batch)
     return loss, centers
 
-def get_image_paths_and_labels(dataset, shuffle=False):
+def get_image_paths_and_labels(dataset, shuffle=False, seed=None):
     image_paths_flat = []
     labels_flat = []
     for i in range(len(dataset)):
         image_paths_flat += dataset[i].image_paths
         labels_flat += [i] * len(dataset[i].image_paths)
     if shuffle:
+        if seed:
+            random.seed(seed)
         shuffle_list = list(zip(image_paths_flat, labels_flat))
         random.shuffle(shuffle_list)
         image_paths_flat, labels_flat = zip(*shuffle_list)
