@@ -204,7 +204,7 @@ def main(args):
                 # Evaluate on LFW
                 if args.lfw_dir:
                     evaluate(sess, enqueue_op, image_paths_placeholder, labels_placeholder, phase_train_placeholder, batch_size_placeholder, 
-                        embeddings, label_batch, lfw_paths, actual_issame, args.lfw_batch_size, args.seed, args.lfw_nrof_folds, log_dir, step, summary_writer)
+                        embeddings, label_batch, lfw_paths, actual_issame, args.lfw_batch_size, args.lfw_nrof_folds, log_dir, step, summary_writer)
     return model_dir
   
 def find_threshold(var, percentile):
@@ -286,7 +286,7 @@ def train(args, sess, epoch, image_list, label_list, enqueue_op, image_paths_pla
     return step
 
 def evaluate(sess, enqueue_op, image_paths_placeholder, labels_placeholder, phase_train_placeholder, batch_size_placeholder, 
-        embeddings, labels, image_paths, actual_issame, batch_size, seed, nrof_folds, log_dir, step, summary_writer):
+        embeddings, labels, image_paths, actual_issame, batch_size, nrof_folds, log_dir, step, summary_writer):
     start_time = time.time()
     # Run forward pass to calculate embeddings
     print('Runnning forward pass on LFW images')
@@ -300,13 +300,16 @@ def evaluate(sess, enqueue_op, image_paths_placeholder, labels_placeholder, phas
     nrof_images = len(actual_issame)*2
     nrof_batches = nrof_images // batch_size
     emb_array = np.zeros((nrof_images, embedding_size))
+    lab_array = np.zeros((nrof_images,))
     for _ in range(nrof_batches):
         feed_dict = {phase_train_placeholder:False, batch_size_placeholder:batch_size}
         emb, lab = sess.run([embeddings, labels], feed_dict=feed_dict)
-        print(lab)
+        lab_array[lab] = lab
         emb_array[lab] = emb
         
-    _, _, accuracy, val, val_std, far = lfw.evaluate(emb_array, seed, actual_issame, nrof_folds=nrof_folds)
+    assert(np.array_equal(lab_array, np.arange(nrof_images)), 'Wrong labels used for evaluation, ' + 
+        'possibly caused by training examples left in the input pipeline')
+    _, _, accuracy, val, val_std, far = lfw.evaluate(emb_array, actual_issame, nrof_folds=nrof_folds)
     
     print('Accuracy: %1.3f+-%1.3f' % (np.mean(accuracy), np.std(accuracy)))
     print('Validation rate: %2.5f+-%2.5f @ FAR=%2.5f' % (val, val_std, far))

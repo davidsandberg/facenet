@@ -52,9 +52,7 @@ def main(args):
 
             # Load the model
             print('Model directory: %s' % args.model_dir)
-            #meta_file, ckpt_file = facenet.get_model_filenames(os.path.expanduser(args.model_dir))
-            meta_file = os.path.join(os.path.expanduser(args.model_dir),'model-20161231-150622.meta')
-            ckpt_file = os.path.join(os.path.expanduser(args.model_dir),'model-20161231-150622.ckpt-80000')
+            meta_file, ckpt_file = facenet.get_model_filenames(os.path.expanduser(args.model_dir))
             
             print('Metagraph file: %s' % meta_file)
             print('Checkpoint file: %s' % ckpt_file)
@@ -82,7 +80,7 @@ def main(args):
                 emb_array[start_index:end_index,:] = sess.run(embeddings, feed_dict=feed_dict)
         
             tpr, fpr, accuracy, val, val_std, far = lfw.evaluate(emb_array, 
-                args.seed, actual_issame, nrof_folds=args.lfw_nrof_folds)
+                actual_issame, nrof_folds=args.lfw_nrof_folds)
 
             print('Accuracy: %1.3f+-%1.3f' % (np.mean(accuracy), np.std(accuracy)))
             print('Validation rate: %2.5f+-%2.5f @ FAR=%2.5f' % (val, val_std, far))
@@ -104,8 +102,6 @@ def parse_arguments(argv):
         help='The file extension for the LFW dataset.', default='png', choices=['jpg', 'png'])
     parser.add_argument('--lfw_nrof_folds', type=int,
         help='Number of folds to use for cross validation. Mainly used for testing.', default=10)
-    parser.add_argument('--seed', type=int,
-        help='Random seed.', default=666)
     return parser.parse_args(argv)
 
 if __name__ == '__main__':
