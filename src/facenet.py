@@ -89,20 +89,19 @@ def center_loss(features, label, alfa, nrof_classes):
     loss = tf.nn.l2_loss(features - centers_batch)
     return loss, centers
 
-def get_image_paths_and_labels(dataset, shuffle=False, seed=None):
+def get_image_paths_and_labels(dataset):
     image_paths_flat = []
     labels_flat = []
     for i in range(len(dataset)):
         image_paths_flat += dataset[i].image_paths
         labels_flat += [i] * len(dataset[i].image_paths)
-    if shuffle:
-        if seed:
-            random.seed(seed)
-        shuffle_list = list(zip(image_paths_flat, labels_flat))
-        random.shuffle(shuffle_list)
-        image_paths_flat, labels_flat = zip(*shuffle_list)
     return image_paths_flat, labels_flat
 
+def shuffle_examples(image_paths, labels):
+    shuffle_list = list(zip(image_paths, labels))
+    random.shuffle(shuffle_list)
+    image_paths_shuff, labels_shuff = zip(*shuffle_list)
+    return image_paths_shuff, labels_shuff
 
 def read_images_from_disk(input_queue):
     """Consumes a single filename and label as a ' '-delimited string.
@@ -379,15 +378,7 @@ def get_model_filenames(model_dir):
     elif len(meta_files)>1:
         raise ValueError('There should not be more than one meta file in the model directory (%s)' % model_dir)
     meta_file = meta_files[0]
-    ckpt_files = [s for s in files if 'ckpt' in s]
-    if len(ckpt_files)==0:
-        raise ValueError('No checkpoint file found in the model directory (%s)' % model_dir)
-    elif len(ckpt_files)==1:
-        ckpt_file = ckpt_files[0]
-    else:
-        ckpt_iter = [(s,int(s.split('-')[-1])) for s in ckpt_files if 'ckpt' in s]
-        sorted_iter = sorted(ckpt_iter, key=lambda tup: tup[1])
-        ckpt_file = sorted_iter[-1][0]
+    ckpt_file = tf.train.get_checkpoint_state(model_dir).model_checkpoint_path
     return meta_file, ckpt_file
 
 def calculate_roc(thresholds, embeddings1, embeddings2, actual_issame, nrof_folds=10):
