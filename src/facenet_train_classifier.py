@@ -31,6 +31,7 @@ from datetime import datetime
 import os.path
 import time
 import sys
+import random
 import tensorflow as tf
 import numpy as np
 import importlib
@@ -58,6 +59,7 @@ def main(args):
     facenet.store_revision_info(src_path, log_dir, ' '.join(sys.argv))
 
     np.random.seed(seed=args.seed)
+    random.seed(args.seed)
     train_set = facenet.get_dataset(args.data_dir)
     if args.filter_filename:
         train_set = filter_dataset(train_set, args.filter_filename, 
@@ -83,7 +85,8 @@ def main(args):
         global_step = tf.Variable(0, trainable=False)
         
         # Get a list of image paths and their labels
-        image_list, label_list = facenet.get_image_paths_and_labels(train_set, shuffle=True, seed=args.seed)
+        image_list, label_list = facenet.get_image_paths_and_labels(train_set)
+        image_list, label_list = facenet.shuffle_examples(image_list, label_list)
 
         learning_rate_placeholder = tf.placeholder(tf.float32, name='learning_rate')
 
@@ -99,7 +102,7 @@ def main(args):
                                     dtypes=[tf.string, tf.int64],
                                     shapes=[(1,), (1,)],
                                     shared_name=None, name=None)
-        enqueue_op = input_queue.enqueue_many([image_paths_placeholder, labels_placeholder])
+        enqueue_op = input_queue.enqueue_many([image_paths_placeholder, labels_placeholder], name='enqueue_op')
         
         nrof_preprocess_threads = 4
         images_and_labels = []
@@ -128,6 +131,8 @@ def main(args):
             shapes=[(args.image_size, args.image_size, 3), ()], enqueue_many=True,
             capacity=4 * nrof_preprocess_threads * args.batch_size,
             allow_smaller_final_batch=True)
+        image_batch = tf.identity(image_batch, 'image_batch')
+        label_batch = tf.identity(label_batch, 'label_batch')
         
         print('Total number of classes: %d' % nrof_classes)
         print('Total number of examples: %d' % len(image_list))
@@ -255,8 +260,11 @@ def train(args, sess, epoch, image_list, label_list, enqueue_op, image_paths_pla
         label_epoch = label_list[j:j+nrof_examples_per_epoch]
         image_epoch = image_list[j:j+nrof_examples_per_epoch]
     else:
-        label_epoch = label_list[j:nrof_examples] + label_list[0:nrof_examples_per_epoch-(nrof_examples-j)]
-        image_epoch = image_list[j:nrof_examples] + image_list[0:nrof_examples_per_epoch-(nrof_examples-j)]
+        label_epoch = label_list[j:nrof_examples] 
+        image_epoch = image_list[j:nrof_examples]
+        image_list, label_list = facenet.shuffle_examples(image_list, label_list)
+        label_epoch += label_list[0:nrof_examples_per_epoch-(nrof_examples-j)]
+        image_epoch += image_list[0:nrof_examples_per_epoch-(nrof_examples-j)]
     
     # Enqueue one epoch of image paths and labels
     labels_array = np.expand_dims(np.array(label_epoch),1)
@@ -307,8 +315,7 @@ def evaluate(sess, enqueue_op, image_paths_placeholder, labels_placeholder, phas
         lab_array[lab] = lab
         emb_array[lab] = emb
         
-    assert(np.array_equal(lab_array, np.arange(nrof_images)), 'Wrong labels used for evaluation, ' + 
-        'possibly caused by training examples left in the input pipeline')
+    assert np.array_equal(lab_array, np.arange(nrof_images))==True, 'Wrong labels used for evaluation, possibly caused by training examples left in the input pipeline'
     _, _, accuracy, val, val_std, far = lfw.evaluate(emb_array, actual_issame, nrof_folds=nrof_folds)
     
     print('Accuracy: %1.3f+-%1.3f' % (np.mean(accuracy), np.std(accuracy)))
