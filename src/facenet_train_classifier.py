@@ -40,6 +40,8 @@ import facenet
 import lfw
 import tensorflow.contrib.slim as slim
 from tensorflow.python.ops import data_flow_ops
+from tensorflow.python.framework import ops
+from tensorflow.python.ops import array_ops
 import h5py
 
 def main(args):
@@ -86,8 +88,15 @@ def main(args):
         
         # Get a list of image paths and their labels
         image_list, label_list = facenet.get_image_paths_and_labels(train_set)
-        image_list, label_list = facenet.shuffle_examples(image_list, label_list)
-
+        
+        # Create a queue that produces indices into the image_list and label_list 
+        labels = ops.convert_to_tensor(label_list, dtype=tf.int32)
+        range_size = array_ops.shape(labels)[0]
+        index_queue = tf.train.range_input_producer(range_size, num_epochs=None,
+                             shuffle=True, seed=None, capacity=32)
+        
+        index_dequeue_op = index_queue.dequeue_many(args.batch_size*args.epoch_size, 'index_dequeue')
+        
         learning_rate_placeholder = tf.placeholder(tf.float32, name='learning_rate')
 
         batch_size_placeholder = tf.placeholder(tf.int32, name='batch_size')
@@ -199,7 +208,7 @@ def main(args):
                 step = sess.run(global_step, feed_dict=None)
                 epoch = step // args.epoch_size
                 # Train for one epoch
-                train(args, sess, epoch, image_list, label_list, enqueue_op, image_paths_placeholder, labels_placeholder,
+                train(args, sess, epoch, image_list, label_list, index_dequeue_op, enqueue_op, image_paths_placeholder, labels_placeholder,
                     learning_rate_placeholder, phase_train_placeholder, batch_size_placeholder, global_step, 
                     total_loss, train_op, summary_op, summary_writer, regularization_losses, args.learning_rate_schedule_file)
 
@@ -243,7 +252,7 @@ def filter_dataset(dataset, data_filename, percentile, min_nrof_images_per_class
 
     return filtered_dataset
   
-def train(args, sess, epoch, image_list, label_list, enqueue_op, image_paths_placeholder, labels_placeholder, 
+def train(args, sess, epoch, image_list, label_list, index_dequeue_op, enqueue_op, image_paths_placeholder, labels_placeholder, 
       learning_rate_placeholder, phase_train_placeholder, batch_size_placeholder, global_step, 
       loss, train_op, summary_op, summary_writer, regularization_losses, learning_rate_schedule_file):
     batch_number = 0
@@ -253,18 +262,9 @@ def train(args, sess, epoch, image_list, label_list, enqueue_op, image_paths_pla
     else:
         lr = facenet.get_learning_rate_from_file(learning_rate_schedule_file, epoch)
 
-    nrof_examples = len(image_list)
-    nrof_examples_per_epoch = args.epoch_size*args.batch_size
-    j = epoch*nrof_examples_per_epoch % nrof_examples
-    if j+args.epoch_size*args.batch_size<=nrof_examples:
-        label_epoch = label_list[j:j+nrof_examples_per_epoch]
-        image_epoch = image_list[j:j+nrof_examples_per_epoch]
-    else:
-        label_epoch = label_list[j:nrof_examples] 
-        image_epoch = image_list[j:nrof_examples]
-        image_list, label_list = facenet.shuffle_examples(image_list, label_list)
-        label_epoch += label_list[0:nrof_examples_per_epoch-(nrof_examples-j)]
-        image_epoch += image_list[0:nrof_examples_per_epoch-(nrof_examples-j)]
+    index_epoch = sess.run(index_dequeue_op)
+    label_epoch = np.array(label_list)[index_epoch]
+    image_epoch = np.array(image_list)[index_epoch]
     
     # Enqueue one epoch of image paths and labels
     labels_array = np.expand_dims(np.array(label_epoch),1)
