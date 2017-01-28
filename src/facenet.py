@@ -38,9 +38,7 @@ from sklearn.cross_validation import KFold
 from scipy import interpolate
 from tensorflow.python.training import training
 import random
-
-#import h5py
-
+import re
 
 def triplet_loss(anchor, positive, negative, alpha):
     """Calculate the triplet loss according to the FaceNet paper
@@ -378,7 +376,15 @@ def get_model_filenames(model_dir):
     elif len(meta_files)>1:
         raise ValueError('There should not be more than one meta file in the model directory (%s)' % model_dir)
     meta_file = meta_files[0]
-    ckpt_file = tf.train.get_checkpoint_state(model_dir).model_checkpoint_path
+    meta_files = [s for s in files if '.ckpt' in s]
+    max_step = -1
+    for f in files:
+        step_str = re.match(r'(^model-[\w\- ]+.ckpt-(\d+))', f)
+        if step_str is not None and len(step_str.groups())>=2:
+            step = int(step_str.groups()[1])
+            if step > max_step:
+                max_step = step
+                ckpt_file = step_str.groups()[0]
     return meta_file, ckpt_file
 
 def calculate_roc(thresholds, embeddings1, embeddings2, actual_issame, nrof_folds=10):
