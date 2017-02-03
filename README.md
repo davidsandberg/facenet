@@ -1,19 +1,21 @@
-# FaceNet implementation in Tensorflow
+# Face Recognition using Tensorflow
 This is a TensorFlow implementation of the face recognizer described in the paper
 ["FaceNet: A Unified Embedding for Face Recognition and Clustering"](http://arxiv.org/abs/1503.03832). The project also uses ideas from the paper ["A Discriminative Feature Learning Approach for Deep Face Recognition"](http://ydwen.github.io/papers/WenECCV16.pdf) as well as the paper ["Deep Face Recognition"](http://www.robots.ox.ac.uk/~vgg/publications/2015/Parkhi15/parkhi15.pdf) from the [Visual Geometry Group](http://www.robots.ox.ac.uk/~vgg/) at Oxford.
 
 ## Tensorflow release
 Currently this repo is compatible with Tensorflow r0.12.
 
-## Notes
-**2017-01-27: Added a model trained on a subset of the MS-Celeb-1M dataset. The LFW accuracy of this model is around 0.994.<br>
-2017-01-02: Updated to code to run with Tensorflow r0.12. Not sure if it runs with older versions of Tensorflow though.**
+## News
+| Date     | Update |
+|----------|--------|
+| 2017-01-27 | Added a model trained on a subset of the MS-Celeb-1M dataset. The LFW accuracy of this model is around 0.994. |
+| 2017-01-02 | Updated to code to run with Tensorflow r0.12. Not sure if it runs with older versions of Tensorflow though.
 
 ## Pre-trained models
 | Model name      | LFW accuracy | Training dataset |
 |-----------------|--------------|------------------|
-| [20170127-100647]() | 0.986        | CASIA-WebFace    |
-| [20170125-122324](https://drive.google.com/file/d/0B5MzpY9kBtDVZEV3QmVmeGpSVWc/view?usp=sharing) | 0.994        | MS-Celeb-1M      |
+| [20170131-005910](https://drive.google.com/open?id=0B5MzpY9kBtDVRDFsRk8xaVI1MUU) | 0.985        | CASIA-WebFace    |
+| [20170131-234652](https://drive.google.com/file/d/0B5MzpY9kBtDVSGM0RmVET2EwVEk/view?usp=sharing) | 0.993        | MS-Celeb-1M      |
 
 ## Inspiration
 The code is heavly inspired by the [OpenFace](https://github.com/cmusatyalab/openface) implementation.
@@ -38,4 +40,4 @@ Currently, the best results are achieved by training the model as a classifier w
 Currently, the best performing model is an Inception-Resnet-v1 model trained on CASIA-Webface aligned with [MTCNN](https://github.com/davidsandberg/facenet/blob/master/tmp/align_dataset.m). This alignment step requires Matlab and Caffe installed which requires some extra work. This will be easier when the [Python/Tensorflow implementation](https://github.com/davidsandberg/facenet/tree/master/src/align) is fully functional.
 
 ## Performance
-The accuracy on LFW for the model [20161116-234200](https://drive.google.com/file/d/0B5MzpY9kBtDVSTgxX25ZQzNTMGc/view?usp=sharing) is 0.980+-0.006. A description of how to run the test can be found on the page [Validate on LFW](https://github.com/davidsandberg/facenet/wiki/Validate-on-lfw).
+The accuracy on LFW for the model [20170131-234652](https://drive.google.com/file/d/0B5MzpY9kBtDVSGM0RmVET2EwVEk/view?usp=sharing) is 0.993+-0.004. A description of how to run the test can be found on the page [Validate on LFW](https://github.com/davidsandberg/facenet/wiki/Validate-on-lfw).
