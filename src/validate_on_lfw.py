@@ -61,6 +61,7 @@ def main(args):
             # Get input and output tensors
             images_placeholder = tf.get_default_graph().get_tensor_by_name("input:0")
             embeddings = tf.get_default_graph().get_tensor_by_name("embeddings:0")
+            phase_train_placeholder = tf.get_default_graph().get_tensor_by_name("phase_train:0")
             
             image_size = images_placeholder.get_shape()[1]
             embedding_size = embeddings.get_shape()[1]
@@ -76,7 +77,7 @@ def main(args):
                 end_index = min((i+1)*batch_size, nrof_images)
                 paths_batch = paths[start_index:end_index]
                 images = facenet.load_data(paths_batch, False, False, image_size)
-                feed_dict = { images_placeholder:images }
+                feed_dict = { images_placeholder:images, phase_train_placeholder:False }
                 emb_array[start_index:end_index,:] = sess.run(embeddings, feed_dict=feed_dict)
         
             tpr, fpr, accuracy, val, val_std, far = lfw.evaluate(emb_array, 
