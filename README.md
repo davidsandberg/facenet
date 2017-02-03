@@ -8,6 +8,7 @@ Currently this repo is compatible with Tensorflow r0.12.
 ## News
 | Date     | Update |
 |----------|--------|
+| 2017-02-27 | Added models where only trainable variables has been stored in the checkpoint. These are therefore significantly smaller. |
 | 2017-01-27 | Added a model trained on a subset of the MS-Celeb-1M dataset. The LFW accuracy of this model is around 0.994. |
 | 2017-01-02 | Updated to code to run with Tensorflow r0.12. Not sure if it runs with older versions of Tensorflow though.
 
