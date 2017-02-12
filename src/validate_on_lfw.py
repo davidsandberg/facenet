@@ -94,7 +94,7 @@ def main(args):
             print('EER=: %1.3f' % eer)
 
             # Plot ROC curve
-            plot_roc(fpr, tpr, 'NN4')
+            facenet.plot_roc(fpr, tpr, 'NN4')
             
 def parse_arguments(argv):
     parser = argparse.ArgumentParser()
