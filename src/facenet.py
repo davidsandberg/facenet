@@ -39,8 +39,6 @@ from scipy import interpolate
 from tensorflow.python.training import training
 import random
 import re
-from sklearn import metrics
-from scipy.optimize import brentq
 
 
 
@@ -534,19 +532,7 @@ def calculate_accuracy(threshold, dist, actual_issame):
     acc = float(tp+tn)/dist.size
     return tpr, fpr, acc
 
-def plot_roc(fpr, tpr, label):
-    plt.plot(fpr, tpr, label=label)
-    auc = metrics.auc(fpr, tpr)
-    print('AUC=: %1.3f' % auc)
-    eer = brentq(lambda x: 1. - x - interpolate.interp1d(fpr, tpr)(x), 0., 1.)
-    print('EER=: %1.3f' % eer)
-    plt.title('Receiver Operating Characteristics')
-    plt.xlabel('False Positive Rate')
-    plt.ylabel('True Positive Rate')
-    plt.legend()
-    plt.plot([0, 1], [0, 1], 'g--')
-    plt.grid(True)
-    plt.show()
+
   
 def calculate_val(thresholds, embeddings1, embeddings2, actual_issame, far_target, seed, nrof_folds=10):
     assert(embeddings1.shape[0] == embeddings2.shape[0])
