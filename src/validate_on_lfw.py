@@ -40,20 +40,6 @@ import math
 from sklearn import metrics
 from scipy.optimize import brentq
 
-def plot_roc(fpr, tpr, label):
-    plt.plot(fpr, tpr, label=label)
-    auc = metrics.auc(fpr, tpr)
-    print('AUC=: %1.3f' % auc)
-    eer = brentq(lambda x: 1. - x - interpolate.interp1d(fpr, tpr)(x), 0., 1.)
-    print('EER=: %1.3f' % eer)
-    plt.title('Receiver Operating Characteristics')
-    plt.xlabel('False Positive Rate')
-    plt.ylabel('True Positive Rate')
-    plt.legend()
-    plt.plot([0, 1], [0, 1], 'g--')
-    plt.grid(True)
-    plt.show()
-
 def main(args):
   
     with tf.Graph().as_default():
@@ -101,6 +87,11 @@ def main(args):
 
             print('Accuracy: %1.3f+-%1.3f' % (np.mean(accuracy), np.std(accuracy)))
             print('Validation rate: %2.5f+-%2.5f @ FAR=%2.5f' % (val, val_std, far))
+
+            auc = metrics.auc(fpr, tpr)
+            print('AUC=: %1.3f' % auc)
+            eer = brentq(lambda x: 1. - x - interpolate.interp1d(fpr, tpr)(x), 0., 1.)
+            print('EER=: %1.3f' % eer)
 
             # Plot ROC curve
             plot_roc(fpr, tpr, 'NN4')

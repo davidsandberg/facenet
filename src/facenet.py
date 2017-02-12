@@ -498,4 +498,13 @@ def list_variables(filename):
     variable_map = reader.get_variable_to_shape_map()
     names = sorted(variable_map.keys())
     return names
-  
+
+def plot_roc(fpr, tpr, label):
+    plt.plot(fpr, tpr, label=label)
+    plt.title('Receiver Operating Characteristics')
+    plt.xlabel('False Positive Rate')
+    plt.ylabel('True Positive Rate')
+    plt.legend()
+    plt.plot([0, 1], [0, 1], 'g--')
+    plt.grid(True)
+    plt.show()
