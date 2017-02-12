@@ -69,9 +69,9 @@ class TrainTest(unittest.TestCase):
         model_file = os.path.join(model_dir, 'model.ckpt-1')
         # Check that the trained model can be loaded
         tf.reset_default_graph()
-        argv = ['--model_file', model_file,
+        argv = [model_file,
+                self.dataset_dir,
                 '--lfw_pairs', self.lfw_pairs_file,
-                '--lfw_dir', self.dataset_dir,
                 '--lfw_nrof_folds', '2' ]
         args = validate_on_lfw.parse_arguments(argv)
         validate_on_lfw.main(args)

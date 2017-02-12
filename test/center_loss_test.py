@@ -23,6 +23,7 @@
 import unittest
 import tensorflow as tf
 import numpy as np
+import facenet
 
 class CenterLossTest(unittest.TestCase):
   
@@ -30,42 +31,57 @@ class CenterLossTest(unittest.TestCase):
 
     def testCenterLoss(self):
         batch_size = 16
-        nrof_features = 4
-        alfa = 1.0
+        nrof_features = 2
+        nrof_classes = 16
+        alfa = 0.5
         
         with tf.Graph().as_default():
         
-            logits = tf.placeholder(tf.float32, shape=(batch_size, nrof_features), name='logits')
+            features = tf.placeholder(tf.float32, shape=(batch_size, nrof_features), name='features')
             labels = tf.placeholder(tf.int32, shape=(batch_size,), name='labels')
-            centers = tf.get_variable('centers', shape=(nrof_features), dtype=tf.float32,
-                initializer=tf.constant_initializer(value=0.0, dtype=tf.float32))
+
             # Define center loss
-            center_loss = tf.reduce_sum(tf.pow(tf.abs(logits - centers), 2.0))
-            one_hot = tf.one_hot(labels, nrof_features, axis=1, dtype=tf.float32, name='one_hot')
-            centers_delta = tf.reduce_mean((centers-logits)*one_hot,0) / (1+tf.reduce_mean(one_hot,0))
-            update_centers = tf.assign(centers, tf.add(centers, -alfa*centers_delta))
+            center_loss, centers = facenet.center_loss(features, labels, alfa, nrof_classes)
+            
+            label_to_center = np.array( [ 
+                 [-3,-3],  [-3,-1],  [-3,1],  [-3,3],
+                 [-1,-3],  [-1,-1],  [-1,1],  [-1,3],
+                 [ 1,-3],  [ 1,-1],  [ 1,1],  [ 1,3],
+                 [ 3,-3],  [ 3,-1],  [ 3,1],  [ 3,3] 
+                 ])
                 
             sess = tf.Session()
             with sess.as_default():
-                sess.run(tf.initialize_all_variables())
+                sess.run(tf.global_variables_initializer())
                 np.random.seed(seed=666)
-                x = np.transpose(np.matmul(np.expand_dims(np.arange(0.1,0.5,0.1),1), np.ones(shape=(1, batch_size))))
-
-                #center_loss_, centers_, one_hot_, fx_, num_, den_ = sess.run([center_loss, centers, one_hot, fx, num, den], feed_dict={logits:x, labels:y})
-                for i in range(0,50):
-                    y = np.zeros(shape=(batch_size), dtype=np.float32)
-                    y[:batch_size/2] = i % nrof_features
-                    y[batch_size/2:] = (i+2) % nrof_features
-                    center_loss_, centers_ = sess.run([center_loss, centers], feed_dict={logits:x, labels:y})
-                    print(center_loss_)
-                    print(centers_)
-                    print('')
-                    _ = sess.run(update_centers, feed_dict={logits:x, labels:y})
-                    center_loss_, centers_ = sess.run([center_loss, centers], feed_dict={logits:x, labels:y})
-                    print(center_loss_)
-                    print(centers_)
-                    print('')
                 
+                for _ in range(0,100):
+                    # Create array of random labels
+                    lbls = np.random.randint(low=0, high=nrof_classes, size=(batch_size,))
+                    feats = create_features(label_to_center, batch_size, nrof_features, lbls)
+
+                    center_loss_, centers_ = sess.run([center_loss, centers], feed_dict={features:feats, labels:lbls})
+                    
+                # After a large number of updates the estimated centers should be close to the true ones
+                np.testing.assert_almost_equal(centers_, label_to_center, decimal=5, err_msg='Incorrect estimated centers')
+                np.testing.assert_almost_equal(center_loss_, 0.0, decimal=5, err_msg='Incorrect center loss')
+                
+
+def create_features(label_to_center, batch_size, nrof_features, labels):
+    # Map label to center
+#     label_to_center_dict = { 
+#          0:(-3,-3),  1:(-3,-1),  2:(-3,1),  3:(-3,3),
+#          4:(-1,-3),  5:(-1,-1),  6:(-1,1),  7:(-1,3),
+#          8:( 1,-3),  9:( 1,-1), 10:( 1,1), 11:( 1,3),
+#         12:( 3,-3), 13:( 3,-1), 14:( 3,1), 15:( 3,3),
+#         }
+    # Create array of features corresponding to the labels
+    feats = np.zeros((batch_size, nrof_features))
+    for i in range(batch_size):
+        cntr =  label_to_center[labels[i]]
+        for j in range(nrof_features):
+            feats[i,j] = cntr[j]
+    return feats
                       
 if __name__ == "__main__":
     unittest.main()
