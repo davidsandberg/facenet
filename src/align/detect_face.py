@@ -168,7 +168,7 @@ class Network(object):
         with tf.variable_scope(name):
             i = inp.get_shape().as_list()
             alpha = self.make_var('alpha', shape=(i[-1]))
-            output = tf.nn.relu(inp) + tf.mul(alpha, -tf.nn.relu(-inp))
+            output = tf.nn.relu(inp) + tf.multiply(alpha, -tf.nn.relu(-inp))
         return output
 
     @layer

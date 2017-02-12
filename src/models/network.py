@@ -72,7 +72,7 @@ def l2_loss(tensor, weight=1.0, scope=None):
         weight = tf.convert_to_tensor(weight,
                                       dtype=tensor.dtype.base_dtype,
                                       name='loss_weight')
-        loss = tf.mul(weight, tf.nn.l2_loss(tensor), name='value')
+        loss = tf.multiply(weight, tf.nn.l2_loss(tensor), name='value')
     return loss
 
 def lppool(inpOp, pnorm, kH, kW, dH, dW, padding, name):
@@ -86,7 +86,7 @@ def lppool(inpOp, pnorm, kH, kW, dH, dW, padding, name):
                               ksize=[1, kH, kW, 1],
                               strides=[1, dH, dW, 1],
                               padding=padding)
-        subsamp_sum = tf.mul(subsamp, kH*kW)
+        subsamp_sum = tf.multiply(subsamp, kH*kW)
         
         if pnorm == 2:
             out = tf.sqrt(subsamp_sum)
