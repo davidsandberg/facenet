@@ -57,7 +57,7 @@ def run_train():
     train_op = opt.apply_gradients(grads)
     
     # Initialize the variables
-    init = tf.initialize_all_variables()
+    init = tf.global_variables_initializer()
     
     # Launch the graph.
     sess = tf.Session()
@@ -74,7 +74,7 @@ def run_train():
         batch = np.random.random((FLAGS.batch_size, FLAGS.image_size, FLAGS.image_size, 3))
         feed_dict = { images_placeholder: batch }
         # Get the variables
-        var_names = tf.all_variables()
+        var_names = tf.global_variables()
         all_vars  += sess.run(var_names, feed_dict=feed_dict)
         # Get the gradients
         grad_tensors, grad_vars = zip(*grads)

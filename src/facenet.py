@@ -43,7 +43,6 @@ from sklearn import metrics
 from scipy.optimize import brentq
 
 
-
 def triplet_loss(anchor, positive, negative, alpha):
     """Calculate the triplet loss according to the FaceNet paper
     
@@ -56,7 +55,7 @@ def triplet_loss(anchor, positive, negative, alpha):
       the triplet loss according to the FaceNet paper as a float tensor.
     """
     with tf.variable_scope('triplet_loss'):
-        pos_dist = tf.reduce_sum(tf.square(tf.sub(anchor, positive)), 1)  # Summing over distances in each batch
+        pos_dist = tf.reduce_sum(tf.square(tf.sub(anchor, positive)), 1)
         neg_dist = tf.reduce_sum(tf.square(tf.sub(anchor, negative)), 1)
         
         basic_loss = tf.add(tf.sub(pos_dist,neg_dist), alpha)
@@ -77,20 +76,19 @@ def decov_loss(xs):
     loss = 0.5*(corr_frob_sqr - corr_diag_sqr)
     return loss 
   
-def center_loss(logits, labels, alfa):
+def center_loss(features, label, alfa, nrof_classes):
     """Center loss based on the paper "A Discriminative Feature Learning Approach for Deep Face Recognition"
        (http://ydwen.github.io/papers/WenECCV16.pdf)
     """
-    nrof_features = logits.get_shape()[1]
-    centers = tf.get_variable('centers', shape=(nrof_features), dtype=tf.float32,
-        initializer=tf.constant_initializer(value=0.0, dtype=tf.float32), trainable=False)
-    loss = tf.nn.l2_loss(logits - centers)
-    one_hot = tf.one_hot(labels, nrof_features, axis=1, dtype=tf.float32, name='one_hot')
-    delta1 = tf.reduce_mean((centers-logits)*one_hot,0)
-    delta2 = 1+tf.reduce_mean(one_hot,0)
-    centers_delta = delta1 / delta2
-    update_centers = tf.assign_add(centers, -alfa*centers_delta)
-    return loss, update_centers
+    nrof_features = features.get_shape()[1]
+    centers = tf.get_variable('centers', [nrof_classes, nrof_features], dtype=tf.float32,
+        initializer=tf.constant_initializer(0), trainable=False)
+    label = tf.reshape(label, [-1])
+    centers_batch = tf.gather(centers, label)
+    diff = (1 - alfa) * (centers_batch - features)
+    centers = tf.scatter_sub(centers, label, diff)
+    loss = tf.nn.l2_loss(features - centers_batch)
+    return loss, centers
 
 def get_image_paths_and_labels(dataset):
     image_paths_flat = []
@@ -100,6 +98,11 @@ def get_image_paths_and_labels(dataset):
         labels_flat += [i] * len(dataset[i].image_paths)
     return image_paths_flat, labels_flat
 
+def shuffle_examples(image_paths, labels):
+    shuffle_list = list(zip(image_paths, labels))
+    random.shuffle(shuffle_list)
+    image_paths_shuff, labels_shuff = zip(*shuffle_list)
+    return image_paths_shuff, labels_shuff
 
 def read_images_from_disk(input_queue):
     """Consumes a single filename and label as a ' '-delimited string.
@@ -113,8 +116,12 @@ def read_images_from_disk(input_queue):
     example = tf.image.decode_png(file_contents, channels=3)
     return example, label
   
+def random_rotate_image(image):
+    angle = np.random.uniform(low=-10.0, high=10.0)
+    return misc.imrotate(image, angle, 'bicubic')
+  
 def read_and_augument_data(image_list, label_list, image_size, batch_size, max_nrof_epochs, 
-        random_crop, random_flip, nrof_preprocess_threads, shuffle=True):
+        random_crop, random_flip, random_rotate, nrof_preprocess_threads, shuffle=True):
     
     images = ops.convert_to_tensor(image_list, dtype=tf.string)
     labels = ops.convert_to_tensor(label_list, dtype=tf.int32)
@@ -126,6 +133,8 @@ def read_and_augument_data(image_list, label_list, image_size, batch_size, max_n
     images_and_labels = []
     for _ in range(nrof_preprocess_threads):
         image, label = read_images_from_disk(input_queue)
+        if random_rotate:
+            image = tf.py_func(random_rotate_image, [image], tf.uint8)
         if random_crop:
             image = tf.random_crop(image, [image_size, image_size, 3])
         else:
@@ -134,7 +143,7 @@ def read_and_augument_data(image_list, label_list, image_size, batch_size, max_n
             image = tf.image.random_flip_left_right(image)
         #pylint: disable=no-member
         image.set_shape((image_size, image_size, 3))
-        image = tf.image.per_image_whitening(image)
+        image = tf.image.per_image_standardization(image)
         images_and_labels.append([image, label])
 
     image_batch, label_batch = tf.train.batch_join(
@@ -165,8 +174,8 @@ def _add_loss_summaries(total_loss):
     for l in losses + [total_loss]:
         # Name each loss as '(raw)' and name the moving average version of the loss
         # as the original loss name.
-        tf.scalar_summary(l.op.name +' (raw)', l)
-        tf.scalar_summary(l.op.name, loss_averages.average(l))
+        tf.summary.scalar(l.op.name +' (raw)', l)
+        tf.summary.scalar(l.op.name, loss_averages.average(l))
   
     return loss_averages_op
 
@@ -197,13 +206,13 @@ def train(total_loss, global_step, optimizer, learning_rate, moving_average_deca
     # Add histograms for trainable variables.
     if log_histograms:
         for var in tf.trainable_variables():
-            tf.histogram_summary(var.op.name, var)
+            tf.summary.histogram(var.op.name, var)
    
     # Add histograms for gradients.
     if log_histograms:
         for grad, var in grads:
             if grad is not None:
-                tf.histogram_summary(var.op.name + '/gradients', grad)
+                tf.summary.histogram(var.op.name + '/gradients', grad)
   
     # Track the moving averages of all trainable variables.
     variable_averages = tf.train.ExponentialMovingAverage(
@@ -291,72 +300,6 @@ def get_triplet_batch(triplets, batch_index, batch_size):
     batch = np.vstack([a, p, n])
     return batch
 
-def select_triplets(embeddings, num_per_class, image_data, people_per_batch, alpha):
-    """ Select the triplets for training
-    This is v1 of the triplet_selection function using pre-calculated distance matrix.
-    """
-    nrof_images = image_data.shape[0]
-
-    # distance matrix
-    dists = np.zeros((nrof_images, nrof_images))
-    for i in np.arange(0, nrof_images):
-        dists[i] = np.sum(np.square(np.subtract(embeddings, embeddings[i])), 1)
-
-    nrof_triplets = nrof_images - people_per_batch
-    shp = [nrof_triplets, image_data.shape[1], image_data.shape[2], image_data.shape[3]]
-    as_arr = np.zeros(shp)
-    ps_arr = np.zeros(shp)
-    ns_arr = np.zeros(shp)
-    
-    trip_idx = 0
-    # shuffle the triplets index
-    shuffle = np.arange(nrof_triplets)
-    np.random.shuffle(shuffle)
-    emb_start_idx = 0
-    nrof_random_negs = 0
-
-    # Max int
-    maxInt = 2**32
-
-    for i in xrange(people_per_batch):
-        n = num_per_class[i]
-        for j in range(1,n):
-            a_idx = emb_start_idx
-            p_idx = emb_start_idx + j
-            as_arr[shuffle[trip_idx]] = image_data[a_idx]
-            ps_arr[shuffle[trip_idx]] = image_data[p_idx]
-      
-            pos_dist = dists[a_idx, p_idx]
-            sel_neg_idx = emb_start_idx
-
-            while sel_neg_idx >= emb_start_idx and sel_neg_idx <= emb_start_idx + n - 1:
-                sel_neg_idx = (np.random.randint(1, maxInt) % nrof_images) - 1
-
-            sel_neg_dist = dists[a_idx, sel_neg_idx]
-
-            random_neg = True
-            for k in range(nrof_images):
-                # skip if the index is within the positive (same person) class range.
-                if k < emb_start_idx or k > emb_start_idx + n - 1:
-                    neg_dist = dists[a_idx, k]
-                    if pos_dist < neg_dist and neg_dist < sel_neg_dist and np.abs(pos_dist - neg_dist) < alpha:
-                        random_neg = False
-                        sel_neg_dist = neg_dist
-                        sel_neg_idx = k
-
-            if random_neg:
-                nrof_random_negs += 1
-
-            ns_arr[shuffle[trip_idx]] = image_data[sel_neg_idx]
-            #print('Triplet %d: (%d, %d, %d), pos_dist=%2.3f, neg_dist=%2.3f, sel_neg_dist=%2.3f' % (trip_idx, a_idx, p_idx, sel_neg_idx, pos_dist, neg_dist, sel_neg_dist))
-            trip_idx += 1
-
-        emb_start_idx += n
-
-    triplets = (as_arr, ps_arr, ns_arr)
-
-    return triplets, nrof_random_negs, nrof_triplets
-
 def get_learning_rate_from_file(filename, epoch):
     with open(filename, 'r') as f:
         for line in f.readlines():
@@ -423,52 +366,6 @@ def split_dataset(dataset, split_ratio, mode):
         raise ValueError('Invalid train/test split mode "%s"' % mode)
     return train_set, test_set
 
-def sample_people(dataset, people_per_batch, images_per_person):
-    nrof_images = people_per_batch * images_per_person
-  
-    # Sample classes from the dataset
-    nrof_classes = len(dataset)
-    class_indices = np.arange(nrof_classes)
-    np.random.shuffle(class_indices)
-    
-    i = 0
-    image_paths = []
-    num_per_class = []
-    sampled_class_indices = []
-    # Sample images from these classes until we have enough
-    while len(image_paths)<nrof_images:
-        class_index = class_indices[i]
-        nrof_images_in_class = len(dataset[class_index])
-        image_indices = np.arange(nrof_images_in_class)
-        np.random.shuffle(image_indices)
-        nrof_images_from_class = min(nrof_images_in_class, images_per_person, nrof_images-len(image_paths))
-        idx = image_indices[0:nrof_images_from_class]
-        image_paths_for_class = [dataset[class_index].image_paths[j] for j in idx]
-        sampled_class_indices += [class_index]*nrof_images_from_class
-        image_paths += image_paths_for_class
-        num_per_class.append(nrof_images_from_class)
-        i+=1
-  
-    return image_paths, num_per_class
-  
-def sample_random_people(dataset, nrof_images):
-    # Create flattened dataset with image paths and labels
-    image_paths_flat = []
-    labels_flat = []
-    for i in range(len(dataset)):
-        image_paths_flat += dataset[i].image_paths
-        labels_flat += [i] * len(dataset[i].image_paths)
-        
-    # Take nrof_images samples from the flattened dataset
-    image_paths = []
-    labels = []
-    for i in range(nrof_images):
-        x = np.random.randint(0, len(image_paths_flat))
-        image_paths.append(image_paths_flat[x])
-        labels.append(labels_flat[x])
-  
-    return image_paths, labels
-
 def load_model(model_dir, meta_file, ckpt_file):
     model_dir_exp = os.path.expanduser(model_dir)
     saver = tf.train.import_meta_graph(os.path.join(model_dir_exp, meta_file))
@@ -482,23 +379,23 @@ def get_model_filenames(model_dir):
     elif len(meta_files)>1:
         raise ValueError('There should not be more than one meta file in the model directory (%s)' % model_dir)
     meta_file = meta_files[0]
-    ckpt_files = [s for s in files if 'ckpt' in s]
-    if len(ckpt_files)==0:
-        raise ValueError('No checkpoint file found in the model directory (%s)' % model_dir)
-    elif len(ckpt_files)==1:
-        ckpt_file = ckpt_files[0]
-    else:
-        ckpt_iter = [(s,int(s.split('-')[-1])) for s in ckpt_files if 'ckpt' in s]
-        sorted_iter = sorted(ckpt_iter, key=lambda tup: tup[1])
-        ckpt_file = sorted_iter[-1][0]
+    meta_files = [s for s in files if '.ckpt' in s]
+    max_step = -1
+    for f in files:
+        step_str = re.match(r'(^model-[\w\- ]+.ckpt-(\d+))', f)
+        if step_str is not None and len(step_str.groups())>=2:
+            step = int(step_str.groups()[1])
+            if step > max_step:
+                max_step = step
+                ckpt_file = step_str.groups()[0]
     return meta_file, ckpt_file
 
-def calculate_roc(thresholds, embeddings1, embeddings2, actual_issame, seed, nrof_folds=10):
+def calculate_roc(thresholds, embeddings1, embeddings2, actual_issame, nrof_folds=10):
     assert(embeddings1.shape[0] == embeddings2.shape[0])
     assert(embeddings1.shape[1] == embeddings2.shape[1])
     nrof_pairs = min(len(actual_issame), embeddings1.shape[0])
     nrof_thresholds = len(thresholds)
-    folds = KFold(n=nrof_pairs, n_folds=nrof_folds, shuffle=True, random_state=seed)
+    folds = KFold(n=nrof_pairs, n_folds=nrof_folds, shuffle=False)
     
     tprs = np.zeros((nrof_folds,nrof_thresholds))
     fprs = np.zeros((nrof_folds,nrof_thresholds))
@@ -548,12 +445,12 @@ def plot_roc(fpr, tpr, label):
     plt.grid(True)
     plt.show()
   
-def calculate_val(thresholds, embeddings1, embeddings2, actual_issame, far_target, seed, nrof_folds=10):
+def calculate_val(thresholds, embeddings1, embeddings2, actual_issame, far_target, nrof_folds=10):
     assert(embeddings1.shape[0] == embeddings2.shape[0])
     assert(embeddings1.shape[1] == embeddings2.shape[1])
     nrof_pairs = min(len(actual_issame), embeddings1.shape[0])
     nrof_thresholds = len(thresholds)
-    folds = KFold(n=nrof_pairs, n_folds=nrof_folds, shuffle=True, random_state=seed)
+    folds = KFold(n=nrof_pairs, n_folds=nrof_folds, shuffle=False)
     
     val = np.zeros(nrof_folds)
     far = np.zeros(nrof_folds)

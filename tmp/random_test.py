@@ -18,7 +18,7 @@ with tf.Graph().as_default():
   negative = resh1[2,:,:]
   
   # Build an initialization operation to run below.
-  init = tf.initialize_all_variables()
+  init = tf.global_variables_initializer()
 
   # Start running operations on the Graph.
   sess = tf.Session(config=tf.ConfigProto(log_device_placement=False))
@@ -43,7 +43,7 @@ with tf.Graph().as_default():
 
 
 #feed_dict = { images_placeholder: np.zeros((90,96,96,3)), phase_train_placeholder: True }
-#vars_eval  = sess.run(tf.all_variables(), feed_dict=feed_dict)
+#vars_eval  = sess.run(tf.global_variables(), feed_dict=feed_dict)
 #for gt in vars_eval:
   #print('%.20f' % (np.sum(gt)))
 #for gt, gv in zip(grads_eval, grad_vars):
@@ -101,7 +101,7 @@ with tf.Graph().as_default():
 #relu = tf.nn.relu(conv_bn)
 
 ## Build an initialization operation to run below.
-#init = tf.initialize_all_variables()
+#init = tf.global_variables_initializer()
 
 ## Start running operations on the Graph.
 #sess = tf.Session()

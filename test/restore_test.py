@@ -57,7 +57,7 @@ class TrainTest(unittest.TestCase):
         train = optimizer.minimize(loss)
         
         # Before starting, initialize the variables.  We will 'run' this first.
-        init = tf.initialize_all_variables()
+        init = tf.global_variables_initializer()
 
         saver = tf.train.Saver(tf.trainable_variables())
         
@@ -112,7 +112,7 @@ class TrainTest(unittest.TestCase):
             train_op = tf.group(averages_op)
   
         # Before starting, initialize the variables.  We will 'run' this first.
-        init = tf.initialize_all_variables()
+        init = tf.global_variables_initializer()
 
         saver = tf.train.Saver(tf.trainable_variables())
         
@@ -135,7 +135,7 @@ class TrainTest(unittest.TestCase):
         sess = tf.Session()
         
         print('------------------------------------------------------')
-        for var in tf.all_variables():
+        for var in tf.global_variables():
             print('all variables: ' + var.op.name)
         for var in tf.trainable_variables():
             print('normal variable: ' + var.op.name)

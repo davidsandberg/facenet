@@ -55,7 +55,7 @@ def main(args):
             phase_train=True, weight_decay=0.0)
       
     # Create a saver for restoring variables
-    saver = tf.train.Saver(tf.all_variables())
+    saver = tf.train.Saver(tf.global_variables())
   
     # Restore the parameters
     saver.restore(sess, args.model_file)
