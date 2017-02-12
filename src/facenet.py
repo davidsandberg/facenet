@@ -37,6 +37,8 @@ import matplotlib.pyplot as plt
 from sklearn.cross_validation import KFold
 from scipy import interpolate
 from tensorflow.python.training import training
+import random
+import re
 from sklearn import metrics
 from scipy.optimize import brentq
 
