@@ -37,6 +37,8 @@ import lfw
 import os
 import sys
 import math
+from sklearn import metrics
+from scipy.optimize import brentq
 
 def main(args):
   
@@ -85,7 +87,13 @@ def main(args):
 
             print('Accuracy: %1.3f+-%1.3f' % (np.mean(accuracy), np.std(accuracy)))
             print('Validation rate: %2.5f+-%2.5f @ FAR=%2.5f' % (val, val_std, far))
-            
+
+            auc = metrics.auc(fpr, tpr)
+            print('AUC=: %1.3f' % auc)
+            eer = brentq(lambda x: 1. - x - interpolate.interp1d(fpr, tpr)(x), 0., 1.)
+            print('EER=: %1.3f' % eer)
+
+            # Plot ROC curve
             facenet.plot_roc(fpr, tpr, 'NN4')
             
 def parse_arguments(argv):
