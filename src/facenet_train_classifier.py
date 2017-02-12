@@ -88,6 +88,7 @@ def main(args):
         
         # Get a list of image paths and their labels
         image_list, label_list = facenet.get_image_paths_and_labels(train_set)
+        assert len(image_list)>0, 'The dataset should not be empty'
         
         # Create a queue that produces indices into the image_list and label_list 
         labels = ops.convert_to_tensor(label_list, dtype=tf.int32)
@@ -307,6 +308,7 @@ def evaluate(sess, enqueue_op, image_paths_placeholder, labels_placeholder, phas
     
     embedding_size = embeddings.get_shape()[1]
     nrof_images = len(actual_issame)*2
+    assert nrof_images % batch_size == 0, 'The number of LFW images must be an integer multiple of the LFW batch size'
     nrof_batches = nrof_images // batch_size
     emb_array = np.zeros((nrof_images, embedding_size))
     lab_array = np.zeros((nrof_images,))
