@@ -2,11 +2,12 @@
 
 from distutils.core import setup
 
-setup(name='Facenet',
-      version='0.1',
+setup(name='facenet',
+      version='0.2',
       description='Face Recognition using Tensorflow',
       author='David Sandberg',
       author_email='david.o.sandberg@gmail.com',
       url='https://github.com/davidsandberg/facenet/',
       packages=['src'],
+      package_dir = {'facenet': 'src'}
      )
