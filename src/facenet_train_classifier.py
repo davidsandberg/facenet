@@ -150,15 +150,31 @@ def main(args):
         
         print('Building training graph')
         
+        batch_norm_params = {
+            # Decay for the moving averages.
+            'decay': 0.995,
+            # epsilon to prevent 0s in variance.
+            'epsilon': 0.001,
+            # force in-place updates of mean and variance estimates
+            'updates_collections': None,
+            # Moving averages ends up in the trainable variables collection
+            'variables_collections': [ tf.GraphKeys.TRAINABLE_VARIABLES ],
+        }
         # Build the inference graph
         prelogits, _ = network.inference(image_batch, args.keep_probability, 
             phase_train=phase_train_placeholder, weight_decay=args.weight_decay)
-        logits = slim.fully_connected(prelogits, len(train_set), activation_fn=None, 
+        bottleneck = slim.fully_connected(prelogits, args.embedding_size, activation_fn=None, 
+                weights_initializer=tf.truncated_normal_initializer(stddev=0.1), 
+                weights_regularizer=slim.l2_regularizer(args.weight_decay),
+                normalizer_fn=slim.batch_norm,
+                normalizer_params=batch_norm_params,
+                scope='Bottleneck', reuse=False)
+        logits = slim.fully_connected(bottleneck, len(train_set), activation_fn=None, 
                 weights_initializer=tf.truncated_normal_initializer(stddev=0.1), 
                 weights_regularizer=slim.l2_regularizer(args.weight_decay),
                 scope='Logits', reuse=False)
 
-        embeddings = tf.nn.l2_normalize(prelogits, 1, 1e-10, name='embeddings')
+        embeddings = tf.nn.l2_normalize(bottleneck, 1, 1e-10, name='embeddings')
 
         # Add center loss
         if args.center_loss_factor>0.0:
@@ -381,6 +397,8 @@ def parse_arguments(argv):
         help='Image size (height, width) in pixels.', default=96)
     parser.add_argument('--epoch_size', type=int,
         help='Number of batches per epoch.', default=1000)
+    parser.add_argument('--embedding_size', type=int,
+        help='Dimensionality of the embedding.', default=128)
     parser.add_argument('--random_crop', 
         help='Performs random cropping of training images. If false, the center image_size pixels from the training images are used. ' +
          'If the size of the images in the data directory is equal to image_size no cropping is performed', action='store_true')
