@@ -245,7 +245,7 @@ def main(argv=None):  # pylint: disable=unused-argument
     qqq = tf.arg_max(q, dimension=1)
     z = tf.one_hot(qqq, NUM_LABELS)
     #cross_entropy = -tf.reduce_sum(t*tf.log(q),reduction_indices=1)
-    cross_entropy = -tf.reduce_sum((BETA*t+(1-BETA)*z)*tf.log(q),reduction_indices=1)
+    cross_entropy = -tf.reduce_sum((BETA*t+(1-BETA)*z)*tf.log(q),axis=1)
     
     loss = tf.reduce_mean(cross_entropy)
     

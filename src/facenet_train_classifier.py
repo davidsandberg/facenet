@@ -119,7 +119,7 @@ def main(args):
         for _ in range(nrof_preprocess_threads):
             filenames, label = input_queue.dequeue()
             images = []
-            for filename in tf.unpack(filenames):
+            for filename in tf.unstack(filenames):
                 file_contents = tf.read_file(filename)
                 image = tf.image.decode_png(file_contents)
                 if args.random_rotate:
@@ -171,7 +171,7 @@ def main(args):
 
         # Calculate the average cross entropy loss across the batch
         cross_entropy = tf.nn.sparse_softmax_cross_entropy_with_logits(
-            logits, label_batch, name='cross_entropy_per_example')
+            logits=logits, labels=label_batch, name='cross_entropy_per_example')
         cross_entropy_mean = tf.reduce_mean(cross_entropy, name='cross_entropy')
         tf.add_to_collection('losses', cross_entropy_mean)
         

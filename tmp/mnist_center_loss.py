@@ -275,7 +275,7 @@ def main(argv=None):  # pylint: disable=unused-argument
     logits, hidden = model(train_data_node, True)
     #logits = batch_norm(logits, True)
     xent_loss = tf.reduce_mean(tf.nn.sparse_softmax_cross_entropy_with_logits(
-        logits, train_labels_node))
+        logits=logits, labels=train_labels_node))
     beta = 1e-3
     #center_loss, update_centers = center_loss_op(hidden, train_labels_node)
     center_loss, _ = facenet.center_loss(hidden, train_labels_node, 0.95, NUM_LABELS)
