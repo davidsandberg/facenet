@@ -144,7 +144,7 @@ class Network(object):
         # Verify that the padding is acceptable
         self.validate_padding(padding)
         # Get the number of channels in the input
-        c_i = inp.get_shape()[-1]
+        c_i = int(inp.get_shape()[-1])
         # Verify that the grouping parameter is valid
         assert c_i % group == 0
         assert c_o % group == 0
@@ -166,8 +166,8 @@ class Network(object):
     @layer
     def prelu(self, inp, name):
         with tf.variable_scope(name):
-            i = inp.get_shape().as_list()
-            alpha = self.make_var('alpha', shape=(i[-1]))
+            i = int(inp.get_shape()[-1])
+            alpha = self.make_var('alpha', shape=(i,))
             output = tf.nn.relu(inp) + tf.multiply(alpha, -tf.nn.relu(-inp))
         return output
 
@@ -188,7 +188,7 @@ class Network(object):
                 # The input is spatial. Vectorize it first.
                 dim = 1
                 for d in input_shape[1:].as_list():
-                    dim *= d
+                    dim *= int(d)
                 feed_in = tf.reshape(inp, [-1, dim])
             else:
                 feed_in, dim = (inp, input_shape[-1].value)
