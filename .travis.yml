@@ -5,4 +5,5 @@ python:
 install: "pip install -r requirements.txt"
 # command to run tests
 script: PYTHONPATH=./src ; python -m unittest discover -s test --pattern=*.py
+dist: trusty
 
