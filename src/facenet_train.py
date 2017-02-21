@@ -99,7 +99,7 @@ def main(args):
         for _ in range(nrof_preprocess_threads):
             filenames, label = input_queue.dequeue()
             images = []
-            for filename in tf.unpack(filenames):
+            for filename in tf.unstack(filenames):
                 file_contents = tf.read_file(filename)
                 image = tf.image.decode_png(file_contents)
                 
@@ -129,7 +129,7 @@ def main(args):
 
         embeddings = tf.nn.l2_normalize(pre_embeddings, 1, 1e-10, name='embeddings')
         # Split embeddings into anchor, positive and negative and calculate triplet loss
-        anchor, positive, negative = tf.unpack(tf.reshape(embeddings, [-1,3,args.embedding_size]), 3, 1)
+        anchor, positive, negative = tf.unstack(tf.reshape(embeddings, [-1,3,args.embedding_size]), 3, 1)
         triplet_loss = facenet.triplet_loss(anchor, positive, negative, args.alpha)
         
         learning_rate = tf.train.exponential_decay(learning_rate_placeholder, global_step,

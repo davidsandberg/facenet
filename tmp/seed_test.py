@@ -35,7 +35,7 @@ def run_train():
     #embeddings = inference_affine_test(images_placeholder)
     
     # Split example embeddings into anchor, positive and negative
-    anchor, positive, negative = tf.split(0, 3, embeddings)
+    anchor, positive, negative = tf.split(axis=0, num_or_size_splits=3, value=embeddings)
 
     # Alternative implementation of the split operation
     # This produces the same error
@@ -45,9 +45,9 @@ def run_train():
     #negative = resh1[2,:,:]
     
     # Calculate triplet loss
-    pos_dist = tf.reduce_sum(tf.square(tf.sub(anchor, positive)), 1)
-    neg_dist = tf.reduce_sum(tf.square(tf.sub(anchor, negative)), 1)
-    basic_loss = tf.add(tf.sub(pos_dist,neg_dist), FLAGS.alpha)
+    pos_dist = tf.reduce_sum(tf.square(tf.subtract(anchor, positive)), 1)
+    neg_dist = tf.reduce_sum(tf.square(tf.subtract(anchor, negative)), 1)
+    basic_loss = tf.add(tf.subtract(pos_dist,neg_dist), FLAGS.alpha)
     loss = tf.reduce_mean(tf.maximum(basic_loss, 0.0), 0)
 
     # Build a Graph that trains the model with one batch of examples and updates the model parameters

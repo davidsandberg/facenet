@@ -35,7 +35,7 @@ class DemuxEmbeddingsTest(unittest.TestCase):
         with tf.Graph().as_default():
         
             embeddings = tf.placeholder(tf.float64, shape=(batch_size, embedding_size), name='embeddings')
-            anchor, positive, negative = tf.unpack(tf.reshape(embeddings, [-1,3,embedding_size]), 3, 1)
+            anchor, positive, negative = tf.unstack(tf.reshape(embeddings, [-1,3,embedding_size]), 3, 1)
             triplet_loss = facenet.triplet_loss(anchor, positive, negative, alpha)
                 
             sess = tf.Session()
