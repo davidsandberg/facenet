@@ -32,7 +32,6 @@ import numpy as np
 import sys
 import argparse
 import tensorflow as tf
-import matplotlib.pyplot as plt
 import importlib
 from scipy import misc
 
@@ -88,11 +87,6 @@ def T(layer):
     '''Helper for getting layer output tensor'''
     return tf.get_default_graph().get_tensor_by_name('%s:0' % layer)
 
-def showarray(a):
-    a = np.uint8(np.clip(a, 0, 1)*255)
-    plt.imshow(a)
-    plt.show()
-    
 def visstd(a, s=0.1):
     '''Normalize the image range for visualization'''
     return (a-a.mean())/max(a.std(), 1e-4)*s + 0.5
