@@ -45,25 +45,43 @@ def main(args):
             print('Checkpoint file: %s' % ckpt_file)
 
             model_dir_exp = os.path.expanduser(args.model_dir)
-            saver = tf.train.import_meta_graph(os.path.join(model_dir_exp, meta_file))
+            saver = tf.train.import_meta_graph(os.path.join(model_dir_exp, meta_file), clear_devices=True)
             tf.get_default_session().run(tf.global_variables_initializer())
             tf.get_default_session().run(tf.local_variables_initializer())
             saver.restore(tf.get_default_session(), os.path.join(model_dir_exp, ckpt_file))
             
+            # Retrieve the protobuf graph definition and fix the batch norm nodes
+            gd = sess.graph.as_graph_def()
+            for node in gd.node:            
+                if node.op == 'RefSwitch':
+                    node.op = 'Switch'
+                    for index in xrange(len(node.input)):
+                        if 'moving_' in node.input[index]:
+                            node.input[index] = node.input[index] + '/read'
+                elif node.op == 'AssignSub':
+                    node.op = 'Sub'
+                    if 'use_locking' in node.attr: del node.attr['use_locking']
+                elif node.op == 'AssignAdd':
+                    node.op = 'Add'
+                    if 'use_locking' in node.attr: del node.attr['use_locking']
+            
+            # Get the list of important nodes
             output_node_names = 'embeddings'
             whitelist_names = []
-            for node in sess.graph.as_graph_def().node:
+            for node in gd.node:
                 if node.name.startswith('InceptionResnetV1') or node.name.startswith('embeddings') or node.name.startswith('phase_train'):
                     print(node.name)
                     whitelist_names.append(node.name)
 
+            # Replace all the variables in the graph with constants of the same values
             output_graph_def = graph_util.convert_variables_to_constants(
-                sess, sess.graph.as_graph_def(), output_node_names.split(","), 
+                sess, gd, output_node_names.split(","),
                 variable_names_whitelist=whitelist_names)
-        
+
+        # Serialize and dump the output graph to the filesystem
         with tf.gfile.GFile(args.output_file, 'wb') as f:
             f.write(output_graph_def.SerializeToString())
-        print("%d ops in the final graph." % len(output_graph_def.node)) #pylint: disable=no-member
+        print("%d ops in the final graph." % len(output_graph_def.node))
   
 def parse_arguments(argv):
     parser = argparse.ArgumentParser()
