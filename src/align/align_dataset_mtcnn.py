@@ -51,7 +51,7 @@ def main(args):
         gpu_options = tf.GPUOptions(per_process_gpu_memory_fraction=args.gpu_memory_fraction)
         sess = tf.Session(config=tf.ConfigProto(gpu_options=gpu_options, log_device_placement=False))
         with sess.as_default():
-            pnet, rnet, onet = align.detect_face.create_mtcnn(sess, '../../data/')
+            pnet, rnet, onet = align.detect_face.create_mtcnn(sess, 'data/')
     
     minsize = 20 # minimum size of face
     threshold = [ 0.6, 0.7, 0.7 ]  # three steps's threshold

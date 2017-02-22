@@ -90,7 +90,7 @@ def load_and_align_data(image_paths, image_size, margin, gpu_memory_fraction):
         gpu_options = tf.GPUOptions(per_process_gpu_memory_fraction=gpu_memory_fraction)
         sess = tf.Session(config=tf.ConfigProto(gpu_options=gpu_options, log_device_placement=False))
         with sess.as_default():
-            pnet, rnet, onet = align.detect_face.create_mtcnn(sess, '../data/')
+            pnet, rnet, onet = align.detect_face.create_mtcnn(sess, 'data/')
   
     nrof_samples = len(image_paths)
     img_list = [None] * nrof_samples
