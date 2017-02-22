@@ -33,7 +33,7 @@ import validate_on_lfw
 import compare
 import visualize
 import test_invariance_on_lfw
-from src.download_and_extract_model import download_and_extract_model
+import download_and_extract_model
 
 class TrainTest(unittest.TestCase):
   
@@ -45,7 +45,7 @@ class TrainTest(unittest.TestCase):
         self.lfw_pairs_file = create_mock_lfw_pairs(self.tmp_dir)
         print(self.lfw_pairs_file)
         self.pretrained_model_name = '20170131-234652'
-        download_and_extract_model(self.pretrained_model_name, 'data/')
+        download_and_extract_model.download_and_extract_model(self.pretrained_model_name, 'data/')
         
     @classmethod
     def tearDownClass(self):
@@ -81,6 +81,7 @@ class TrainTest(unittest.TestCase):
         validate_on_lfw.main(args)
         
     # test_align_dataset_mtcnn
+    # http://vis-www.cs.umass.edu/lfw/lfw-a.zip
     
     # test_validate_on_lfw
     

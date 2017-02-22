@@ -1,4 +1,4 @@
-tensorflow==0.12
+tensorflow==1.0
 scipy
 scikit-learn
 opencv-python
