@@ -628,6 +628,8 @@ def bulk_detect_face(images, detection_window_size_ratio, pnet, rnet, onet, thre
             points_per_image = points_per_image[:, pick]
 
             ret.append((image_obj['total_boxes'], points_per_image))
+        else:
+            ret.append(None)
 
         i += onet_input_count
 
