@@ -12,15 +12,13 @@ Currently this repo is compatible with Tensorflow r1.0.
 | 2017-02-22 | Updated to Tensorflow r1.0. Added Continuous Integration using Travis-CI.|
 | 2017-02-03 | Added models where only trainable variables has been stored in the checkpoint. These are therefore significantly smaller. |
 | 2017-01-27 | Added a model trained on a subset of the MS-Celeb-1M dataset. The LFW accuracy of this model is around 0.994. |
-| 2017-01-02       | Updated to code to run with Tensorflow r0.12. Not sure if it runs with older versions of Tensorflow though.   |
+| 2017&#8209;01&#8209;02 | Updated to code to run with Tensorflow r0.12. Not sure if it runs with older versions of Tensorflow though.   |
 
 ## Pre-trained models
 | Model name      | LFW accuracy | Training dataset |
 |-----------------|--------------|------------------|
 | [20170214-092102](https://drive.google.com/open?id=0B5MzpY9kBtDVMUZ3c2lzRHhTZVk) | 0.986        | CASIA-WebFace    |
 | [20170216-091149](https://drive.google.com/open?id=0B5MzpY9kBtDVSkRSZjFBSDQtMzA) | 0.993        | MS-Celeb-1M      |
-
-
 
 ## Inspiration
 The code is heavly inspired by the [OpenFace](https://github.com/cmusatyalab/openface) implementation.
