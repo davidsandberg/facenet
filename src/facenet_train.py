@@ -55,8 +55,9 @@ def main(args):
         os.makedirs(model_dir)
 
     # Store some git revision info in a text file in the log directory
-    src_path,_ = os.path.split(os.path.realpath(__file__))
-    facenet.store_revision_info(src_path, log_dir, ' '.join(sys.argv))
+    if not args.no_store_revision_info:
+        src_path,_ = os.path.split(os.path.realpath(__file__))
+        facenet.store_revision_info(src_path, log_dir, ' '.join(sys.argv))
 
     np.random.seed(seed=args.seed)
     train_set = facenet.get_dataset(args.data_dir)
@@ -476,6 +477,8 @@ def parse_arguments(argv):
         help='Random seed.', default=666)
     parser.add_argument('--learning_rate_schedule_file', type=str,
         help='File containing the learning rate schedule that is used when learning_rate is set to to -1.', default='../data/learning_rate_schedule.txt')
+    parser.add_argument('--no_store_revision_info', 
+        help='Disables storing of git revision info in revision_info.txt.', action='store_false')
 
     # Parameters for validation on LFW
     parser.add_argument('--lfw_pairs', type=str,

@@ -101,7 +101,8 @@ class TrainTest(unittest.TestCase):
                 '--lfw_dir', self.dataset_dir,
                 '--lfw_nrof_folds', '2',
                 '--lfw_batch_size', '1',
-                '--nrof_preprocess_threads', '1' ]
+                '--nrof_preprocess_threads', '1',
+                '--no_store_revision_info' ]
         args = facenet_train_classifier.parse_arguments(argv)
         facenet_train_classifier.main(args)
 
@@ -117,7 +118,8 @@ class TrainTest(unittest.TestCase):
                 '--lfw_dir', self.dataset_dir,
                 '--lfw_nrof_folds', '2',
                 '--lfw_batch_size', '1',
-                '--nrof_preprocess_threads', '1' ]
+                '--nrof_preprocess_threads', '1',
+                '--no_store_revision_info' ]
         args = facenet_train_classifier.parse_arguments(argv)
         facenet_train_classifier.main(args)
 
@@ -133,7 +135,8 @@ class TrainTest(unittest.TestCase):
                 '--images_per_person', '3',
                 '--lfw_pairs', self.lfw_pairs_file,
                 '--lfw_dir', self.dataset_dir,
-                '--lfw_nrof_folds', '2']
+                '--lfw_nrof_folds', '2',
+                '--no_store_revision_info' ]
         args = facenet_train.parse_arguments(argv)
         facenet_train.main(args)
 
@@ -150,7 +153,8 @@ class TrainTest(unittest.TestCase):
                 '--images_per_person', '3',
                 '--lfw_pairs', self.lfw_pairs_file,
                 '--lfw_dir', self.dataset_dir,
-                '--lfw_nrof_folds', '2']
+                '--lfw_nrof_folds', '2',
+                '--no_store_revision_info' ]
         args = facenet_train.parse_arguments(argv)
         facenet_train.main(args)
 
