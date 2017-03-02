@@ -106,6 +106,7 @@ class TrainTest(unittest.TestCase):
         args = facenet_train_classifier.parse_arguments(argv)
         facenet_train_classifier.main(args)
 
+    @unittest.skip("Skip this test case for now")
     def test_training_classifier_inception_resnet_v2(self):
         argv = ['--logs_base_dir', self.tmp_dir,
                 '--models_base_dir', self.tmp_dir,
