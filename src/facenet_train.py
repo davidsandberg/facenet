@@ -478,7 +478,7 @@ def parse_arguments(argv):
     parser.add_argument('--learning_rate_schedule_file', type=str,
         help='File containing the learning rate schedule that is used when learning_rate is set to to -1.', default='../data/learning_rate_schedule.txt')
     parser.add_argument('--no_store_revision_info', 
-        help='Disables storing of git revision info in revision_info.txt.', action='store_false')
+        help='Disables storing of git revision info in revision_info.txt.', action='store_true')
 
     # Parameters for validation on LFW
     parser.add_argument('--lfw_pairs', type=str,

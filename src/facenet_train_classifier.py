@@ -443,7 +443,7 @@ def parse_arguments(argv):
     parser.add_argument('--filter_min_nrof_images_per_class', type=int,
         help='Keep only the classes with this number of examples or more', default=0)
     parser.add_argument('--no_store_revision_info', 
-        help='Disables storing of git revision info in revision_info.txt.', action='store_false')
+        help='Disables storing of git revision info in revision_info.txt.', action='store_true')
  
     # Parameters for validation on LFW
     parser.add_argument('--lfw_pairs', type=str,
