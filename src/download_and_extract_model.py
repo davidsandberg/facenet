@@ -3,7 +3,8 @@ import zipfile
 import os
 
 model_dict = {
-    '20170131-234652': '0B5MzpY9kBtDVSGM0RmVET2EwVEk'
+    '20170131-234652': '0B5MzpY9kBtDVSGM0RmVET2EwVEk',
+    '20170216-091149': '0B5MzpY9kBtDVSkRSZjFBSDQtMzA'
     }
 
 def download_and_extract_model(model_name, data_dir):

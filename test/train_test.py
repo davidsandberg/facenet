@@ -44,8 +44,10 @@ class TrainTest(unittest.TestCase):
         create_mock_dataset(self.dataset_dir)
         self.lfw_pairs_file = create_mock_lfw_pairs(self.tmp_dir)
         print(self.lfw_pairs_file)
-        self.pretrained_model_name = '20170131-234652'
+        self.pretrained_model_name = '20170216-091149'
         download_and_extract_model.download_and_extract_model(self.pretrained_model_name, 'data/')
+        self.model_file = os.path.join('data', self.pretrained_model_name, 'model-%s.ckpt-250000' % self.pretrained_model_name)
+
         
     @classmethod
     def tearDownClass(self):
@@ -83,44 +85,10 @@ class TrainTest(unittest.TestCase):
     # test_align_dataset_mtcnn
     # http://vis-www.cs.umass.edu/lfw/lfw-a.zip
     
-    # test_validate_on_lfw
-    
     # test_triplet_loss_training
     
     # test_freeze_graph
-
-    @unittest.skip("Skip this test case for now")
-    def test_training_nn4_small2_v1(self):
-        argv = ['--logs_base_dir', self.tmp_dir,
-                '--models_base_dir', self.tmp_dir,
-                '--data_dir', self.dataset_dir,
-                '--model_def', 'models.nn4_small2_v1',
-                '--epoch_size', '1',
-                '--max_nrof_epochs', '1',
-                '--batch_size', '6',
-                '--people_per_batch', '2',
-                '--images_per_person', '3',
-                '--lfw_pairs', self.lfw_pairs_file,
-                '--lfw_dir', self.dataset_dir,
-                '--lfw_nrof_folds', '2' ]
-        args = facenet_train.parse_arguments(argv)
-        facenet_train.main(args)
-
-    @unittest.skip("Skip this test case for now")
-    def test_training_classifier_nn4(self):
-        argv = ['--logs_base_dir', self.tmp_dir,
-                '--models_base_dir', self.tmp_dir,
-                '--data_dir', self.dataset_dir,
-                '--model_def', 'models.nn4',
-                '--epoch_size', '1',
-                '--max_nrof_epochs', '1',
-                '--batch_size', '6',
-                '--lfw_pairs', self.lfw_pairs_file,
-                '--lfw_dir', self.dataset_dir,
-                '--lfw_nrof_folds', '2' ]
-        args = facenet_train_classifier.parse_arguments(argv)
-        facenet_train_classifier.main(args)
-
+    
     def test_training_classifier_inception_resnet_v1(self):
         argv = ['--logs_base_dir', self.tmp_dir,
                 '--models_base_dir', self.tmp_dir,
@@ -152,6 +120,39 @@ class TrainTest(unittest.TestCase):
                 '--nrof_preprocess_threads', '1' ]
         args = facenet_train_classifier.parse_arguments(argv)
         facenet_train_classifier.main(args)
+
+    def test_train_tripletloss_inception_resnet_v1(self):
+        argv = ['--logs_base_dir', self.tmp_dir,
+                '--models_base_dir', self.tmp_dir,
+                '--data_dir', self.dataset_dir,
+                '--model_def', 'models.inception_resnet_v1',
+                '--epoch_size', '1',
+                '--max_nrof_epochs', '1',
+                '--batch_size', '6',
+                '--people_per_batch', '2',
+                '--images_per_person', '3',
+                '--lfw_pairs', self.lfw_pairs_file,
+                '--lfw_dir', self.dataset_dir,
+                '--lfw_nrof_folds', '2']
+        args = facenet_train.parse_arguments(argv)
+        facenet_train.main(args)
+
+    def test_finetune_tripletloss_inception_resnet_v1(self):
+        argv = ['--logs_base_dir', self.tmp_dir,
+                '--models_base_dir', self.tmp_dir,
+                '--data_dir', self.dataset_dir,
+                '--model_def', 'models.inception_resnet_v1',
+                '--pretrained_model', self.model_file,
+                '--epoch_size', '1',
+                '--max_nrof_epochs', '1',
+                '--batch_size', '6',
+                '--people_per_batch', '2',
+                '--images_per_person', '3',
+                '--lfw_pairs', self.lfw_pairs_file,
+                '--lfw_dir', self.dataset_dir,
+                '--lfw_nrof_folds', '2']
+        args = facenet_train.parse_arguments(argv)
+        facenet_train.main(args)
 
     def test_compare(self):
         argv = [os.path.join('data/', self.pretrained_model_name),

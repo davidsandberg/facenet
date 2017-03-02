@@ -121,12 +121,26 @@ def main(args):
             capacity=4 * nrof_preprocess_threads * args.batch_size,
             allow_smaller_final_batch=True)
 
+        batch_norm_params = {
+            # Decay for the moving averages.
+            'decay': 0.995,
+            # epsilon to prevent 0s in variance.
+            'epsilon': 0.001,
+            # force in-place updates of mean and variance estimates
+            'updates_collections': None,
+            # Moving averages ends up in the trainable variables collection
+            'variables_collections': [ tf.GraphKeys.TRAINABLE_VARIABLES ],
+        }
         # Build the inference graph
         prelogits, _ = network.inference(image_batch, args.keep_probability, 
             phase_train=phase_train_placeholder, weight_decay=args.weight_decay)
-        pre_embeddings = slim.fully_connected(prelogits, args.embedding_size, activation_fn=None, scope='Embeddings', reuse=False)
-        #embedding_size = 1792
-
+        pre_embeddings = slim.fully_connected(prelogits, args.embedding_size, activation_fn=None, 
+                weights_initializer=tf.truncated_normal_initializer(stddev=0.1), 
+                weights_regularizer=slim.l2_regularizer(args.weight_decay),
+                normalizer_fn=slim.batch_norm,
+                normalizer_params=batch_norm_params,
+                scope='Bottleneck', reuse=False)
+        
         embeddings = tf.nn.l2_normalize(pre_embeddings, 1, 1e-10, name='embeddings')
         # Split embeddings into anchor, positive and negative and calculate triplet loss
         anchor, positive, negative = tf.unstack(tf.reshape(embeddings, [-1,3,args.embedding_size]), 3, 1)
@@ -140,27 +154,12 @@ def main(args):
         regularization_losses = tf.get_collection(tf.GraphKeys.REGULARIZATION_LOSSES)
         total_loss = tf.add_n([triplet_loss] + regularization_losses, name='total_loss')
 
-        # Create list with variables to restore
-        restore_vars = []
-        update_gradient_vars = []
-        if args.pretrained_model:
-            update_gradient_vars = tf.global_variables()
-            for var in tf.global_variables():
-                if not 'Embeddings/' in var.op.name:
-                    restore_vars.append(var)
-                #else:
-                    #update_gradient_vars.append(var)
-        else:
-            restore_vars = tf.global_variables()
-            update_gradient_vars = tf.global_variables()
-
         # Build a Graph that trains the model with one batch of examples and updates the model parameters
         train_op = facenet.train(total_loss, global_step, args.optimizer, 
-            learning_rate, args.moving_average_decay, update_gradient_vars)
+            learning_rate, args.moving_average_decay, tf.global_variables())
         
         # Create a saver
-        restore_saver = tf.train.Saver(restore_vars)
-        saver = tf.train.Saver(tf.global_variables(), max_to_keep=3)
+        saver = tf.train.Saver(tf.trainable_variables(), max_to_keep=3)
 
         # Build the summary operation based on the TF collection of Summaries.
         summary_op = tf.summary.merge_all()
@@ -180,7 +179,7 @@ def main(args):
 
             if args.pretrained_model:
                 print('Restoring pretrained model: %s' % args.pretrained_model)
-                restore_saver.restore(sess, os.path.expanduser(args.pretrained_model))
+                saver.restore(sess, os.path.expanduser(args.pretrained_model))
 
             # Training and validation loop
             epoch = 0
