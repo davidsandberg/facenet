@@ -230,8 +230,8 @@ def prewhiten(x):
 
 def crop(image, random_crop, image_size):
     if image.shape[1]>image_size:
-        sz1 = image.shape[1]//2
-        sz2 = image_size//2
+        sz1 = int(image.shape[1]//2)
+        sz2 = int(image_size//2)
         if random_crop:
             diff = sz1-sz2
             (h, v) = (np.random.randint(-diff, diff+1), np.random.randint(-diff, diff+1))
