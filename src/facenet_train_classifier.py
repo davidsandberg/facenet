@@ -152,14 +152,16 @@ def main(args):
         print('Building training graph')
         
         batch_norm_params = {
-            # Decay for the moving averages.
+            # Decay for the moving averages
             'decay': 0.995,
-            # epsilon to prevent 0s in variance.
+            # epsilon to prevent 0s in variance
             'epsilon': 0.001,
             # force in-place updates of mean and variance estimates
             'updates_collections': None,
             # Moving averages ends up in the trainable variables collection
             'variables_collections': [ tf.GraphKeys.TRAINABLE_VARIABLES ],
+            # Only update statistics during training mode
+            'is_training': phase_train_placeholder
         }
         # Build the inference graph
         prelogits, _ = network.inference(image_batch, args.keep_probability, 
@@ -435,7 +437,7 @@ def parse_arguments(argv):
     parser.add_argument('--log_histograms', 
         help='Enables logging of weight/bias histograms in tensorboard.', action='store_true')
     parser.add_argument('--learning_rate_schedule_file', type=str,
-        help='File containing the learning rate schedule that is used when learning_rate is set to to -1.', default='../data/learning_rate_schedule.txt')
+        help='File containing the learning rate schedule that is used when learning_rate is set to to -1.', default='data/learning_rate_schedule.txt')
     parser.add_argument('--filter_filename', type=str,
         help='File containing image data used for dataset filtering', default='')
     parser.add_argument('--filter_percentile', type=float,
@@ -447,7 +449,7 @@ def parse_arguments(argv):
  
     # Parameters for validation on LFW
     parser.add_argument('--lfw_pairs', type=str,
-        help='The file containing the pairs to use for validation.', default='../data/pairs.txt')
+        help='The file containing the pairs to use for validation.', default='data/pairs.txt')
     parser.add_argument('--lfw_file_ext', type=str,
         help='The file extension for the LFW dataset.', default='png', choices=['jpg', 'png'])
     parser.add_argument('--lfw_dir', type=str,

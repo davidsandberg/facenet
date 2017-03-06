@@ -123,14 +123,16 @@ def main(args):
             allow_smaller_final_batch=True)
 
         batch_norm_params = {
-            # Decay for the moving averages.
+            # Decay for the moving averages
             'decay': 0.995,
-            # epsilon to prevent 0s in variance.
+            # epsilon to prevent 0s in variance
             'epsilon': 0.001,
             # force in-place updates of mean and variance estimates
             'updates_collections': None,
             # Moving averages ends up in the trainable variables collection
             'variables_collections': [ tf.GraphKeys.TRAINABLE_VARIABLES ],
+            # Only update statistics during training mode
+            'is_training': phase_train_placeholder
         }
         # Build the inference graph
         prelogits, _ = network.inference(image_batch, args.keep_probability, 
