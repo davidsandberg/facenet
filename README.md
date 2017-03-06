@@ -17,8 +17,8 @@ Currently this repo is compatible with Tensorflow r1.0.
 ## Pre-trained models
 | Model name      | LFW accuracy | Training dataset |
 |-----------------|--------------|------------------|
-| [20170214-092102](https://drive.google.com/open?id=0B5MzpY9kBtDVMUZ3c2lzRHhTZVk) | 0.986        | CASIA-WebFace    |
-| [20170216-091149](https://drive.google.com/open?id=0B5MzpY9kBtDVSkRSZjFBSDQtMzA) | 0.993        | MS-Celeb-1M      |
+| [20170214-092102](https://drive.google.com/open?id=0B5MzpY9kBtDVS214bHdvd2RGS3M) | 0.986        | CASIA-WebFace    |
+| [20170216-091149](https://drive.google.com/open?id=0B5MzpY9kBtDVTGZjcWkzT3pldDA) | 0.993        | MS-Celeb-1M      |
 
 ## Inspiration
 The code is heavly inspired by the [OpenFace](https://github.com/cmusatyalab/openface) implementation.
@@ -26,7 +26,6 @@ The code is heavly inspired by the [OpenFace](https://github.com/cmusatyalab/ope
 ## Training data
 The [CASIA-WebFace](http://www.cbsr.ia.ac.cn/english/CASIA-WebFace-Database.html) dataset has been used for training. This training set consists of total of 453 453 images over 10 575 identities after face detection. Some performance improvement has been seen if the dataset has been filtered before training. Some more information about how this was done will come later.
 The best performing model has been trained on a subset of the [MS-Celeb-1M](https://www.microsoft.com/en-us/research/project/ms-celeb-1m-challenge-recognizing-one-million-celebrities-real-world/) dataset. This dataset is significantly larger but also contains significantly more label noise, and therefore it is crucial to apply dataset filtering on this dataset.
-
 
 ## Pre-processing
 
