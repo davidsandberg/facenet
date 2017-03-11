@@ -38,11 +38,11 @@ import importlib
 import argparse
 import facenet
 import lfw
+import h5py
 import tensorflow.contrib.slim as slim
 from tensorflow.python.ops import data_flow_ops
 from tensorflow.python.framework import ops
 from tensorflow.python.ops import array_ops
-import h5py
 
 def main(args):
   
@@ -214,7 +214,8 @@ def main(args):
         sess.run(tf.global_variables_initializer())
         sess.run(tf.local_variables_initializer())
         summary_writer = tf.summary.FileWriter(log_dir, sess.graph)
-        tf.train.start_queue_runners(sess=sess)
+        coord = tf.train.Coordinator()
+        tf.train.start_queue_runners(coord=coord, sess=sess)
 
         with sess.as_default():
 
@@ -240,6 +241,7 @@ def main(args):
                 if args.lfw_dir:
                     evaluate(sess, enqueue_op, image_paths_placeholder, labels_placeholder, phase_train_placeholder, batch_size_placeholder, 
                         embeddings, label_batch, lfw_paths, actual_issame, args.lfw_batch_size, args.lfw_nrof_folds, log_dir, step, summary_writer)
+    sess.close()
     return model_dir
   
 def find_threshold(var, percentile):
