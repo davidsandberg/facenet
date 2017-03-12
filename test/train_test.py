@@ -35,6 +35,13 @@ import visualize
 import test_invariance_on_lfw
 import download_and_extract_model
 
+def memory_usage_psutil():
+    # return the memory usage in MB
+    import psutil
+    process = psutil.Process(os.getpid())
+    mem = process.memory_info()[0] / float(2 ** 20)
+    return mem
+
 class TrainTest(unittest.TestCase):
   
     @classmethod
@@ -47,12 +54,17 @@ class TrainTest(unittest.TestCase):
         self.pretrained_model_name = '20170216-091149'
         download_and_extract_model.download_and_extract_model(self.pretrained_model_name, 'data/')
         self.model_file = os.path.join('data', self.pretrained_model_name, 'model-%s.ckpt-250000' % self.pretrained_model_name)
+        print('Memory utilization (SetUpClass): %.3f MB' % memory_usage_psutil())
 
         
     @classmethod
     def tearDownClass(self):
         # Recursively remove the temporary directory
         shutil.rmtree(self.tmp_dir)
+        
+    def tearDown(self):
+        print('Memory utilization (TearDown): %.3f MB' % memory_usage_psutil())
+
 
     @unittest.skip("Skip this test case for now")
     def test_training_nn4(self):
@@ -89,6 +101,8 @@ class TrainTest(unittest.TestCase):
     
     # test_freeze_graph
     
+    # test_evaluate_on_lfw
+    
     def test_training_classifier_inception_resnet_v1(self):
         argv = ['--logs_base_dir', self.tmp_dir,
                 '--models_base_dir', self.tmp_dir,
@@ -106,7 +120,6 @@ class TrainTest(unittest.TestCase):
         args = facenet_train_classifier.parse_arguments(argv)
         facenet_train_classifier.main(args)
 
-    @unittest.skip("Skip this test case for now")
     def test_training_classifier_inception_resnet_v2(self):
         argv = ['--logs_base_dir', self.tmp_dir,
                 '--models_base_dir', self.tmp_dir,
@@ -123,7 +136,7 @@ class TrainTest(unittest.TestCase):
                 '--no_store_revision_info' ]
         args = facenet_train_classifier.parse_arguments(argv)
         facenet_train_classifier.main(args)
-
+ 
     def test_train_tripletloss_inception_resnet_v1(self):
         argv = ['--logs_base_dir', self.tmp_dir,
                 '--models_base_dir', self.tmp_dir,
@@ -140,7 +153,7 @@ class TrainTest(unittest.TestCase):
                 '--no_store_revision_info' ]
         args = facenet_train.parse_arguments(argv)
         facenet_train.main(args)
-
+ 
     def test_finetune_tripletloss_inception_resnet_v1(self):
         argv = ['--logs_base_dir', self.tmp_dir,
                 '--models_base_dir', self.tmp_dir,
@@ -158,14 +171,14 @@ class TrainTest(unittest.TestCase):
                 '--no_store_revision_info' ]
         args = facenet_train.parse_arguments(argv)
         facenet_train.main(args)
-
+ 
     def test_compare(self):
         argv = [os.path.join('data/', self.pretrained_model_name),
                 'data/images/Anthony_Hopkins_0001.jpg',
                 'data/images/Anthony_Hopkins_0002.jpg' ]
         args = compare.parse_arguments(argv)
         compare.main(args)
-
+ 
     @unittest.skip("Skip this test case for now")
     def test_visualize(self):
         model_dir = os.path.abspath('../data/model/20160620-173927')
@@ -174,7 +187,7 @@ class TrainTest(unittest.TestCase):
                 '--model_def', 'models.nn4' ]
         args = visualize.parse_arguments(argv)
         visualize.main(args)
-
+ 
     @unittest.skip("Skip this test case for now")
     def test_test_invariance_on_lfw(self):
         model_dir = os.path.abspath('../data/model/20160620-173927')

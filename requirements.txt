@@ -6,3 +6,4 @@ h5py
 matplotlib
 Pillow
 requests
+psutil

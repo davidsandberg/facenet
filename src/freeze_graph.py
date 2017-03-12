@@ -69,7 +69,7 @@ def main(args):
             output_node_names = 'embeddings'
             whitelist_names = []
             for node in gd.node:
-                if node.name.startswith('InceptionResnetV1') or node.name.startswith('embeddings') or node.name.startswith('phase_train'):
+                if node.name.startswith('InceptionResnetV1') or node.name.startswith('embeddings') or node.name.startswith('phase_train') or node.name.startswith('Bottleneck'):
                     print(node.name)
                     whitelist_names.append(node.name)
 

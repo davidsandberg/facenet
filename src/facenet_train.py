@@ -176,7 +176,8 @@ def main(args):
         sess.run(tf.local_variables_initializer(), feed_dict={phase_train_placeholder:True})
 
         summary_writer = tf.summary.FileWriter(log_dir, sess.graph)
-        tf.train.start_queue_runners(sess=sess)
+        coord = tf.train.Coordinator()
+        tf.train.start_queue_runners(coord=coord, sess=sess)
 
         with sess.as_default():
 
@@ -204,6 +205,7 @@ def main(args):
                             batch_size_placeholder, learning_rate_placeholder, phase_train_placeholder, enqueue_op, actual_issame, args.batch_size, 
                             args.lfw_nrof_folds, log_dir, step, summary_writer, args.embedding_size)
 
+    sess.close()
     return model_dir
 
 
