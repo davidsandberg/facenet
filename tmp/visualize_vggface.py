@@ -1,7 +1,7 @@
 import numpy as np
 import tensorflow as tf
 import matplotlib.pyplot as plt
-import vggface16
+import tmp.vggface16
 
 def main():
   
@@ -12,14 +12,14 @@ def main():
     t_preprocessed = tf.expand_dims(t_input-image_mean, 0)
      
     # Build the inference graph
-    nodes = vggface16.load('../data/vgg_face.mat', t_preprocessed)
+    nodes = tmp.vggface16.load('data/vgg_face.mat', t_preprocessed)
         
     img_noise = np.random.uniform(size=(224,224,3)) + 117.0
 
     # Picking some internal layer. Note that we use outputs before applying the ReLU nonlinearity
     # to have non-zero gradients for features with negative initial activations.
     layer = 'conv5_3'
-    channel = 139 # picking some feature channel to visualize
+    channel = 140 # picking some feature channel to visualize
     img = render_naive(sess, t_input, nodes[layer][:,:,:,channel], img_noise)
     showarray(img)
 
