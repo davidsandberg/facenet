@@ -74,7 +74,7 @@ mixedImage = imageNoise * noiseRatio + inputImage * (1 - noiseRatio)
 pyplot.imshow(inputImage[0])
 
 
-session.run(tf.initialize_all_variables())
+session.run(tf.global_variables_initializer())
 session.run(nodes['input'].assign(inputImage))
 contentLoss = sqErrorLossContent(session, nodes, 'conv4_2')
 session.run(nodes['input'].assign(paintingStyleImage))
@@ -83,11 +83,11 @@ totalLoss = beta * contentLoss + alpha * styleLoss
 
 optimizer = tf.train.AdamOptimizer(2.0)
 trainStep = optimizer.minimize(totalLoss)
-session.run(tf.initialize_all_variables())
+session.run(tf.global_variables_initializer())
 session.run(nodes['input'].assign(inputImage))
 # Number of iterations to run.
 iterations = 2000
-session.run(tf.initialize_all_variables())
+session.run(tf.global_variables_initializer())
 session.run(nodes['input'].assign(inputImage))
  
 for iters in range(iterations):

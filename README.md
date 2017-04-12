@@ -25,4 +25,4 @@ Currently, the best results are achieved by training the model as a classifier w
 Currently, the best performing model is an Inception-Resnet-v1 model trained on a combination of FaceScrub and CASIA-Webface aligned with [MTCNN](https://github.com/davidsandberg/facenet/blob/master/tmp/align_dataset.m). This alignment step requires Matlab and Caffe installed which requires some extra work. This will be easier when the [Python/Tensorflow implementation](https://github.com/davidsandberg/facenet/tree/master/src/align) is fully functional.
 
 ## Performance
-The accuracy on LFW for the model [20161030-023650](https://drive.google.com/file/d/0B5MzpY9kBtDVVlBrcHppdTJQYTQ/view?usp=sharin) is 0.978+-0.008. A description of how to run the test can be found on the page [Validate on LFW](https://github.com/davidsandberg/facenet/wiki/Validate-on-lfw).
+The accuracy on LFW for the model [20161116-234200](https://drive.google.com/file/d/0B5MzpY9kBtDVSTgxX25ZQzNTMGc/view?usp=sharing) is 0.980+-0.006. A description of how to run the test can be found on the page [Validate on LFW](https://github.com/davidsandberg/facenet/wiki/Validate-on-lfw).

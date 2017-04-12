@@ -30,9 +30,6 @@ import time
 from six.moves import urllib  # @UnresolvedImport
 import tensorflow as tf
 import numpy as np
-import matplotlib.pyplot as plt
-from tensorflow.python.ops import control_flow_ops
-import facenet
 
 SOURCE_URL = 'http://yann.lecun.com/exdb/mnist/'
 WORK_DIRECTORY = 'data'
@@ -46,6 +43,8 @@ BATCH_SIZE = 64
 NUM_EPOCHS = 10
 EVAL_BATCH_SIZE = 64
 EVAL_FREQUENCY = 100  # Number of steps between evaluations.
+NOISE_FACTOR = 0.2
+BETA = 0.8
 
 
 tf.app.flags.DEFINE_boolean("self_test", False, "True if running a self test.")
@@ -145,6 +144,12 @@ def main(argv=None):  # pylint: disable=unused-argument
         validation_labels = train_labels[:VALIDATION_SIZE]
         train_data = train_data[VALIDATION_SIZE:, ...]
         train_labels = train_labels[VALIDATION_SIZE:]
+        nrof_training_examples = train_labels.shape[0]
+        nrof_changed_labels = int(nrof_training_examples*NOISE_FACTOR)
+        shuf = np.arange(0,nrof_training_examples)
+        np.random.shuffle(shuf)
+        change_idx = shuf[0:nrof_changed_labels]
+        train_labels[change_idx] = (train_labels[change_idx] + np.random.randint(1,9,size=(nrof_changed_labels,))) % NUM_LABELS
         num_epochs = NUM_EPOCHS
     train_size = train_labels.shape[0]
 
@@ -177,53 +182,12 @@ def main(argv=None):  # pylint: disable=unused-argument
                             seed=SEED,
                             dtype=data_type()))
     fc1_biases = tf.Variable(tf.constant(0.1, shape=[512], dtype=data_type()))
-    fc1p_weights = tf.Variable(  # fully connected, depth 512.
-        tf.truncated_normal([512, 2],
-                            stddev=0.1,
-                            seed=SEED,
-                            dtype=data_type()))
-    fc1p_biases = tf.Variable(tf.constant(0.1, shape=[2], dtype=data_type()))
-    fc2_weights = tf.Variable(tf.truncated_normal([2, NUM_LABELS],
+    fc2_weights = tf.Variable(tf.truncated_normal([512, NUM_LABELS],
                                                   stddev=0.1,
                                                   seed=SEED,
                                                   dtype=data_type()))
     fc2_biases = tf.Variable(tf.constant(
         0.1, shape=[NUM_LABELS], dtype=data_type()))
-    
-    def batch_norm(x, phase_train):  #pylint: disable=unused-variable
-        """
-        Batch normalization on convolutional maps.
-        Args:
-            x:           Tensor, 4D BHWD input maps
-            n_out:       integer, depth of input maps
-            phase_train: boolean tf.Variable, true indicates training phase
-            scope:       string, variable scope
-            affn:      whether to affn-transform outputs
-        Return:
-            normed:      batch-normalized maps
-        Ref: http://stackoverflow.com/questions/33949786/how-could-i-use-batch-normalization-in-tensorflow/33950177
-        """
-        name = 'batch_norm'
-        with tf.variable_scope(name):
-            phase_train = tf.convert_to_tensor(phase_train, dtype=tf.bool)
-            n_out = int(x.get_shape()[-1])
-            beta = tf.Variable(tf.constant(0.0, shape=[n_out], dtype=x.dtype),
-                               name=name+'/beta', trainable=True, dtype=x.dtype)
-            gamma = tf.Variable(tf.constant(1.0, shape=[n_out], dtype=x.dtype),
-                                name=name+'/gamma', trainable=True, dtype=x.dtype)
-          
-            batch_mean, batch_var = tf.nn.moments(x, [0], name='moments')
-            ema = tf.train.ExponentialMovingAverage(decay=0.9)
-            def mean_var_with_update():
-                ema_apply_op = ema.apply([batch_mean, batch_var])
-                with tf.control_dependencies([ema_apply_op]):
-                    return tf.identity(batch_mean), tf.identity(batch_var)
-            mean, var = control_flow_ops.cond(phase_train,
-                                              mean_var_with_update,
-                                              lambda: (ema.average(batch_mean), ema.average(batch_var)))
-            normed = tf.nn.batch_normalization(x, mean, var, beta, gamma, 1e-3)
-        return normed
-    
 
     # We will replicate the model structure for the training subgraph, as well
     # as the evaluation subgraphs, while sharing the trainable parameters.
@@ -262,24 +226,31 @@ def main(argv=None):  # pylint: disable=unused-argument
         # Fully connected layer. Note that the '+' operation automatically
         # broadcasts the biases.
         hidden = tf.nn.relu(tf.matmul(reshape, fc1_weights) + fc1_biases)
+
         # Add a 50% dropout during training only. Dropout also scales
         # activations such that no rescaling is needed at evaluation time.
         if train:
             hidden = tf.nn.dropout(hidden, 0.5, seed=SEED)
-
-        hidden = tf.matmul(hidden, fc1p_weights) + fc1p_biases
-
-        return tf.nn.relu(tf.matmul(hidden, fc2_weights) + fc2_biases), hidden
+        return tf.matmul(hidden, fc2_weights) + fc2_biases
 
     # Training computation: logits + cross-entropy loss.
-    logits, hidden = model(train_data_node, True)
-    #logits = batch_norm(logits, True)
-    xent_loss = tf.reduce_mean(tf.nn.sparse_softmax_cross_entropy_with_logits(
-        logits, train_labels_node))
-    beta = 1e-3
-    #center_loss, update_centers = center_loss_op(hidden, train_labels_node)
-    center_loss, _ = facenet.center_loss(hidden, train_labels_node, 0.95, NUM_LABELS)
-    loss = xent_loss + beta * center_loss
+    logits = model(train_data_node, True)
+    
+    # t: observed noisy labels
+    # q: estimated class probabilities (output from softmax)
+    # z: argmax of q
+
+    t = tf.one_hot(train_labels_node, NUM_LABELS)
+    q = tf.nn.softmax(logits)
+    qqq = tf.arg_max(q, dimension=1)
+    z = tf.one_hot(qqq, NUM_LABELS)
+    #cross_entropy = -tf.reduce_sum(t*tf.log(q),reduction_indices=1)
+    cross_entropy = -tf.reduce_sum((BETA*t+(1-BETA)*z)*tf.log(q),reduction_indices=1)
+    
+    loss = tf.reduce_mean(cross_entropy)
+    
+#     loss = tf.reduce_mean(tf.nn.sparse_softmax_cross_entropy_with_logits(
+#         logits, train_labels_node))
   
     # L2 regularization for the fully connected parameters.
     regularizers = (tf.nn.l2_loss(fc1_weights) + tf.nn.l2_loss(fc1_biases) +
@@ -306,8 +277,7 @@ def main(argv=None):  # pylint: disable=unused-argument
     train_prediction = tf.nn.softmax(logits)
   
     # Predictions for the test and validation, which we'll compute less often.
-    eval_logits, eval_embeddings = model(eval_data)
-    eval_prediction = tf.nn.softmax(eval_logits)
+    eval_prediction = tf.nn.softmax(model(eval_data))
     
     # Small utility function to evaluate a dataset by feeding batches of data to
     # {eval_data} and pulling the results from {eval_predictions}.
@@ -331,25 +301,6 @@ def main(argv=None):  # pylint: disable=unused-argument
                 predictions[begin:, :] = batch_predictions[begin - size:, :]
         return predictions
   
-    def calculate_embeddings(data, sess):
-        """Get all predictions for a dataset by running it in small batches."""
-        size = data.shape[0]
-        if size < EVAL_BATCH_SIZE:
-            raise ValueError("batch size for evals larger than dataset: %d" % size)
-        predictions = np.ndarray(shape=(size, 2), dtype=np.float32)
-        for begin in xrange(0, size, EVAL_BATCH_SIZE):
-            end = begin + EVAL_BATCH_SIZE
-            if end <= size:
-                predictions[begin:end, :] = sess.run(
-                    eval_embeddings,
-                    feed_dict={eval_data: data[begin:end, ...]})
-            else:
-                batch_predictions = sess.run(
-                    eval_embeddings,
-                    feed_dict={eval_data: data[-EVAL_BATCH_SIZE:, ...]})
-                predictions[begin:, :] = batch_predictions[begin - size:, :]
-        return predictions
-
     # Create a local session to run the training.
     start_time = time.time()
     with tf.Session() as sess:
@@ -368,15 +319,16 @@ def main(argv=None):  # pylint: disable=unused-argument
             feed_dict = {train_data_node: batch_data,
                          train_labels_node: batch_labels}
             # Run the graph and fetch some of the nodes.
-            #_, l, lr, predictions = sess.run([optimizer, loss, learning_rate, train_prediction], feed_dict=feed_dict)
-            _, cl, l, lr, predictions = sess.run([optimizer, center_loss, loss, learning_rate, train_prediction], feed_dict=feed_dict)
+            _, l, lr, predictions = sess.run(
+                [optimizer, loss, learning_rate, train_prediction],
+                feed_dict=feed_dict)
             if step % EVAL_FREQUENCY == 0:
                 elapsed_time = time.time() - start_time
                 start_time = time.time()
                 print('Step %d (epoch %.2f), %.1f ms' %
                       (step, float(step) * BATCH_SIZE / train_size,
                        1000 * elapsed_time / EVAL_FREQUENCY))
-                print('Minibatch loss: %.3f  %.3f, learning rate: %.6f' % (l, cl*beta, lr))
+                print('Minibatch loss: %.3f, learning rate: %.6f' % (l, lr))
                 print('Minibatch error: %.1f%%' % error_rate(predictions, batch_labels))
                 print('Validation error: %.1f%%' % error_rate(
                     eval_in_batches(validation_data, sess), validation_labels))
@@ -388,15 +340,6 @@ def main(argv=None):  # pylint: disable=unused-argument
             print('test_error', test_error)
             assert test_error == 0.0, 'expected 0.0 test_error, got %.2f' % (
                 test_error,)
-            
-        train_embeddings = calculate_embeddings(train_data, sess)
-        
-        color_list = ['b', 'g', 'r', 'c', 'm', 'y', 'k', 'b', 'g', 'r', 'c' ]
-        plt.figure(1)
-        for n in range(0,10):
-            idx = np.where(train_labels[0:10000]==n)
-            plt.plot(train_embeddings[idx,0], train_embeddings[idx,1], color_list[n]+'.')
-        plt.show()
 
 
 if __name__ == '__main__':

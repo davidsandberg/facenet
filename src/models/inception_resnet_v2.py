@@ -24,8 +24,7 @@ from __future__ import division
 from __future__ import print_function
 
 import tensorflow as tf
-
-slim = tf.contrib.slim
+import tensorflow.contrib.slim as slim
 
 # Inception-Renset-A
 def block35(net, scale=1.0, activation_fn=tf.nn.relu, scope=None, reuse=None):
@@ -89,13 +88,14 @@ def block8(net, scale=1.0, activation_fn=tf.nn.relu, scope=None, reuse=None):
             net = activation_fn(net)
     return net
   
-#pylint: disable=unused-argument
 def inference(images, keep_probability, phase_train=True, weight_decay=0.0, reuse=None):
     batch_norm_params = {
         # Decay for the moving averages.
-        'decay': 0.9997,
+        'decay': 0.995,
         # epsilon to prevent 0s in variance.
         'epsilon': 0.001,
+        # force in-place updates of mean and variance estimates
+        'updates_collections': None,
     }
     with slim.arg_scope([slim.conv2d],
                         weights_initializer=tf.truncated_normal_initializer(stddev=0.1),
