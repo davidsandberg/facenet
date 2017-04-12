@@ -29,6 +29,7 @@ import numpy.testing as testing
 class BatchNormTest(unittest.TestCase):
 
 
+    @unittest.skip("Skip batch norm test case")
     def testBatchNorm(self):
       
         tf.set_random_seed(123)

@@ -87,6 +87,7 @@ class TrainTest(unittest.TestCase):
         self.assertAlmostEqual(b_reference, b_restored, 'Restored model use different weight than the original model')
 
 
+    @unittest.skip("Skip restore EMA test case for now")
     def test_restore_ema(self):
         
         # Create 100 phony x, y data points in NumPy, y = x * 0.1 + 0.3

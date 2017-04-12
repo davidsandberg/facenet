@@ -33,12 +33,11 @@ import tensorflow as tf
 from tensorflow.python.framework import ops
 import numpy as np
 from scipy import misc
-import matplotlib.pyplot as plt
-from sklearn.cross_validation import KFold
+from sklearn.model_selection import KFold
 from scipy import interpolate
 from tensorflow.python.training import training
-
-#import h5py
+import random
+import re
 
 
 def triplet_loss(anchor, positive, negative, alpha):
@@ -53,10 +52,10 @@ def triplet_loss(anchor, positive, negative, alpha):
       the triplet loss according to the FaceNet paper as a float tensor.
     """
     with tf.variable_scope('triplet_loss'):
-        pos_dist = tf.reduce_sum(tf.square(tf.sub(anchor, positive)), 1)
-        neg_dist = tf.reduce_sum(tf.square(tf.sub(anchor, negative)), 1)
+        pos_dist = tf.reduce_sum(tf.square(tf.subtract(anchor, positive)), 1)
+        neg_dist = tf.reduce_sum(tf.square(tf.subtract(anchor, negative)), 1)
         
-        basic_loss = tf.add(tf.sub(pos_dist,neg_dist), alpha)
+        basic_loss = tf.add(tf.subtract(pos_dist,neg_dist), alpha)
         loss = tf.reduce_mean(tf.maximum(basic_loss, 0.0), 0)
       
     return loss
@@ -68,7 +67,7 @@ def decov_loss(xs):
     x = tf.reshape(xs, [int(xs.get_shape()[0]), -1])
     m = tf.reduce_mean(x, 0, True)
     z = tf.expand_dims(x-m, 2)
-    corr = tf.reduce_mean(tf.batch_matmul(z, tf.transpose(z, perm=[0,2,1])), 0)
+    corr = tf.reduce_mean(tf.matmul(z, tf.transpose(z, perm=[0,2,1])), 0)
     corr_frob_sqr = tf.reduce_sum(tf.square(corr))
     corr_diag_sqr = tf.reduce_sum(tf.square(tf.diag_part(corr)))
     loss = 0.5*(corr_frob_sqr - corr_diag_sqr)
@@ -96,6 +95,11 @@ def get_image_paths_and_labels(dataset):
         labels_flat += [i] * len(dataset[i].image_paths)
     return image_paths_flat, labels_flat
 
+def shuffle_examples(image_paths, labels):
+    shuffle_list = list(zip(image_paths, labels))
+    random.shuffle(shuffle_list)
+    image_paths_shuff, labels_shuff = zip(*shuffle_list)
+    return image_paths_shuff, labels_shuff
 
 def read_images_from_disk(input_queue):
     """Consumes a single filename and label as a ' '-delimited string.
@@ -199,13 +203,13 @@ def train(total_loss, global_step, optimizer, learning_rate, moving_average_deca
     # Add histograms for trainable variables.
     if log_histograms:
         for var in tf.trainable_variables():
-            tf.histogram_summary(var.op.name, var)
+            tf.summary.histogram(var.op.name, var)
    
     # Add histograms for gradients.
     if log_histograms:
         for grad, var in grads:
             if grad is not None:
-                tf.histogram_summary(var.op.name + '/gradients', grad)
+                tf.summary.histogram(var.op.name + '/gradients', grad)
   
     # Track the moving averages of all trainable variables.
     variable_averages = tf.train.ExponentialMovingAverage(
@@ -226,8 +230,8 @@ def prewhiten(x):
 
 def crop(image, random_crop, image_size):
     if image.shape[1]>image_size:
-        sz1 = image.shape[1]//2
-        sz2 = image_size//2
+        sz1 = int(image.shape[1]//2)
+        sz2 = int(image_size//2)
         if random_crop:
             diff = sz1-sz2
             (h, v) = (np.random.randint(-diff, diff+1), np.random.randint(-diff, diff+1))
@@ -372,23 +376,23 @@ def get_model_filenames(model_dir):
     elif len(meta_files)>1:
         raise ValueError('There should not be more than one meta file in the model directory (%s)' % model_dir)
     meta_file = meta_files[0]
-    ckpt_files = [s for s in files if 'ckpt' in s]
-    if len(ckpt_files)==0:
-        raise ValueError('No checkpoint file found in the model directory (%s)' % model_dir)
-    elif len(ckpt_files)==1:
-        ckpt_file = ckpt_files[0]
-    else:
-        ckpt_iter = [(s,int(s.split('-')[-1])) for s in ckpt_files if 'ckpt' in s]
-        sorted_iter = sorted(ckpt_iter, key=lambda tup: tup[1])
-        ckpt_file = sorted_iter[-1][0]
+    meta_files = [s for s in files if '.ckpt' in s]
+    max_step = -1
+    for f in files:
+        step_str = re.match(r'(^model-[\w\- ]+.ckpt-(\d+))', f)
+        if step_str is not None and len(step_str.groups())>=2:
+            step = int(step_str.groups()[1])
+            if step > max_step:
+                max_step = step
+                ckpt_file = step_str.groups()[0]
     return meta_file, ckpt_file
 
-def calculate_roc(thresholds, embeddings1, embeddings2, actual_issame, seed, nrof_folds=10):
+def calculate_roc(thresholds, embeddings1, embeddings2, actual_issame, nrof_folds=10):
     assert(embeddings1.shape[0] == embeddings2.shape[0])
     assert(embeddings1.shape[1] == embeddings2.shape[1])
     nrof_pairs = min(len(actual_issame), embeddings1.shape[0])
     nrof_thresholds = len(thresholds)
-    folds = KFold(n=nrof_pairs, n_folds=nrof_folds, shuffle=True, random_state=seed)
+    k_fold = KFold(n_splits=nrof_folds, shuffle=False)
     
     tprs = np.zeros((nrof_folds,nrof_thresholds))
     fprs = np.zeros((nrof_folds,nrof_thresholds))
@@ -396,8 +400,9 @@ def calculate_roc(thresholds, embeddings1, embeddings2, actual_issame, seed, nro
     
     diff = np.subtract(embeddings1, embeddings2)
     dist = np.sum(np.square(diff),1)
+    indices = np.arange(nrof_pairs)
     
-    for fold_idx, (train_set, test_set) in enumerate(folds):
+    for fold_idx, (train_set, test_set) in enumerate(k_fold.split(indices)):
         
         # Find the best threshold for the fold
         acc_train = np.zeros((nrof_thresholds))
@@ -424,30 +429,23 @@ def calculate_accuracy(threshold, dist, actual_issame):
     acc = float(tp+tn)/dist.size
     return tpr, fpr, acc
 
-def plot_roc(fpr, tpr, label):
-    plt.plot(fpr, tpr, label=label)
-    plt.title('Receiver Operating Characteristics')
-    plt.xlabel('False Positive Rate')
-    plt.ylabel('True Positive Rate')
-    plt.legend()
-    plt.plot([0, 1], [0, 1], 'g--')
-    plt.grid(True)
-    plt.show()
+
   
-def calculate_val(thresholds, embeddings1, embeddings2, actual_issame, far_target, seed, nrof_folds=10):
+def calculate_val(thresholds, embeddings1, embeddings2, actual_issame, far_target, nrof_folds=10):
     assert(embeddings1.shape[0] == embeddings2.shape[0])
     assert(embeddings1.shape[1] == embeddings2.shape[1])
     nrof_pairs = min(len(actual_issame), embeddings1.shape[0])
     nrof_thresholds = len(thresholds)
-    folds = KFold(n=nrof_pairs, n_folds=nrof_folds, shuffle=True, random_state=seed)
+    k_fold = KFold(n_splits=nrof_folds, shuffle=False)
     
     val = np.zeros(nrof_folds)
     far = np.zeros(nrof_folds)
     
     diff = np.subtract(embeddings1, embeddings2)
     dist = np.sum(np.square(diff),1)
+    indices = np.arange(nrof_pairs)
     
-    for fold_idx, (train_set, test_set) in enumerate(folds):
+    for fold_idx, (train_set, test_set) in enumerate(k_fold.split(indices)):
       
         # Find the threshold that gives FAR = far_target
         far_train = np.zeros(nrof_thresholds)
@@ -501,4 +499,3 @@ def list_variables(filename):
     variable_map = reader.get_variable_to_shape_map()
     names = sorted(variable_map.keys())
     return names
-  

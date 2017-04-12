@@ -39,7 +39,7 @@ def block35(net, scale=1.0, activation_fn=tf.nn.relu, scope=None, reuse=None):
             tower_conv2_0 = slim.conv2d(net, 32, 1, scope='Conv2d_0a_1x1')
             tower_conv2_1 = slim.conv2d(tower_conv2_0, 48, 3, scope='Conv2d_0b_3x3')
             tower_conv2_2 = slim.conv2d(tower_conv2_1, 64, 3, scope='Conv2d_0c_3x3')
-        mixed = tf.concat(3, [tower_conv, tower_conv1_1, tower_conv2_2])
+        mixed = tf.concat([tower_conv, tower_conv1_1, tower_conv2_2], 3)
         up = slim.conv2d(mixed, net.get_shape()[3], 1, normalizer_fn=None,
                          activation_fn=None, scope='Conv2d_1x1')
         net += scale * up
@@ -59,7 +59,7 @@ def block17(net, scale=1.0, activation_fn=tf.nn.relu, scope=None, reuse=None):
                                         scope='Conv2d_0b_1x7')
             tower_conv1_2 = slim.conv2d(tower_conv1_1, 192, [7, 1],
                                         scope='Conv2d_0c_7x1')
-        mixed = tf.concat(3, [tower_conv, tower_conv1_2])
+        mixed = tf.concat([tower_conv, tower_conv1_2], 3)
         up = slim.conv2d(mixed, net.get_shape()[3], 1, normalizer_fn=None,
                          activation_fn=None, scope='Conv2d_1x1')
         net += scale * up
@@ -80,7 +80,7 @@ def block8(net, scale=1.0, activation_fn=tf.nn.relu, scope=None, reuse=None):
                                         scope='Conv2d_0b_1x3')
             tower_conv1_2 = slim.conv2d(tower_conv1_1, 256, [3, 1],
                                         scope='Conv2d_0c_3x1')
-        mixed = tf.concat(3, [tower_conv, tower_conv1_2])
+        mixed = tf.concat([tower_conv, tower_conv1_2], 3)
         up = slim.conv2d(mixed, net.get_shape()[3], 1, normalizer_fn=None,
                          activation_fn=None, scope='Conv2d_1x1')
         net += scale * up
@@ -96,7 +96,9 @@ def inference(images, keep_probability, phase_train=True, weight_decay=0.0, reus
         'epsilon': 0.001,
         # force in-place updates of mean and variance estimates
         'updates_collections': None,
-    }
+        # Moving averages ends up in the trainable variables collection
+        'variables_collections': [ tf.GraphKeys.TRAINABLE_VARIABLES ],
+}
     with slim.arg_scope([slim.conv2d],
                         weights_initializer=tf.truncated_normal_initializer(stddev=0.1),
                         weights_regularizer=slim.l2_regularizer(weight_decay),
@@ -178,8 +180,8 @@ def inception_resnet_v2(inputs, is_training=True,
                                                      scope='AvgPool_0a_3x3')
                         tower_pool_1 = slim.conv2d(tower_pool, 64, 1,
                                                    scope='Conv2d_0b_1x1')
-                    net = tf.concat(3, [tower_conv, tower_conv1_1,
-                                        tower_conv2_2, tower_pool_1])
+                    net = tf.concat([tower_conv, tower_conv1_1,
+                                        tower_conv2_2, tower_pool_1], 3)
         
                 end_points['Mixed_5b'] = net
                 net = slim.repeat(net, 10, block35, scale=0.17)
@@ -199,7 +201,7 @@ def inception_resnet_v2(inputs, is_training=True,
                     with tf.variable_scope('Branch_2'):
                         tower_pool = slim.max_pool2d(net, 3, stride=2, padding='VALID',
                                                      scope='MaxPool_1a_3x3')
-                    net = tf.concat(3, [tower_conv, tower_conv1_2, tower_pool])
+                    net = tf.concat([tower_conv, tower_conv1_2, tower_pool], 3)
         
                 end_points['Mixed_6a'] = net
                 net = slim.repeat(net, 20, block17, scale=0.10)
@@ -222,8 +224,8 @@ def inception_resnet_v2(inputs, is_training=True,
                     with tf.variable_scope('Branch_3'):
                         tower_pool = slim.max_pool2d(net, 3, stride=2, padding='VALID',
                                                      scope='MaxPool_1a_3x3')
-                    net = tf.concat(3, [tower_conv_1, tower_conv1_1,
-                                        tower_conv2_2, tower_pool])
+                    net = tf.concat([tower_conv_1, tower_conv1_1,
+                                        tower_conv2_2, tower_pool], 3)
         
                 end_points['Mixed_7a'] = net
         

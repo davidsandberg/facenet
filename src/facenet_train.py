@@ -55,8 +55,9 @@ def main(args):
         os.makedirs(model_dir)
 
     # Store some git revision info in a text file in the log directory
-    src_path,_ = os.path.split(os.path.realpath(__file__))
-    facenet.store_revision_info(src_path, log_dir, ' '.join(sys.argv))
+    if not args.no_store_revision_info:
+        src_path,_ = os.path.split(os.path.realpath(__file__))
+        facenet.store_revision_info(src_path, log_dir, ' '.join(sys.argv))
 
     np.random.seed(seed=args.seed)
     train_set = facenet.get_dataset(args.data_dir)
@@ -99,7 +100,7 @@ def main(args):
         for _ in range(nrof_preprocess_threads):
             filenames, label = input_queue.dequeue()
             images = []
-            for filename in tf.unpack(filenames):
+            for filename in tf.unstack(filenames):
                 file_contents = tf.read_file(filename)
                 image = tf.image.decode_png(file_contents)
                 
@@ -121,15 +122,31 @@ def main(args):
             capacity=4 * nrof_preprocess_threads * args.batch_size,
             allow_smaller_final_batch=True)
 
+        batch_norm_params = {
+            # Decay for the moving averages
+            'decay': 0.995,
+            # epsilon to prevent 0s in variance
+            'epsilon': 0.001,
+            # force in-place updates of mean and variance estimates
+            'updates_collections': None,
+            # Moving averages ends up in the trainable variables collection
+            'variables_collections': [ tf.GraphKeys.TRAINABLE_VARIABLES ],
+            # Only update statistics during training mode
+            'is_training': phase_train_placeholder
+        }
         # Build the inference graph
         prelogits, _ = network.inference(image_batch, args.keep_probability, 
             phase_train=phase_train_placeholder, weight_decay=args.weight_decay)
-        pre_embeddings = slim.fully_connected(prelogits, args.embedding_size, activation_fn=None, scope='Embeddings', reuse=False)
-        #embedding_size = 1792
-
+        pre_embeddings = slim.fully_connected(prelogits, args.embedding_size, activation_fn=None, 
+                weights_initializer=tf.truncated_normal_initializer(stddev=0.1), 
+                weights_regularizer=slim.l2_regularizer(args.weight_decay),
+                normalizer_fn=slim.batch_norm,
+                normalizer_params=batch_norm_params,
+                scope='Bottleneck', reuse=False)
+        
         embeddings = tf.nn.l2_normalize(pre_embeddings, 1, 1e-10, name='embeddings')
         # Split embeddings into anchor, positive and negative and calculate triplet loss
-        anchor, positive, negative = tf.unpack(tf.reshape(embeddings, [-1,3,args.embedding_size]), 3, 1)
+        anchor, positive, negative = tf.unstack(tf.reshape(embeddings, [-1,3,args.embedding_size]), 3, 1)
         triplet_loss = facenet.triplet_loss(anchor, positive, negative, args.alpha)
         
         learning_rate = tf.train.exponential_decay(learning_rate_placeholder, global_step,
@@ -140,27 +157,12 @@ def main(args):
         regularization_losses = tf.get_collection(tf.GraphKeys.REGULARIZATION_LOSSES)
         total_loss = tf.add_n([triplet_loss] + regularization_losses, name='total_loss')
 
-        # Create list with variables to restore
-        restore_vars = []
-        update_gradient_vars = []
-        if args.pretrained_model:
-            update_gradient_vars = tf.global_variables()
-            for var in tf.global_variables():
-                if not 'Embeddings/' in var.op.name:
-                    restore_vars.append(var)
-                #else:
-                    #update_gradient_vars.append(var)
-        else:
-            restore_vars = tf.global_variables()
-            update_gradient_vars = tf.global_variables()
-
         # Build a Graph that trains the model with one batch of examples and updates the model parameters
         train_op = facenet.train(total_loss, global_step, args.optimizer, 
-            learning_rate, args.moving_average_decay, update_gradient_vars)
+            learning_rate, args.moving_average_decay, tf.global_variables())
         
         # Create a saver
-        restore_saver = tf.train.Saver(restore_vars)
-        saver = tf.train.Saver(tf.global_variables(), max_to_keep=3)
+        saver = tf.train.Saver(tf.trainable_variables(), max_to_keep=3)
 
         # Build the summary operation based on the TF collection of Summaries.
         summary_op = tf.summary.merge_all()
@@ -170,17 +172,18 @@ def main(args):
         sess = tf.Session(config=tf.ConfigProto(gpu_options=gpu_options))        
 
         # Initialize variables
-        sess.run(tf.global_variables_initializer())
-        sess.run(tf.local_variables_initializer())
+        sess.run(tf.global_variables_initializer(), feed_dict={phase_train_placeholder:True})
+        sess.run(tf.local_variables_initializer(), feed_dict={phase_train_placeholder:True})
 
         summary_writer = tf.summary.FileWriter(log_dir, sess.graph)
-        tf.train.start_queue_runners(sess=sess)
+        coord = tf.train.Coordinator()
+        tf.train.start_queue_runners(coord=coord, sess=sess)
 
         with sess.as_default():
 
             if args.pretrained_model:
                 print('Restoring pretrained model: %s' % args.pretrained_model)
-                restore_saver.restore(sess, os.path.expanduser(args.pretrained_model))
+                saver.restore(sess, os.path.expanduser(args.pretrained_model))
 
             # Training and validation loop
             epoch = 0
@@ -200,8 +203,9 @@ def main(args):
                 if args.lfw_dir:
                     evaluate(sess, lfw_paths, embeddings, labels_batch, image_paths_placeholder, labels_placeholder, 
                             batch_size_placeholder, learning_rate_placeholder, phase_train_placeholder, enqueue_op, actual_issame, args.batch_size, 
-                            args.seed, args.lfw_nrof_folds, log_dir, step, summary_writer, args.embedding_size)
+                            args.lfw_nrof_folds, log_dir, step, summary_writer, args.embedding_size)
 
+    sess.close()
     return model_dir
 
 
@@ -230,7 +234,7 @@ def train(args, sess, dataset, epoch, image_paths_placeholder, labels_placeholde
         for i in xrange(nrof_batches):
             batch_size = min(nrof_examples-i*args.batch_size, args.batch_size)
             emb, lab = sess.run([embeddings, labels_batch], feed_dict={batch_size_placeholder: batch_size, 
-                learning_rate_placeholder: 0.0, phase_train_placeholder: False})
+                learning_rate_placeholder: lr, phase_train_placeholder: True})
             emb_array[lab,:] = emb
         print('%.3f' % (time.time()-start_time))
 
@@ -245,8 +249,6 @@ def train(args, sess, dataset, epoch, image_paths_placeholder, labels_placeholde
         # Perform training on the selected triplets
         nrof_batches = int(np.ceil(nrof_triplets*3/args.batch_size))
         triplet_paths = list(itertools.chain(*triplets))
-        #triplet_paths = triplet_paths[0:nrof_batches*args.batch_size]
-        print('Nrof paths: %d' % len(triplet_paths))
         labels_array = np.reshape(np.arange(len(triplet_paths)),(-1,3))
         triplet_paths_array = np.reshape(np.expand_dims(np.array(triplet_paths),1), (-1,3))
         sess.run(enqueue_op, {image_paths_placeholder: triplet_paths_array, labels_placeholder: labels_array})
@@ -348,7 +350,7 @@ def sample_people(dataset, people_per_batch, images_per_person):
 
 def evaluate(sess, image_paths, embeddings, labels_batch, image_paths_placeholder, labels_placeholder, 
         batch_size_placeholder, learning_rate_placeholder, phase_train_placeholder, enqueue_op, actual_issame, batch_size, 
-        seed, nrof_folds, log_dir, step, summary_writer, embedding_size):
+        nrof_folds, log_dir, step, summary_writer, embedding_size):
     start_time = time.time()
     # Run forward pass to calculate embeddings
     print('Running forward pass on LFW images: ', end='')
@@ -371,7 +373,7 @@ def evaluate(sess, image_paths, embeddings, labels_batch, image_paths_placeholde
     
     assert(np.all(label_check_array==1))
     
-    _, _, accuracy, val, val_std, far = lfw.evaluate(emb_array, seed, actual_issame, nrof_folds=nrof_folds)
+    _, _, accuracy, val, val_std, far = lfw.evaluate(emb_array, actual_issame, nrof_folds=nrof_folds)
     
     print('Accuracy: %1.3f+-%1.3f' % (np.mean(accuracy), np.std(accuracy)))
     print('Validation rate: %2.5f+-%2.5f @ FAR=%2.5f' % (val, val_std, far))
@@ -478,11 +480,13 @@ def parse_arguments(argv):
     parser.add_argument('--seed', type=int,
         help='Random seed.', default=666)
     parser.add_argument('--learning_rate_schedule_file', type=str,
-        help='File containing the learning rate schedule that is used when learning_rate is set to to -1.', default='../data/learning_rate_schedule.txt')
+        help='File containing the learning rate schedule that is used when learning_rate is set to to -1.', default='data/learning_rate_schedule.txt')
+    parser.add_argument('--no_store_revision_info', 
+        help='Disables storing of git revision info in revision_info.txt.', action='store_true')
 
     # Parameters for validation on LFW
     parser.add_argument('--lfw_pairs', type=str,
-        help='The file containing the pairs to use for validation.', default='../data/pairs.txt')
+        help='The file containing the pairs to use for validation.', default='data/pairs.txt')
     parser.add_argument('--lfw_file_ext', type=str,
         help='The file extension for the LFW dataset.', default='png', choices=['jpg', 'png'])
     parser.add_argument('--lfw_dir', type=str,

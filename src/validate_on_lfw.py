@@ -37,6 +37,9 @@ import lfw
 import os
 import sys
 import math
+from sklearn import metrics
+from scipy.optimize import brentq
+from scipy import interpolate
 
 def main(args):
   
@@ -53,6 +56,7 @@ def main(args):
             # Load the model
             print('Model directory: %s' % args.model_dir)
             meta_file, ckpt_file = facenet.get_model_filenames(os.path.expanduser(args.model_dir))
+            
             print('Metagraph file: %s' % meta_file)
             print('Checkpoint file: %s' % ckpt_file)
             facenet.load_model(args.model_dir, meta_file, ckpt_file)
@@ -60,6 +64,7 @@ def main(args):
             # Get input and output tensors
             images_placeholder = tf.get_default_graph().get_tensor_by_name("input:0")
             embeddings = tf.get_default_graph().get_tensor_by_name("embeddings:0")
+            phase_train_placeholder = tf.get_default_graph().get_tensor_by_name("phase_train:0")
             
             image_size = images_placeholder.get_shape()[1]
             embedding_size = embeddings.get_shape()[1]
@@ -75,16 +80,19 @@ def main(args):
                 end_index = min((i+1)*batch_size, nrof_images)
                 paths_batch = paths[start_index:end_index]
                 images = facenet.load_data(paths_batch, False, False, image_size)
-                feed_dict = { images_placeholder:images }
+                feed_dict = { images_placeholder:images, phase_train_placeholder:False }
                 emb_array[start_index:end_index,:] = sess.run(embeddings, feed_dict=feed_dict)
         
             tpr, fpr, accuracy, val, val_std, far = lfw.evaluate(emb_array, 
-                args.seed, actual_issame, nrof_folds=args.lfw_nrof_folds)
+                actual_issame, nrof_folds=args.lfw_nrof_folds)
 
             print('Accuracy: %1.3f+-%1.3f' % (np.mean(accuracy), np.std(accuracy)))
             print('Validation rate: %2.5f+-%2.5f @ FAR=%2.5f' % (val, val_std, far))
-            
-            facenet.plot_roc(fpr, tpr, 'NN4')
+
+            auc = metrics.auc(fpr, tpr)
+            print('Area Under Curve (AUC): %1.3f' % auc)
+            eer = brentq(lambda x: 1. - x - interpolate.interp1d(fpr, tpr)(x), 0., 1.)
+            print('Equal Error Rate (EER): %1.3f' % eer)
             
 def parse_arguments(argv):
     parser = argparse.ArgumentParser()
@@ -96,13 +104,11 @@ def parse_arguments(argv):
     parser.add_argument('model_dir', type=str, 
         help='Directory containing the metagraph (.meta) file and the checkpoint (ckpt) file containing model parameters')
     parser.add_argument('--lfw_pairs', type=str,
-        help='The file containing the pairs to use for validation.', default='../data/pairs.txt')
+        help='The file containing the pairs to use for validation.', default='data/pairs.txt')
     parser.add_argument('--lfw_file_ext', type=str,
         help='The file extension for the LFW dataset.', default='png', choices=['jpg', 'png'])
     parser.add_argument('--lfw_nrof_folds', type=int,
         help='Number of folds to use for cross validation. Mainly used for testing.', default=10)
-    parser.add_argument('--seed', type=int,
-        help='Random seed.', default=666)
     return parser.parse_args(argv)
 
 if __name__ == '__main__':
