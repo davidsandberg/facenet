@@ -49,7 +49,7 @@ def main(args):
         nrof_images = len(image_list)
         image_indices = range(nrof_images)
 
-        image_batch, label_batch = facenet.read_and_augument_data(image_list, image_indices, args.image_size, args.batch_size, None, 
+        image_batch, label_batch = facenet.read_and_augment_data(image_list, image_indices, args.image_size, args.batch_size, None, 
             False, False, False, nrof_preprocess_threads=4, shuffle=False)
         prelogits, _ = network.inference(image_batch, 1.0, 
             phase_train=False, weight_decay=0.0, reuse=False)

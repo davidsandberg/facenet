@@ -117,7 +117,7 @@ def random_rotate_image(image):
     angle = np.random.uniform(low=-10.0, high=10.0)
     return misc.imrotate(image, angle, 'bicubic')
   
-def read_and_augument_data(image_list, label_list, image_size, batch_size, max_nrof_epochs, 
+def read_and_augment_data(image_list, label_list, image_size, batch_size, max_nrof_epochs, 
         random_crop, random_flip, random_rotate, nrof_preprocess_threads, shuffle=True):
     
     images = ops.convert_to_tensor(image_list, dtype=tf.string)
