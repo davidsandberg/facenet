@@ -69,8 +69,8 @@ def main(args):
             output_node_names = 'embeddings'
             whitelist_names = []
             for node in gd.node:
-                if node.name.startswith('InceptionResnetV1') or node.name.startswith('embeddings') or node.name.startswith('phase_train') or node.name.startswith('Bottleneck'):
-                    print(node.name)
+                if (node.name.startswith('InceptionResnetV1') or node.name.startswith('embeddings') or 
+                        node.name.startswith('phase_train') or node.name.startswith('Bottleneck')):
                     whitelist_names.append(node.name)
 
             # Replace all the variables in the graph with constants of the same values
@@ -81,7 +81,7 @@ def main(args):
         # Serialize and dump the output graph to the filesystem
         with tf.gfile.GFile(args.output_file, 'wb') as f:
             f.write(output_graph_def.SerializeToString())
-        print("%d ops in the final graph." % len(output_graph_def.node))
+        print("%d ops in the final graph: %s" % (len(output_graph_def.node), args.output_file))
   
 def parse_arguments(argv):
     parser = argparse.ArgumentParser()
