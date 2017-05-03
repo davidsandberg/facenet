@@ -1,7 +1,4 @@
-"""Validate a face recognizer on the "Labeled Faces in the Wild" dataset (http://vis-www.cs.umass.edu/lfw/).
-Embeddings are calculated using the pairs from http://vis-www.cs.umass.edu/lfw/pairs.txt and the ROC curve
-is calculated and plotted. Both the model metagraph and the model parameters need to exist
-in the same directory, and the metagraph should have the extension '.meta'.
+"""An example of how to use your own dataset to train a classifier that recognizes people.
 """
 # MIT License
 # 
@@ -33,6 +30,7 @@ import tensorflow as tf
 import numpy as np
 import argparse
 import facenet
+import os
 import sys
 import math
 import time
@@ -54,18 +52,28 @@ def main(args):
             else:
                 train_set = facenet.get_dataset(args.data_dir)
                 test_set = facenet.get_dataset(args.test_data_dir)
+
+            # Check that there are at least one training image per class
+            for cls in train_set:
+                assert(len(cls.image_paths)>0, 'There must be at least one image for each class in the training set')            
+            for cls in test_set:
+                assert(len(cls.image_paths)>0, 'There must be at least one image for each class in the test set')            
+
+            # Check that the classes are the same in the two sets
+            class_names = [ cls.name for cls in train_set]
+            test_class_names = [ cls.name for cls in test_set]
+            assert(test_class_names==class_names, 'Classes used for training and testing must be identical')
                  
             train_images, train_labels = facenet.get_image_paths_and_labels(train_set)
             test_images, test_labels = facenet.get_image_paths_and_labels(test_set)
             nrof_classes = len(train_set)
-            assert len(test_set)==nrof_classes
             
             print('Number of classes: %d' % len(train_set))
             print('Number of train images: %d' % len(train_images))
             print('Number of test images: %d' % len(test_images))
             
             # Load the model
-            facenet.load_model(args.model_dir)
+            facenet.load_model(args.model)
             
             # Get input and output tensors
             images_placeholder = tf.get_default_graph().get_tensor_by_name("input:0")
@@ -126,14 +134,25 @@ def main(args):
 
             validate_every_n_epochs = 10
             for epoch in range(args.max_nrof_epochs):
+                # Run training for one epoch 
                 train_or_test_epoch(sess, total_loss, regularization_losses, embeddings, labels, predictions, train_op, learning_rate_placeholder, 
                     epoch, emb_array_train, np.array(train_labels), args.batch_size, 0.01, True, True)
                 if epoch % validate_every_n_epochs == 0 or epoch==args.max_nrof_epochs-1:
+                    # Test the classifier
                     accuracy = train_or_test_epoch(sess, total_loss, regularization_losses, embeddings, labels, predictions, None, learning_rate_placeholder, 
                         epoch, emb_array_test, np.array(test_labels), args.batch_size, 0.0, False, True)
                     print('Test accuracy: %.3f' % accuracy)
-                            
-
+                    
+            if args.output_filename:
+                # Freeze and store model
+                import freeze_graph
+                print('Freezing and storing model')
+                output_graph_def = freeze_graph.freeze_graph_def(sess, tf.get_default_graph().as_graph_def(), 'predictions')
+                with tf.gfile.GFile(os.path.expanduser(args.output_filename), 'wb') as f:
+                    f.write(output_graph_def.SerializeToString())
+                print('Stored model to file "%s"' % args.output_filename)
+                
+            
 def train_or_test_epoch(sess, total_loss, regularization_losses, embeddings, labels, predictions, train_op, learning_rate_placeholder, 
         epoch, emb_array, labels_array, batch_size, learning_rate, is_training, print_results):
     nrof_images = len(labels_array)
@@ -159,11 +178,11 @@ def train_or_test_epoch(sess, total_loss, regularization_losses, embeddings, lab
     return np.mean(correct_predictions)
   
 def split_dataset(dataset, min_nrof_images_per_class, nrof_train_images_per_class):
-    # Remove classes with less than min_nrof_images_per_class
     train_set = []
     test_set = []
     for cls in dataset:
         paths = cls.image_paths
+        # Remove classes with less than min_nrof_images_per_class
         if len(paths)>=min_nrof_images_per_class:
             np.random.shuffle(paths)
             train_set.append(facenet.ImageClass(cls.name, paths[:nrof_train_images_per_class]))
@@ -176,10 +195,13 @@ def parse_arguments(argv):
     
     parser.add_argument('data_dir', type=str,
         help='Path to the data directory containing aligned LFW face patches.')
+    parser.add_argument('model', type=str, 
+        help='Could be either a directory containing the meta_file and ckpt_file or a model protobuf (.pb) file')
     parser.add_argument('--use_split_dataset', 
-        help='', action='store_true')
-    parser.add_argument('model_dir', type=str, 
-        help='Directory containing the metagraph (.meta) file and the checkpoint (ckpt) file containing model parameters')
+        help='Indicates that the dataset specified by data_dir should be split into a training and test set. ' +  
+        'Otherwise a separate test set can be specified using the test_data_dir option.', action='store_true')
+    parser.add_argument('--test_data_dir', type=str,
+        help='Path to the test data directory containing aligned images used for testing.')
     parser.add_argument('--weight_decay', type=float,
         help='L2 weight regularization.', default=0.0)
     parser.add_argument('--optimizer', type=str, choices=['ADAGRAD', 'ADADELTA', 'ADAM', 'RMSPROP', 'MOM'],
@@ -205,6 +227,8 @@ def parse_arguments(argv):
         help='Only include classes with at least this number of images in the dataset', default=20)
     parser.add_argument('--nrof_train_images_per_class', type=int,
         help='Use this number of images from each class for training and the rest for testing', default=10)
+    parser.add_argument('--output_filename', 
+        help='Store model as a protobuf with the given filename when training is finished.')
     
     return parser.parse_args(argv)
 
