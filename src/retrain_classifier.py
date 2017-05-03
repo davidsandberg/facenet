@@ -79,10 +79,10 @@ def main(args):
             images_placeholder = tf.get_default_graph().get_tensor_by_name("input:0")
             embeddings = tf.get_default_graph().get_tensor_by_name("embeddings:0")
             phase_train_placeholder = tf.get_default_graph().get_tensor_by_name("phase_train:0")
-        
             embedding_size = embeddings.get_shape()[1]
-        
+            
             # Run forward pass to calculate embeddings
+            embeddings_dict = {}
             for phase, paths in [['train', train_images], ['test', test_images]]:
                 print('Runnning forward pass on %s images' % phase)
                 nrof_images = len(paths)
@@ -95,13 +95,8 @@ def main(args):
                     images = facenet.load_data(paths_batch, False, False, args.image_size)
                     feed_dict = { images_placeholder:images, phase_train_placeholder:False }
                     emb_array[start_index:end_index,:] = sess.run(embeddings, feed_dict=feed_dict)
-                
-                embeddings_filename = 'embeddings_%s.npy' % phase
-                print('Saving %s' % embeddings_filename)
-                np.save(embeddings_filename, emb_array)
+                embeddings_dict[phase] = emb_array
                     
-            emb_array_train = np.load('embeddings_train.npy')
-            emb_array_test = np.load('embeddings_test.npy')
             labels = tf.placeholder(tf.int32, [None], 'labels')
             learning_rate_placeholder = tf.placeholder(tf.float32, name='learning_rate')
             logits = slim.fully_connected(embeddings, nrof_classes, activation_fn=None, 
@@ -136,11 +131,11 @@ def main(args):
             for epoch in range(args.max_nrof_epochs):
                 # Run training for one epoch 
                 train_or_test_epoch(sess, total_loss, regularization_losses, embeddings, labels, predictions, train_op, learning_rate_placeholder, 
-                    epoch, emb_array_train, np.array(train_labels), args.batch_size, 0.01, True, True)
+                    epoch, embeddings_dict['train'], np.array(train_labels), args.batch_size, 0.01, True, True)
                 if epoch % validate_every_n_epochs == 0 or epoch==args.max_nrof_epochs-1:
                     # Test the classifier
                     accuracy = train_or_test_epoch(sess, total_loss, regularization_losses, embeddings, labels, predictions, None, learning_rate_placeholder, 
-                        epoch, emb_array_test, np.array(test_labels), args.batch_size, 0.0, False, True)
+                        epoch, embeddings_dict['test'], np.array(test_labels), args.batch_size, 0.0, False, True)
                     print('Test accuracy: %.3f' % accuracy)
                     
             if args.output_filename:
