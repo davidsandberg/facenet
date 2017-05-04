@@ -34,7 +34,8 @@ import os
 import sys
 import math
 import time
-import tensorflow.contrib.slim as slim
+import pickle
+from sklearn.svm import SVC
 
 def main(args):
   
@@ -43,8 +44,6 @@ def main(args):
         with tf.Session() as sess:
             
             np.random.seed(seed=args.seed)
-            tf.set_random_seed(args.seed)
-            global_step = tf.Variable(0, trainable=False)
             
             if args.use_split_dataset:
                 dataset = facenet.get_dataset(args.data_dir)
@@ -60,13 +59,12 @@ def main(args):
                 assert(len(cls.image_paths)>0, 'There must be at least one image for each class in the test set')            
 
             # Check that the classes are the same in the two sets
-            class_names = [ cls.name for cls in train_set]
-            test_class_names = [ cls.name for cls in test_set]
+            class_names = [ cls.name.replace('_', ' ') for cls in train_set]
+            test_class_names = [ cls.name.replace('_', ' ') for cls in test_set]
             assert(test_class_names==class_names, 'Classes used for training and testing must be identical')
                  
             train_images, train_labels = facenet.get_image_paths_and_labels(train_set)
             test_images, test_labels = facenet.get_image_paths_and_labels(test_set)
-            nrof_classes = len(train_set)
             
             print('Number of classes: %d' % len(train_set))
             print('Number of train images: %d' % len(train_images))
@@ -96,56 +94,28 @@ def main(args):
                     feed_dict = { images_placeholder:images, phase_train_placeholder:False }
                     emb_array[start_index:end_index,:] = sess.run(embeddings, feed_dict=feed_dict)
                 embeddings_dict[phase] = emb_array
-                    
-            labels = tf.placeholder(tf.int32, [None], 'labels')
-            learning_rate_placeholder = tf.placeholder(tf.float32, name='learning_rate')
-            logits = slim.fully_connected(embeddings, nrof_classes, activation_fn=None, 
-                    weights_initializer=tf.truncated_normal_initializer(stddev=0.1), 
-                    weights_regularizer=slim.l2_regularizer(args.weight_decay),
-                    scope='Logits', reuse=False)
+                
+            print('Training classifier')
+            model = SVC(kernel='linear', probability=True)
+            model.fit(embeddings_dict['train'], train_labels)
             
-            nrof_batches_per_epoch_train = int(math.ceil(1.0*len(train_labels) / args.batch_size))
-            learning_rate = tf.train.exponential_decay(learning_rate_placeholder, global_step,
-                args.learning_rate_decay_epochs*nrof_batches_per_epoch_train, args.learning_rate_decay_factor, staircase=True)
-            tf.summary.scalar('learning_rate', learning_rate)
-    
-            # Calculate the average cross entropy loss across the batch
-            cross_entropy = tf.nn.sparse_softmax_cross_entropy_with_logits(
-                labels=labels, logits=logits, name='cross_entropy_per_example')
-            cross_entropy_mean = tf.reduce_mean(cross_entropy, name='cross_entropy')
-            tf.add_to_collection('losses', cross_entropy_mean)
-            predictions = tf.nn.softmax(logits, name='predictions')
+            predictions = model.predict_proba(embeddings_dict['test'])
+            best_class_indices = np.argmax(predictions, axis=1)
             
-            # Calculate the total losses
-            regularization_losses = tf.get_collection(tf.GraphKeys.REGULARIZATION_LOSSES)
-            total_loss = tf.add_n([cross_entropy_mean] + regularization_losses, name='total_loss')
-    
-            # Build a Graph that trains the model with one batch of examples and updates the model parameters
-            train_op = facenet.train(total_loss, global_step, args.optimizer, 
-                learning_rate, args.moving_average_decay, tf.global_variables(), False)
+            pred_prob = predictions[np.arange(len(best_class_indices)), best_class_indices]
             
-            sess.run(tf.global_variables_initializer())
-            sess.run(tf.local_variables_initializer())
-
-            validate_every_n_epochs = 10
-            for epoch in range(args.max_nrof_epochs):
-                # Run training for one epoch 
-                train_or_test_epoch(sess, total_loss, regularization_losses, embeddings, labels, predictions, train_op, learning_rate_placeholder, 
-                    epoch, embeddings_dict['train'], np.array(train_labels), args.batch_size, 0.01, True, True)
-                if epoch % validate_every_n_epochs == 0 or epoch==args.max_nrof_epochs-1:
-                    # Test the classifier
-                    accuracy = train_or_test_epoch(sess, total_loss, regularization_losses, embeddings, labels, predictions, None, learning_rate_placeholder, 
-                        epoch, embeddings_dict['test'], np.array(test_labels), args.batch_size, 0.0, False, True)
-                    print('Test accuracy: %.3f' % accuracy)
-                    
-            if args.output_filename:
-                # Freeze and store model
-                import freeze_graph
-                print('Freezing and storing model')
-                output_graph_def = freeze_graph.freeze_graph_def(sess, tf.get_default_graph().as_graph_def(), 'predictions')
-                with tf.gfile.GFile(os.path.expanduser(args.output_filename), 'wb') as f:
-                    f.write(output_graph_def.SerializeToString())
-                print('Stored model to file "%s"' % args.output_filename)
+            for i in range(len(best_class_indices)):
+                print('%3d  %s: %.3f' % (i, class_names[best_class_indices[i]], pred_prob[i]))
+                
+            accuracy = np.mean(np.equal(best_class_indices, test_labels))
+            print('Accuracy: %.3f' % accuracy)
+            
+            if args.classifier_filename:
+                classifier_filename_exp = os.path.expanduser(args.classifier_filename)
+                # Saving classifier model
+                with open(classifier_filename_exp, 'wb') as output:
+                    pickle.dump(model, output)
+                print('Saved model to file "%s"' % args.classifier_filename)
                 
             
 def train_or_test_epoch(sess, total_loss, regularization_losses, embeddings, labels, predictions, train_op, learning_rate_placeholder, 
@@ -192,6 +162,9 @@ def parse_arguments(argv):
         help='Path to the data directory containing aligned LFW face patches.')
     parser.add_argument('model', type=str, 
         help='Could be either a directory containing the meta_file and ckpt_file or a model protobuf (.pb) file')
+    parser.add_argument('--classifier_filename', 
+        help='Classifier model file name as a pickle (.pkl) file. ' + 
+        'For training this is the output and for classification this is an input.')
     parser.add_argument('--use_split_dataset', 
         help='Indicates that the dataset specified by data_dir should be split into a training and test set. ' +  
         'Otherwise a separate test set can be specified using the test_data_dir option.', action='store_true')
@@ -222,8 +195,6 @@ def parse_arguments(argv):
         help='Only include classes with at least this number of images in the dataset', default=20)
     parser.add_argument('--nrof_train_images_per_class', type=int,
         help='Use this number of images from each class for training and the rest for testing', default=10)
-    parser.add_argument('--output_filename', 
-        help='Store model as a protobuf with the given filename when training is finished.')
     
     return parser.parse_args(argv)
 
