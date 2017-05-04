@@ -33,7 +33,6 @@ import facenet
 import os
 import sys
 import math
-import time
 import pickle
 from sklearn.svm import SVC
 
@@ -94,18 +93,19 @@ def main(args):
                     feed_dict = { images_placeholder:images, phase_train_placeholder:False }
                     emb_array[start_index:end_index,:] = sess.run(embeddings, feed_dict=feed_dict)
                 embeddings_dict[phase] = emb_array
-                
+            
+            # Train classifier    
             print('Training classifier')
             model = SVC(kernel='linear', probability=True)
             model.fit(embeddings_dict['train'], train_labels)
             
+            # Test classifier
             predictions = model.predict_proba(embeddings_dict['test'])
             best_class_indices = np.argmax(predictions, axis=1)
-            
-            pred_prob = predictions[np.arange(len(best_class_indices)), best_class_indices]
+            best_class_probabilities = predictions[np.arange(len(best_class_indices)), best_class_indices]
             
             for i in range(len(best_class_indices)):
-                print('%3d  %s: %.3f' % (i, class_names[best_class_indices[i]], pred_prob[i]))
+                print('%3d  %s: %.3f' % (i, class_names[best_class_indices[i]], best_class_probabilities[i]))
                 
             accuracy = np.mean(np.equal(best_class_indices, test_labels))
             print('Accuracy: %.3f' % accuracy)
@@ -115,33 +115,9 @@ def main(args):
                 # Saving classifier model
                 with open(classifier_filename_exp, 'wb') as output:
                     pickle.dump(model, output)
-                print('Saved model to file "%s"' % args.classifier_filename)
+                print('Saved model to file "%s"' % classifier_filename_exp)
                 
             
-def train_or_test_epoch(sess, total_loss, regularization_losses, embeddings, labels, predictions, train_op, learning_rate_placeholder, 
-        epoch, emb_array, labels_array, batch_size, learning_rate, is_training, print_results):
-    nrof_images = len(labels_array)
-    nrof_batches_per_epoch = int(math.ceil(1.0*nrof_images / batch_size))
-    phase_string = ['Test ', 'Train']
-    correct_predictions = np.zeros([nrof_images])
-    for i in range(nrof_batches_per_epoch):
-        start_time = time.time()
-        start_index = i*batch_size
-        end_index = min((i+1)*batch_size, nrof_images)
-        embeddings_batch = emb_array[start_index:end_index,:]
-        labels_batch = labels_array[start_index:end_index]
-        feed_dict = {embeddings: embeddings_batch, labels: labels_batch, learning_rate_placeholder: learning_rate}
-        if is_training:
-            loss, reg_loss, pred, _ = sess.run([total_loss, regularization_losses, predictions, train_op], feed_dict=feed_dict)
-        else:
-            loss, reg_loss, pred = sess.run([total_loss, regularization_losses, predictions], feed_dict=feed_dict)
-        correct_predictions[start_index:end_index] = np.equal(np.argmax(pred, axis=1), np.array(labels_batch))
-        duration = time.time() - start_time
-        if print_results:
-            print('%5s Epoch: [%d][%d]\tTime %.3f\tLoss %2.3f\tRegLoss %2.3f\tAccuracy %.3f' %
-                  (phase_string[is_training], epoch, i, duration, loss, np.sum(reg_loss), np.mean(correct_predictions[:end_index])))
-    return np.mean(correct_predictions)
-  
 def split_dataset(dataset, min_nrof_images_per_class, nrof_train_images_per_class):
     train_set = []
     test_set = []
