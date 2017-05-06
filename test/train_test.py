@@ -27,8 +27,8 @@ import cv2
 import os
 import shutil
 import tensorflow as tf
-import facenet_train
-import facenet_train_classifier
+import train_tripletloss
+import train_softmax
 import validate_on_lfw
 import compare
 import download_and_extract_model
@@ -85,8 +85,8 @@ class TrainTest(unittest.TestCase):
                 '--lfw_pairs', self.lfw_pairs_file,
                 '--lfw_dir', self.dataset_dir,
                 '--lfw_nrof_folds', '2' ]
-        args = facenet_train.parse_arguments(argv)
-        model_dir = facenet_train.main(args)
+        args = train_tripletloss.parse_arguments(argv)
+        model_dir = train_tripletloss.main(args)
         
         
         model_file = os.path.join(model_dir, 'model.ckpt-1')
@@ -117,8 +117,8 @@ class TrainTest(unittest.TestCase):
                 '--lfw_batch_size', '1',
                 '--nrof_preprocess_threads', '1',
                 '--no_store_revision_info' ]
-        args = facenet_train_classifier.parse_arguments(argv)
-        facenet_train_classifier.main(args)
+        args = train_softmax.parse_arguments(argv)
+        train_softmax.main(args)
 
     def test_training_classifier_inception_resnet_v2(self):
         print('test_training_classifier_inception_resnet_v2')
@@ -135,8 +135,8 @@ class TrainTest(unittest.TestCase):
                 '--lfw_batch_size', '1',
                 '--nrof_preprocess_threads', '1',
                 '--no_store_revision_info' ]
-        args = facenet_train_classifier.parse_arguments(argv)
-        facenet_train_classifier.main(args)
+        args = train_softmax.parse_arguments(argv)
+        train_softmax.main(args)
  
     def test_train_tripletloss_inception_resnet_v1(self):
         print('test_train_tripletloss_inception_resnet_v1')
@@ -153,8 +153,8 @@ class TrainTest(unittest.TestCase):
                 '--lfw_dir', self.dataset_dir,
                 '--lfw_nrof_folds', '2',
                 '--no_store_revision_info' ]
-        args = facenet_train.parse_arguments(argv)
-        facenet_train.main(args)
+        args = train_tripletloss.parse_arguments(argv)
+        train_tripletloss.main(args)
  
     def test_finetune_tripletloss_inception_resnet_v1(self):
         print('test_finetune_tripletloss_inception_resnet_v1')
@@ -172,8 +172,8 @@ class TrainTest(unittest.TestCase):
                 '--lfw_dir', self.dataset_dir,
                 '--lfw_nrof_folds', '2',
                 '--no_store_revision_info' ]
-        args = facenet_train.parse_arguments(argv)
-        facenet_train.main(args)
+        args = train_tripletloss.parse_arguments(argv)
+        train_tripletloss.main(args)
  
     def test_compare(self):
         print('test_compare')

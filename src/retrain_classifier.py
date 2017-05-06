@@ -94,7 +94,7 @@ def main(args):
                     emb_array[start_index:end_index,:] = sess.run(embeddings, feed_dict=feed_dict)
                 embeddings_dict[phase] = emb_array
             
-            # Train classifier    
+            # Train classifier
             print('Training classifier')
             model = SVC(kernel='linear', probability=True)
             model.fit(embeddings_dict['train'], train_labels)
