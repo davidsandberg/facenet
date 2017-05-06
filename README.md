@@ -8,6 +8,7 @@ Currently this repo is compatible with Tensorflow r1.0.
 ## News
 | Date     | Update |
 |----------|--------|
+| 2017-05-06 | Added code to [train a classifier on your own images](https://github.com/davidsandberg/facenet/wiki/Train-a-classifier-on-own-images). Renamed facenet_train.py to train_tripletloss.py and facenet_train_classifier.py to train_softmax.py. |
 | 2017-03-02 | Added pretrained models that generate 128-dimensional embeddings.|
 | 2017-02-22 | Updated to Tensorflow r1.0. Added Continuous Integration using Travis-CI.|
 | 2017-02-03 | Added models where only trainable variables has been stored in the checkpoint. These are therefore significantly smaller. |
@@ -42,4 +43,4 @@ Currently, the best results are achieved by training the model as a classifier w
 Currently, the best performing model is an Inception-Resnet-v1 model trained on CASIA-Webface aligned with [MTCNN](https://github.com/davidsandberg/facenet/tree/master/src/align).
 
 ## Performance
-The accuracy on LFW for the model [20170216-091149](https://drive.google.com/open?id=0B5MzpY9kBtDVSkRSZjFBSDQtMzA) is 0.993+-0.004. A description of how to run the test can be found on the page [Validate on LFW](https://github.com/davidsandberg/facenet/wiki/Validate-on-lfw).
+The accuracy on LFW for the model [20170216-091149](https://drive.google.com/open?id=0B5MzpY9kBtDVTGZjcWkzT3pldDA) is 0.993+-0.004. A description of how to run the test can be found on the page [Validate on LFW](https://github.com/davidsandberg/facenet/wiki/Validate-on-lfw).
