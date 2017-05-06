@@ -27,13 +27,12 @@ import cv2
 import os
 import shutil
 import tensorflow as tf
-import facenet_train
-import facenet_train_classifier
+import train_tripletloss
+import train_softmax
 import validate_on_lfw
 import compare
-import visualize
-import test_invariance_on_lfw
 import download_and_extract_model
+import freeze_graph
 
 def memory_usage_psutil():
     # return the memory usage in MB
@@ -46,28 +45,34 @@ class TrainTest(unittest.TestCase):
   
     @classmethod
     def setUpClass(self):
+        print('setUpClass')
         self.tmp_dir = tempfile.mkdtemp()
         self.dataset_dir = os.path.join(self.tmp_dir, 'dataset')
-        create_mock_dataset(self.dataset_dir)
+        create_mock_dataset(self.dataset_dir, 160)
         self.lfw_pairs_file = create_mock_lfw_pairs(self.tmp_dir)
         print(self.lfw_pairs_file)
         self.pretrained_model_name = '20170216-091149'
         download_and_extract_model.download_and_extract_model(self.pretrained_model_name, 'data/')
         self.model_file = os.path.join('data', self.pretrained_model_name, 'model-%s.ckpt-250000' % self.pretrained_model_name)
+        self.pretrained_model = os.path.join('data', self.pretrained_model_name)
+        self.frozen_graph_filename = os.path.join('data', self.pretrained_model_name+'.pb')
         print('Memory utilization (SetUpClass): %.3f MB' % memory_usage_psutil())
 
         
     @classmethod
     def tearDownClass(self):
+        print('tearDownClass')
         # Recursively remove the temporary directory
         shutil.rmtree(self.tmp_dir)
         
     def tearDown(self):
+        print('tearDown')
         print('Memory utilization (TearDown): %.3f MB' % memory_usage_psutil())
 
 
     @unittest.skip("Skip this test case for now")
     def test_training_nn4(self):
+        print('test_training_nn4')
         argv = ['--logs_base_dir', self.tmp_dir,
                 '--models_base_dir', self.tmp_dir,
                 '--data_dir', self.dataset_dir,
@@ -80,8 +85,8 @@ class TrainTest(unittest.TestCase):
                 '--lfw_pairs', self.lfw_pairs_file,
                 '--lfw_dir', self.dataset_dir,
                 '--lfw_nrof_folds', '2' ]
-        args = facenet_train.parse_arguments(argv)
-        model_dir = facenet_train.main(args)
+        args = train_tripletloss.parse_arguments(argv)
+        model_dir = train_tripletloss.main(args)
         
         
         model_file = os.path.join(model_dir, 'model.ckpt-1')
@@ -97,13 +102,8 @@ class TrainTest(unittest.TestCase):
     # test_align_dataset_mtcnn
     # http://vis-www.cs.umass.edu/lfw/lfw-a.zip
     
-    # test_triplet_loss_training
-    
-    # test_freeze_graph
-    
-    # test_evaluate_on_lfw
-    
     def test_training_classifier_inception_resnet_v1(self):
+        print('test_training_classifier_inception_resnet_v1')
         argv = ['--logs_base_dir', self.tmp_dir,
                 '--models_base_dir', self.tmp_dir,
                 '--data_dir', self.dataset_dir,
@@ -117,10 +117,11 @@ class TrainTest(unittest.TestCase):
                 '--lfw_batch_size', '1',
                 '--nrof_preprocess_threads', '1',
                 '--no_store_revision_info' ]
-        args = facenet_train_classifier.parse_arguments(argv)
-        facenet_train_classifier.main(args)
+        args = train_softmax.parse_arguments(argv)
+        train_softmax.main(args)
 
     def test_training_classifier_inception_resnet_v2(self):
+        print('test_training_classifier_inception_resnet_v2')
         argv = ['--logs_base_dir', self.tmp_dir,
                 '--models_base_dir', self.tmp_dir,
                 '--data_dir', self.dataset_dir,
@@ -134,10 +135,11 @@ class TrainTest(unittest.TestCase):
                 '--lfw_batch_size', '1',
                 '--nrof_preprocess_threads', '1',
                 '--no_store_revision_info' ]
-        args = facenet_train_classifier.parse_arguments(argv)
-        facenet_train_classifier.main(args)
+        args = train_softmax.parse_arguments(argv)
+        train_softmax.main(args)
  
     def test_train_tripletloss_inception_resnet_v1(self):
+        print('test_train_tripletloss_inception_resnet_v1')
         argv = ['--logs_base_dir', self.tmp_dir,
                 '--models_base_dir', self.tmp_dir,
                 '--data_dir', self.dataset_dir,
@@ -151,10 +153,11 @@ class TrainTest(unittest.TestCase):
                 '--lfw_dir', self.dataset_dir,
                 '--lfw_nrof_folds', '2',
                 '--no_store_revision_info' ]
-        args = facenet_train.parse_arguments(argv)
-        facenet_train.main(args)
+        args = train_tripletloss.parse_arguments(argv)
+        train_tripletloss.main(args)
  
     def test_finetune_tripletloss_inception_resnet_v1(self):
+        print('test_finetune_tripletloss_inception_resnet_v1')
         argv = ['--logs_base_dir', self.tmp_dir,
                 '--models_base_dir', self.tmp_dir,
                 '--data_dir', self.dataset_dir,
@@ -169,39 +172,34 @@ class TrainTest(unittest.TestCase):
                 '--lfw_dir', self.dataset_dir,
                 '--lfw_nrof_folds', '2',
                 '--no_store_revision_info' ]
-        args = facenet_train.parse_arguments(argv)
-        facenet_train.main(args)
+        args = train_tripletloss.parse_arguments(argv)
+        train_tripletloss.main(args)
  
     def test_compare(self):
+        print('test_compare')
         argv = [os.path.join('data/', self.pretrained_model_name),
                 'data/images/Anthony_Hopkins_0001.jpg',
                 'data/images/Anthony_Hopkins_0002.jpg' ]
         args = compare.parse_arguments(argv)
         compare.main(args)
- 
-    @unittest.skip("Skip this test case for now")
-    def test_visualize(self):
-        model_dir = os.path.abspath('../data/model/20160620-173927')
-        create_checkpoint_file(model_dir, 'model.ckpt-500000')
-        argv = [model_dir, 
-                '--model_def', 'models.nn4' ]
-        args = visualize.parse_arguments(argv)
-        visualize.main(args)
- 
-    @unittest.skip("Skip this test case for now")
-    def test_test_invariance_on_lfw(self):
-        model_dir = os.path.abspath('../data/model/20160620-173927')
-        model_file = os.path.join(model_dir, 'model.ckpt-500000')
-        argv = ['--model_file', model_file,
+        
+    def test_validate_on_lfw(self):
+        print('test_validate_on_lfw')
+        argv = [self.dataset_dir,
+                self.pretrained_model,
                 '--lfw_pairs', self.lfw_pairs_file,
-                '--lfw_dir', self.dataset_dir,
                 '--lfw_nrof_folds', '2',
-                '--orig_image_size', '96',
-                '--nrof_offsets', '1',
-                '--nrof_angles', '1',
-                '--nrof_scales', '1' ]
-        args = test_invariance_on_lfw.parse_arguments(argv)
-        test_invariance_on_lfw.main(args)
+                '--lfw_batch_size', '6']
+        args = validate_on_lfw.parse_arguments(argv)
+        validate_on_lfw.main(args)
+
+    @unittest.skip("This test case results in a memory leak")
+    def test_freeze_graph(self):
+        print('test_freeze_graph')
+        argv = [ self.pretrained_model,
+                 self.frozen_graph_filename ]
+        args = freeze_graph.parse_arguments(argv)
+        freeze_graph.main(args)
 
 # Create a checkpoint file pointing to the model
 def create_checkpoint_file(model_dir, model_file):
@@ -212,7 +210,7 @@ def create_checkpoint_file(model_dir, model_file):
         f.write('all_model_checkpoint_paths: "%s"\n' % full_model_filename)
         
 # Create a mock dataset with random pixel images
-def create_mock_dataset(dataset_dir):
+def create_mock_dataset(dataset_dir, image_size):
    
     nrof_persons = 3
     nrof_images_per_person = 2
@@ -225,7 +223,7 @@ def create_mock_dataset(dataset_dir):
         for j in range(nrof_images_per_person):
             img_name = '%04d' % (j+1)
             img_path = os.path.join(class_dir, class_name+'_'+img_name + '.png')
-            img = np.random.uniform(low=0.0, high=255.0, size=(96,96,3))
+            img = np.random.uniform(low=0.0, high=255.0, size=(image_size,image_size,3))
             cv2.imwrite(img_path, img) #@UndefinedVariable
 
 # Create a mock LFW pairs file

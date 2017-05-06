@@ -54,19 +54,15 @@ def main(args):
             paths, actual_issame = lfw.get_paths(os.path.expanduser(args.lfw_dir), pairs, args.lfw_file_ext)
 
             # Load the model
-            print('Model directory: %s' % args.model_dir)
-            meta_file, ckpt_file = facenet.get_model_filenames(os.path.expanduser(args.model_dir))
-            
-            print('Metagraph file: %s' % meta_file)
-            print('Checkpoint file: %s' % ckpt_file)
-            facenet.load_model(args.model_dir, meta_file, ckpt_file)
+            facenet.load_model(args.model)
             
             # Get input and output tensors
             images_placeholder = tf.get_default_graph().get_tensor_by_name("input:0")
             embeddings = tf.get_default_graph().get_tensor_by_name("embeddings:0")
             phase_train_placeholder = tf.get_default_graph().get_tensor_by_name("phase_train:0")
             
-            image_size = images_placeholder.get_shape()[1]
+            #image_size = images_placeholder.get_shape()[1]  # For some reason this doesn't work for frozen graphs
+            image_size = args.image_size
             embedding_size = embeddings.get_shape()[1]
         
             # Run forward pass to calculate embeddings
@@ -101,8 +97,10 @@ def parse_arguments(argv):
         help='Path to the data directory containing aligned LFW face patches.')
     parser.add_argument('--lfw_batch_size', type=int,
         help='Number of images to process in a batch in the LFW test set.', default=100)
-    parser.add_argument('model_dir', type=str, 
-        help='Directory containing the metagraph (.meta) file and the checkpoint (ckpt) file containing model parameters')
+    parser.add_argument('model', type=str, 
+        help='Could be either a directory containing the meta_file and ckpt_file or a model protobuf (.pb) file')
+    parser.add_argument('--image_size', type=int,
+        help='Image size (height, width) in pixels.', default=160)
     parser.add_argument('--lfw_pairs', type=str,
         help='The file containing the pairs to use for validation.', default='data/pairs.txt')
     parser.add_argument('--lfw_file_ext', type=str,

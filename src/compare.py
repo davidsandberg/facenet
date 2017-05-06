@@ -1,4 +1,4 @@
-"""Performs face alignment and calculates L2 distance between the embeddings of two images."""
+"""Performs face alignment and calculates L2 distance between the embeddings of images."""
 
 # MIT License
 # 
@@ -43,11 +43,7 @@ def main(args):
         with tf.Session() as sess:
       
             # Load the model
-            print('Model directory: %s' % args.model_dir)
-            meta_file, ckpt_file = facenet.get_model_filenames(os.path.expanduser(args.model_dir))
-            print('Metagraph file: %s' % meta_file)
-            print('Checkpoint file: %s' % ckpt_file)
-            facenet.load_model(args.model_dir, meta_file, ckpt_file)
+            facenet.load_model(args.model)
     
             # Get input and output tensors
             images_placeholder = tf.get_default_graph().get_tensor_by_name("input:0")
@@ -114,8 +110,8 @@ def load_and_align_data(image_paths, image_size, margin, gpu_memory_fraction):
 def parse_arguments(argv):
     parser = argparse.ArgumentParser()
     
-    parser.add_argument('model_dir', type=str, 
-        help='Directory containing the meta_file and ckpt_file')
+    parser.add_argument('model', type=str, 
+        help='Could be either a directory containing the meta_file and ckpt_file or a model protobuf (.pb) file')
     parser.add_argument('image_files', type=str, nargs='+', help='Images to compare')
     parser.add_argument('--image_size', type=int,
         help='Image size (height, width) in pixels.', default=160)
