@@ -146,25 +146,10 @@ def parse_arguments(argv):
         'Otherwise a separate test set can be specified using the test_data_dir option.', action='store_true')
     parser.add_argument('--test_data_dir', type=str,
         help='Path to the test data directory containing aligned images used for testing.')
-    parser.add_argument('--weight_decay', type=float,
-        help='L2 weight regularization.', default=0.0)
-    parser.add_argument('--optimizer', type=str, choices=['ADAGRAD', 'ADADELTA', 'ADAM', 'RMSPROP', 'MOM'],
-        help='The optimization algorithm to use', default='ADAGRAD')
-    parser.add_argument('--max_nrof_epochs', type=int,
-        help='Number of epochs to run.', default=1000)
     parser.add_argument('--batch_size', type=int,
         help='Number of images to process in a batch.', default=90)
     parser.add_argument('--image_size', type=int,
         help='Image size (height, width) in pixels.', default=160)
-    parser.add_argument('--learning_rate', type=float,
-        help='Initial learning rate. If set to a negative value a learning rate ' +
-        'schedule can be specified in the file "learning_rate_schedule.txt"', default=0.1)
-    parser.add_argument('--learning_rate_decay_epochs', type=int,
-        help='Number of epochs between learning rate decay.', default=1000)
-    parser.add_argument('--learning_rate_decay_factor', type=float,
-        help='Learning rate decay factor.', default=1.0)
-    parser.add_argument('--moving_average_decay', type=float,
-        help='Exponential decay for tracking of training parameters.', default=0.9999)
     parser.add_argument('--seed', type=int,
         help='Random seed.', default=666)
     parser.add_argument('--min_nrof_images_per_class', type=int,
