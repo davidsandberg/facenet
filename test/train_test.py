@@ -138,6 +138,7 @@ class TrainTest(unittest.TestCase):
         args = train_tripletloss.parse_arguments(argv)
         train_tripletloss.main(args)
  
+    @unittest.skip("Skip this until there is a new pretrained model or the test case is rewritten")
     def test_finetune_tripletloss_inception_resnet_v1(self):
         print('test_finetune_tripletloss_inception_resnet_v1')
         argv = ['--logs_base_dir', self.tmp_dir,
