@@ -88,7 +88,8 @@ def block8(net, scale=1.0, activation_fn=tf.nn.relu, scope=None, reuse=None):
             net = activation_fn(net)
     return net
   
-def inference(images, keep_probability, phase_train=True, weight_decay=0.0, reuse=None):
+def inference(images, keep_probability, phase_train=True, 
+              bottleneck_layer_size=128, weight_decay=0.0, reuse=None):
     batch_norm_params = {
         # Decay for the moving averages.
         'decay': 0.995,
@@ -105,11 +106,12 @@ def inference(images, keep_probability, phase_train=True, weight_decay=0.0, reus
                         normalizer_fn=slim.batch_norm,
                         normalizer_params=batch_norm_params):
         return inception_resnet_v2(images, is_training=phase_train,
-              dropout_keep_prob=keep_probability, reuse=reuse)
+              dropout_keep_prob=keep_probability, bottleneck_layer_size=bottleneck_layer_size, reuse=reuse)
 
 
 def inception_resnet_v2(inputs, is_training=True,
                         dropout_keep_prob=0.8,
+                        bottleneck_layer_size=128,
                         reuse=None,
                         scope='InceptionResnetV2'):
     """Creates the Inception Resnet V2 model.
@@ -246,5 +248,8 @@ def inception_resnet_v2(inputs, is_training=True,
                                        scope='Dropout')
           
                     end_points['PreLogitsFlatten'] = net
+                
+                net = slim.fully_connected(net, bottleneck_layer_size, activation_fn=None, 
+                        scope='Bottleneck', reuse=False)
   
     return net, end_points

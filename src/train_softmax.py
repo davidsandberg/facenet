@@ -57,9 +57,8 @@ def main(args):
         os.makedirs(model_dir)
 
     # Store some git revision info in a text file in the log directory
-    if not args.no_store_revision_info:
-        src_path,_ = os.path.split(os.path.realpath(__file__))
-        facenet.store_revision_info(src_path, log_dir, ' '.join(sys.argv))
+    src_path,_ = os.path.split(os.path.realpath(__file__))
+    facenet.store_revision_info(src_path, log_dir, ' '.join(sys.argv))
 
     np.random.seed(seed=args.seed)
     random.seed(args.seed)
@@ -151,33 +150,15 @@ def main(args):
         
         print('Building training graph')
         
-        batch_norm_params = {
-            # Decay for the moving averages
-            'decay': 0.995,
-            # epsilon to prevent 0s in variance
-            'epsilon': 0.001,
-            # force in-place updates of mean and variance estimates
-            'updates_collections': None,
-            # Moving averages ends up in the trainable variables collection
-            'variables_collections': [ tf.GraphKeys.TRAINABLE_VARIABLES ],
-            # Only update statistics during training mode
-            'is_training': phase_train_placeholder
-        }
         # Build the inference graph
         prelogits, _ = network.inference(image_batch, args.keep_probability, 
             phase_train=phase_train_placeholder, weight_decay=args.weight_decay)
-        bottleneck = slim.fully_connected(prelogits, args.embedding_size, activation_fn=None, 
-                weights_initializer=tf.truncated_normal_initializer(stddev=0.1), 
-                weights_regularizer=slim.l2_regularizer(args.weight_decay),
-                normalizer_fn=slim.batch_norm,
-                normalizer_params=batch_norm_params,
-                scope='Bottleneck', reuse=False)
-        logits = slim.fully_connected(bottleneck, len(train_set), activation_fn=None, 
+        logits = slim.fully_connected(prelogits, len(train_set), activation_fn=None, 
                 weights_initializer=tf.truncated_normal_initializer(stddev=0.1), 
                 weights_regularizer=slim.l2_regularizer(args.weight_decay),
                 scope='Logits', reuse=False)
 
-        embeddings = tf.nn.l2_normalize(bottleneck, 1, 1e-10, name='embeddings')
+        embeddings = tf.nn.l2_normalize(prelogits, 1, 1e-10, name='embeddings')
 
         # Add center loss
         if args.center_loss_factor>0.0:
@@ -446,8 +427,6 @@ def parse_arguments(argv):
         help='Keep only the percentile images closed to its class center', default=100.0)
     parser.add_argument('--filter_min_nrof_images_per_class', type=int,
         help='Keep only the classes with this number of examples or more', default=0)
-    parser.add_argument('--no_store_revision_info', 
-        help='Disables storing of git revision info in revision_info.txt.', action='store_true')
  
     # Parameters for validation on LFW
     parser.add_argument('--lfw_pairs', type=str,

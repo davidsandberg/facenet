@@ -127,7 +127,8 @@ def reduction_b(net):
                         tower_conv2_2, tower_pool], 3)
     return net
   
-def inference(images, keep_probability, phase_train=True, weight_decay=0.0, reuse=None):
+def inference(images, keep_probability, phase_train=True, 
+              bottleneck_layer_size=128, weight_decay=0.0, reuse=None):
     batch_norm_params = {
         # Decay for the moving averages.
         'decay': 0.995,
@@ -138,18 +139,20 @@ def inference(images, keep_probability, phase_train=True, weight_decay=0.0, reus
         # Moving averages ends up in the trainable variables collection
         'variables_collections': [ tf.GraphKeys.TRAINABLE_VARIABLES ],
     }
+    
     with slim.arg_scope([slim.conv2d],
                         weights_initializer=tf.truncated_normal_initializer(stddev=0.1),
                         weights_regularizer=slim.l2_regularizer(weight_decay),
                         normalizer_fn=slim.batch_norm,
                         normalizer_params=batch_norm_params):
         return inception_resnet_v1(images, is_training=phase_train,
-              dropout_keep_prob=keep_probability, reuse=reuse)
+              dropout_keep_prob=keep_probability, bottleneck_layer_size=bottleneck_layer_size, reuse=reuse)
 
 
 def inception_resnet_v1(inputs, is_training=True,
                         dropout_keep_prob=0.8,
-                        reuse=None,
+                        bottleneck_layer_size=128,
+                        reuse=None, 
                         scope='InceptionResnetV1'):
     """Creates the Inception Resnet V1 model.
     Args:
@@ -231,5 +234,8 @@ def inception_resnet_v1(inputs, is_training=True,
                                        scope='Dropout')
           
                     end_points['PreLogitsFlatten'] = net
+                
+                net = slim.fully_connected(net, bottleneck_layer_size, activation_fn=None, 
+                        scope='Bottleneck', reuse=False)
   
     return net, end_points

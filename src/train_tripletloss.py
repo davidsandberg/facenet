@@ -55,9 +55,8 @@ def main(args):
         os.makedirs(model_dir)
 
     # Store some git revision info in a text file in the log directory
-    if not args.no_store_revision_info:
-        src_path,_ = os.path.split(os.path.realpath(__file__))
-        facenet.store_revision_info(src_path, log_dir, ' '.join(sys.argv))
+    src_path,_ = os.path.split(os.path.realpath(__file__))
+    facenet.store_revision_info(src_path, log_dir, ' '.join(sys.argv))
 
     np.random.seed(seed=args.seed)
     train_set = facenet.get_dataset(args.data_dir)
@@ -455,7 +454,7 @@ def parse_arguments(argv):
         help='Number of batches per epoch.', default=1000)
     parser.add_argument('--alpha', type=float,
         help='Positive to negative triplet distance margin.', default=0.2)
-    parser.add_argument('--embedding_size', type=float,
+    parser.add_argument('--embedding_size', type=int,
         help='Dimensionality of the embedding.', default=128)
     parser.add_argument('--random_crop', 
         help='Performs random cropping of training images. If false, the center image_size pixels from the training images are used. ' +
