@@ -38,7 +38,7 @@ def inference(images, keep_probability, phase_train=True, bottleneck_layer_size=
         # Moving averages ends up in the trainable variables collection
         'variables_collections': [ tf.GraphKeys.TRAINABLE_VARIABLES ],
     }
-    with slim.arg_scope([slim.conv2d],
+    with slim.arg_scope([slim.conv2d, slim.fully_connected],
                         weights_initializer=slim.xavier_initializer_conv2d(uniform=True),
                         weights_regularizer=slim.l2_regularizer(weight_decay),
                         normalizer_fn=slim.batch_norm,
