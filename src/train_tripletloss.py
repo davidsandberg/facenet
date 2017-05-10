@@ -38,7 +38,6 @@ import itertools
 import argparse
 import facenet
 import lfw
-import tensorflow.contrib.slim as slim
 
 from tensorflow.python.ops import data_flow_ops
 
@@ -121,30 +120,12 @@ def main(args):
             capacity=4 * nrof_preprocess_threads * args.batch_size,
             allow_smaller_final_batch=True)
 
-        batch_norm_params = {
-            # Decay for the moving averages
-            'decay': 0.995,
-            # epsilon to prevent 0s in variance
-            'epsilon': 0.001,
-            # force in-place updates of mean and variance estimates
-            'updates_collections': None,
-            # Moving averages ends up in the trainable variables collection
-            'variables_collections': [ tf.GraphKeys.TRAINABLE_VARIABLES ],
-            # Only update statistics during training mode
-            'is_training': phase_train_placeholder
-        }
         # Build the inference graph
         prelogits, _ = network.inference(image_batch, args.keep_probability, 
             phase_train=phase_train_placeholder, bottleneck_layer_size=args.embedding_size,
             weight_decay=args.weight_decay)
-        pre_embeddings = slim.fully_connected(prelogits, args.embedding_size, activation_fn=None, 
-                weights_initializer=tf.truncated_normal_initializer(stddev=0.1), 
-                weights_regularizer=slim.l2_regularizer(args.weight_decay),
-                normalizer_fn=slim.batch_norm,
-                normalizer_params=batch_norm_params,
-                scope='Bottleneck', reuse=False)
         
-        embeddings = tf.nn.l2_normalize(pre_embeddings, 1, 1e-10, name='embeddings')
+        embeddings = tf.nn.l2_normalize(prelogits, 1, 1e-10, name='embeddings')
         # Split embeddings into anchor, positive and negative and calculate triplet loss
         anchor, positive, negative = tf.unstack(tf.reshape(embeddings, [-1,3,args.embedding_size]), 3, 1)
         triplet_loss = facenet.triplet_loss(anchor, positive, negative, args.alpha)
