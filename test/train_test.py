@@ -183,14 +183,6 @@ class TrainTest(unittest.TestCase):
         args = freeze_graph.parse_arguments(argv)
         freeze_graph.main(args)
 
-# Create a checkpoint file pointing to the model
-def create_checkpoint_file(model_dir, model_file):
-    checkpoint_filename = os.path.join(model_dir, 'checkpoint')
-    full_model_filename = os.path.join(model_dir, model_file)
-    with open(checkpoint_filename, 'w') as f:
-        f.write('model_checkpoint_path: "%s"\n' % full_model_filename)
-        f.write('all_model_checkpoint_paths: "%s"\n' % full_model_filename)
-        
 # Create a mock dataset with random pixel images
 def create_mock_dataset(dataset_dir, image_size):
    
