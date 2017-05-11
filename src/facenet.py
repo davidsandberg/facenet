@@ -84,7 +84,7 @@ def center_loss(features, label, alfa, nrof_classes):
     centers_batch = tf.gather(centers, label)
     diff = (1 - alfa) * (centers_batch - features)
     centers = tf.scatter_sub(centers, label, diff)
-    loss = tf.nn.l2_loss(features - centers_batch)
+    loss = tf.reduce_mean(tf.square(features - centers_batch))
     return loss, centers
 
 def get_image_paths_and_labels(dataset):
