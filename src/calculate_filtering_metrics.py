@@ -34,38 +34,41 @@ import os
 import sys
 import time
 import h5py
-import importlib
 import math
+from tensorflow.python.platform import gfile
 
 def main(args):
-    network = importlib.import_module(args.model_def, 'inference')
-  
-    train_set = facenet.get_dataset(args.dataset_dir)
+    dataset = facenet.get_dataset(args.dataset_dir)
   
     with tf.Graph().as_default():
       
         # Get a list of image paths and their labels
-        image_list, label_list = facenet.get_image_paths_and_labels(train_set)
+        image_list, label_list = facenet.get_image_paths_and_labels(dataset)
         nrof_images = len(image_list)
         image_indices = range(nrof_images)
 
-        image_batch, label_batch = facenet.read_and_augment_data(image_list, image_indices, args.image_size, args.batch_size, None, 
+        image_batch, label_batch = facenet.read_and_augment_data(image_list,
+            image_indices, args.image_size, args.batch_size, None, 
             False, False, False, nrof_preprocess_threads=4, shuffle=False)
-        prelogits, _ = network.inference(image_batch, 1.0, 
-            phase_train=False, weight_decay=0.0, reuse=False)
-        embeddings = tf.nn.l2_normalize(prelogits, 1, 1e-10, name='embeddings')
-        saver = tf.train.Saver(tf.global_variables())
         
+        model_exp = os.path.expanduser(args.model_file)
+        with gfile.FastGFile(model_exp,'rb') as f:
+            graph_def = tf.GraphDef()
+            graph_def.ParseFromString(f.read())
+            input_map={'input':image_batch, 'phase_train':False}
+            tf.import_graph_def(graph_def, input_map=input_map, name='net')
+        
+        embeddings = tf.get_default_graph().get_tensor_by_name("net/embeddings:0")
+
         with tf.Session() as sess:
-            saver.restore(sess, os.path.join(os.path.expanduser(args.model_file)))
             tf.train.start_queue_runners(sess=sess)
                 
             embedding_size = int(embeddings.get_shape()[1])
             nrof_batches = int(math.ceil(nrof_images / args.batch_size))
-            nrof_classes = len(train_set)
+            nrof_classes = len(dataset)
             label_array = np.array(label_list)
-            class_names = [cls.name for cls in train_set]
-            nrof_examples_per_class = [ len(cls.image_paths) for cls in train_set ]
+            class_names = [cls.name for cls in dataset]
+            nrof_examples_per_class = [ len(cls.image_paths) for cls in dataset ]
             class_variance = np.zeros((nrof_classes,))
             class_center = np.zeros((nrof_classes,embedding_size))
             distance_to_center = np.ones((len(label_list),))*np.NaN
@@ -110,10 +113,8 @@ def parse_arguments(argv):
     
     parser.add_argument('dataset_dir', type=str,
         help='Path to the directory containing aligned dataset.')
-    parser.add_argument('model_def', type=str,
-        help='Model definition. Points to a module containing the definition of the inference graph.')
     parser.add_argument('model_file', type=str,
-        help='File containing the model parameters in checkpoint format.')
+        help='File containing the frozen model in protobuf (.pb) format to use for feature extraction.')
     parser.add_argument('data_file_name', type=str,
         help='The name of the file to store filtering data in.')
     parser.add_argument('--image_size', type=int,
