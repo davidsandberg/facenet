@@ -64,7 +64,7 @@ def main(args):
     random.seed(args.seed)
     train_set = facenet.get_dataset(args.data_dir)
     if args.filter_filename:
-        train_set = filter_dataset(train_set, args.filter_filename, 
+        train_set = filter_dataset(train_set, os.path.expanduser(args.filter_filename), 
             args.filter_percentile, args.filter_min_nrof_images_per_class)
     nrof_classes = len(train_set)
     
