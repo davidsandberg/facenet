@@ -50,7 +50,7 @@ class TrainTest(unittest.TestCase):
         create_mock_dataset(self.dataset_dir, 160)
         self.lfw_pairs_file = create_mock_lfw_pairs(self.tmp_dir)
         print(self.lfw_pairs_file)
-        self.pretrained_model_name = '20170216-091149'
+        self.pretrained_model_name = '20170512-110547'
         download_and_extract_model.download_and_extract_model(self.pretrained_model_name, 'data/')
         self.model_file = os.path.join('data', self.pretrained_model_name, 'model-%s.ckpt-250000' % self.pretrained_model_name)
         self.pretrained_model = os.path.join('data', self.pretrained_model_name)
@@ -138,7 +138,6 @@ class TrainTest(unittest.TestCase):
         args = train_tripletloss.parse_arguments(argv)
         train_tripletloss.main(args)
  
-    @unittest.skip("Skip this until there is a new pretrained model or the test case is rewritten")
     def test_finetune_tripletloss_inception_resnet_v1(self):
         print('test_finetune_tripletloss_inception_resnet_v1')
         argv = ['--logs_base_dir', self.tmp_dir,
