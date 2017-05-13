@@ -174,6 +174,18 @@ class TrainTest(unittest.TestCase):
         args = validate_on_lfw.parse_arguments(argv)
         validate_on_lfw.main(args)
 
+    def test_validate_on_lfw_frozen_graph(self):
+        print('test_validate_on_lfw_frozen_graph')
+        self.pretrained_model = os.path.join('data', self.pretrained_model_name)
+        frozen_model = os.path.join(self.pretrained_model, self.pretrained_model_name+'.pb')
+        argv = [self.dataset_dir,
+                frozen_model,
+                '--lfw_pairs', self.lfw_pairs_file,
+                '--lfw_nrof_folds', '2',
+                '--lfw_batch_size', '6']
+        args = validate_on_lfw.parse_arguments(argv)
+        validate_on_lfw.main(args)
+
     @unittest.skip("This test case results in a memory leak")
     def test_freeze_graph(self):
         print('test_freeze_graph')
