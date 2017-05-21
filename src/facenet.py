@@ -60,6 +60,47 @@ def triplet_loss(anchor, positive, negative, alpha):
       
     return loss
   
+def batch_hard_triplet_loss(embeddings, alpha, nrof_classes, nrof_images_per_class):
+  
+    P = nrof_classes
+    K = nrof_images_per_class
+
+    positives_index_vector = np.zeros((P*K*K,2), dtype=np.int32)
+    negatives_index_vector = np.zeros((P*K*(P-1)*K,2), dtype=np.int32)
+    pos_idx = 0
+    neg_idx = 0
+    for i in range(P):
+        for a in range(K):
+            # Add the hardest positives indices to the index vector
+            for p in range(K):
+                positives_index_vector[pos_idx,:] =  [ i*K+a, i*K+p ]
+                pos_idx += 1
+                
+            # Add the hardest negatives indices to the index vector
+            for j in range(P):
+                for n in range(K):
+                    if j!=i:
+                        negatives_index_vector[neg_idx,:] =  [ i*K+a, j*K+n ]
+                        neg_idx += 1
+      
+    with tf.variable_scope('triplet_loss'):
+        e1 = tf.expand_dims(embeddings, 1)
+        e2 = tf.expand_dims(embeddings, 0)
+        distances = tf.reduce_sum(tf.squared_difference(e1, e2), 2)
+        
+        positive_dist_vector = tf.gather_nd(distances, positives_index_vector)
+        hp_rshp = tf.reshape(positive_dist_vector, [P*K, K])
+        hardest_positives = tf.reduce_max(hp_rshp, 1)
+        
+        negative_dist_vector = tf.gather_nd(distances, negatives_index_vector)
+        hn_rshp = tf.reshape(negative_dist_vector, [P*K, (P-1)*K])
+        hardest_negatives = tf.reduce_min(hn_rshp, 1)
+    
+        l = tf.maximum(0.0, alpha + hardest_positives - hardest_negatives)
+        loss = tf.reduce_mean(l)
+        active_triplets_fraction = tf.count_nonzero(l) / (P*K)
+    return loss, active_triplets_fraction
+  
 def decov_loss(xs):
     """Decov loss as described in https://arxiv.org/pdf/1511.06068.pdf
     'Reducing Overfitting In Deep Networks by Decorrelating Representation'
