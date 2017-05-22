@@ -125,7 +125,8 @@ def main(args):
             weight_decay=args.weight_decay)
         
         embeddings = tf.nn.l2_normalize(prelogits, 1, 1e-10, name='embeddings')
-        triplet_loss, active_triplets_fraction = facenet.batch_hard_triplet_loss(embeddings, args.alpha, args.people_per_batch, args.images_per_person)
+        triplet_loss, active_triplets_fraction = facenet.batch_hard_triplet_loss(embeddings, args.alpha, 
+            args.people_per_batch, args.images_per_person, args.use_softplus)
         
         learning_rate = tf.train.exponential_decay(learning_rate_placeholder, global_step,
             args.learning_rate_decay_epochs*args.epoch_size, args.learning_rate_decay_factor, staircase=True)
@@ -356,6 +357,8 @@ def parse_arguments(argv):
         help='Number of images per person.', default=4)
     parser.add_argument('--epoch_size', type=int,
         help='Number of batches per epoch.', default=1000)
+    parser.add_argument('--use_softplus', 
+        help='Use soft plus function instead of hinge function in triplet loss.', action='store_true')
     parser.add_argument('--alpha', type=float,
         help='Positive to negative triplet distance margin.', default=0.2)
     parser.add_argument('--embedding_size', type=int,

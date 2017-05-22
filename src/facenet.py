@@ -60,7 +60,7 @@ def triplet_loss(anchor, positive, negative, alpha):
       
     return loss
   
-def batch_hard_triplet_loss(embeddings, alpha, nrof_classes, nrof_images_per_class):
+def batch_hard_triplet_loss(embeddings, alpha, nrof_classes, nrof_images_per_class, use_softplus):
   
     P = nrof_classes
     K = nrof_images_per_class
@@ -96,7 +96,10 @@ def batch_hard_triplet_loss(embeddings, alpha, nrof_classes, nrof_images_per_cla
         hn_rshp = tf.reshape(negative_dist_vector, [P*K, (P-1)*K])
         hardest_negatives = tf.reduce_min(hn_rshp, 1)
     
-        l = tf.maximum(0.0, alpha + hardest_positives - hardest_negatives)
+        if use_softplus:
+            l = tf.nn.softplus(hardest_positives - hardest_negatives)
+        else:
+            l = tf.maximum(0.0, alpha + hardest_positives - hardest_negatives)
         loss = tf.reduce_mean(l)
         active_triplets_fraction = tf.count_nonzero(l) / (P*K)
     return loss, active_triplets_fraction
@@ -228,7 +231,7 @@ def train(total_loss, global_step, optimizer, learning_rate, moving_average_deca
         elif optimizer=='ADADELTA':
             opt = tf.train.AdadeltaOptimizer(learning_rate, rho=0.9, epsilon=1e-6)
         elif optimizer=='ADAM':
-            opt = tf.train.AdamOptimizer(learning_rate, beta1=0.9, beta2=0.999, epsilon=0.1)
+            opt = tf.train.AdamOptimizer(learning_rate, beta1=0.9, beta2=0.999, epsilon=0.001)
         elif optimizer=='RMSPROP':
             opt = tf.train.RMSPropOptimizer(learning_rate, decay=0.9, momentum=0.9, epsilon=1.0)
         elif optimizer=='MOM':
