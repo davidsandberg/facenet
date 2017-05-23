@@ -39,7 +39,7 @@ class TripletLossTestNew(unittest.TestCase):
         with tf.Graph().as_default():
         
             embeddings = tf.placeholder(tf.float32, shape=(batch_size, nrof_features), name='embeddings')
-            loss, active_triplets_fraction = facenet.batch_hard_triplet_loss(embeddings, m, P, K)
+            loss, active_triplets_fraction = facenet.batch_hard_triplet_loss(embeddings, m, P, K, False)
             
             sess = tf.Session()
             with sess.as_default():
