@@ -60,7 +60,8 @@ def triplet_loss(anchor, positive, negative, alpha):
       
     return loss
   
-def batch_hard_triplet_loss(embeddings, alpha, nrof_classes, nrof_images_per_class, use_softplus):
+def batch_hard_triplet_loss(embeddings, alpha, nrof_classes, nrof_images_per_class,
+        use_softplus=False, use_nonsquared_distance=False):
   
     P = nrof_classes
     K = nrof_images_per_class
@@ -71,12 +72,13 @@ def batch_hard_triplet_loss(embeddings, alpha, nrof_classes, nrof_images_per_cla
     neg_idx = 0
     for i in range(P):
         for a in range(K):
-            # Add the hardest positives indices to the index vector
+            # Add the positives indices to the index vector
             for p in range(K):
-                positives_index_vector[pos_idx,:] =  [ i*K+a, i*K+p ]
-                pos_idx += 1
+                if a!=p:
+                    positives_index_vector[pos_idx,:] =  [ i*K+a, i*K+p ]
+                    pos_idx += 1
                 
-            # Add the hardest negatives indices to the index vector
+            # Add the negatives indices to the index vector
             for j in range(P):
                 for n in range(K):
                     if j!=i:
@@ -86,7 +88,10 @@ def batch_hard_triplet_loss(embeddings, alpha, nrof_classes, nrof_images_per_cla
     with tf.variable_scope('triplet_loss'):
         e1 = tf.expand_dims(embeddings, 1)
         e2 = tf.expand_dims(embeddings, 0)
-        distances = tf.reduce_sum(tf.squared_difference(e1, e2), 2)
+        if use_nonsquared_distance:
+            distances = tf.sqrt(tf.maximum(0.0, tf.reduce_sum(tf.squared_difference(e1, e2), 2)))
+        else:
+            distances = tf.reduce_sum(tf.squared_difference(e1, e2), 2)
         
         positive_dist_vector = tf.gather_nd(distances, positives_index_vector)
         hp_rshp = tf.reshape(positive_dist_vector, [P*K, K])
@@ -102,7 +107,13 @@ def batch_hard_triplet_loss(embeddings, alpha, nrof_classes, nrof_images_per_cla
             l = tf.maximum(0.0, alpha + hardest_positives - hardest_negatives)
         loss = tf.reduce_mean(l)
         active_triplets_fraction = tf.count_nonzero(l) / (P*K)
-    return loss, active_triplets_fraction
+        
+        debug = {}
+        debug['active_triplets_fraction'] = active_triplets_fraction
+        debug['positive_dist_vector'] = positive_dist_vector
+        debug['negative_dist_vector'] = negative_dist_vector
+        
+    return loss, debug
   
 def decov_loss(xs):
     """Decov loss as described in https://arxiv.org/pdf/1511.06068.pdf

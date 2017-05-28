@@ -39,15 +39,15 @@ class TripletLossTestNew(unittest.TestCase):
         with tf.Graph().as_default():
         
             embeddings = tf.placeholder(tf.float32, shape=(batch_size, nrof_features), name='embeddings')
-            loss, active_triplets_fraction = facenet.batch_hard_triplet_loss(embeddings, m, P, K, False)
+            loss, debug = facenet.batch_hard_triplet_loss(embeddings, m, P, K, False, True)
             
             sess = tf.Session()
             with sess.as_default():
                 sess.run(tf.global_variables_initializer())
 
-                loss_, acf_ = sess.run([ loss, active_triplets_fraction ], feed_dict={embeddings:emb})
-            unittest.TestCase.assertAlmostEqual(self, loss_, 0.0666666)
-            unittest.TestCase.assertAlmostEqual(self, acf_, 1.0/3)
+                loss_, acf_ = sess.run([ loss, debug['active_triplets_fraction'] ], feed_dict={embeddings:emb})
+            unittest.TestCase.assertAlmostEqual(self, loss_, 0.0666666, places=6)
+            unittest.TestCase.assertAlmostEqual(self, acf_, 1.0/3, places=6)
                 
 if __name__ == "__main__":
     unittest.main()

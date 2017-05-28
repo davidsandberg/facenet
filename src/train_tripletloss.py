@@ -37,6 +37,7 @@ import importlib
 import argparse
 import facenet
 import lfw
+import h5py
 
 from tensorflow.python.ops import data_flow_ops
 
@@ -51,6 +52,8 @@ def main(args):
     model_dir = os.path.join(os.path.expanduser(args.models_base_dir), subdir)
     if not os.path.isdir(model_dir):  # Create the model directory if it doesn't exist
         os.makedirs(model_dir)
+        
+    log_file_name = os.path.join(log_dir, 'logs.h5')
 
     # Store some git revision info in a text file in the log directory
     src_path,_ = os.path.split(os.path.realpath(__file__))
@@ -125,8 +128,8 @@ def main(args):
             weight_decay=args.weight_decay)
         
         embeddings = tf.nn.l2_normalize(prelogits, 1, 1e-10, name='embeddings')
-        triplet_loss, active_triplets_fraction = facenet.batch_hard_triplet_loss(embeddings, args.alpha, 
-            args.people_per_batch, args.images_per_person, args.use_softplus)
+        triplet_loss, debug = facenet.batch_hard_triplet_loss(embeddings, args.alpha, 
+            args.people_per_batch, args.images_per_person, args.use_softplus, args.use_nonsquared_distance)
         
         learning_rate = tf.train.exponential_decay(learning_rate_placeholder, global_step,
             args.learning_rate_decay_epochs*args.epoch_size, args.learning_rate_decay_factor, staircase=True)
@@ -166,6 +169,12 @@ def main(args):
 
             # Training and validation loop
             epoch = 0
+            log = {
+                'total_loss': np.zeros((0,), np.float),
+                'triplet_loss': np.zeros((0,), np.float),
+                'neg_dist_percs': np.zeros((0,3), np.float),
+                'pos_dist_percs': np.zeros((0,3), np.float)
+                }
             while epoch < args.max_nrof_epochs:
                 step = sess.run(global_step, feed_dict=None)
                 epoch = step // args.epoch_size
@@ -173,7 +182,7 @@ def main(args):
                 train(args, sess, train_set, epoch, image_paths_placeholder, labels_placeholder, labels_batch,
                     batch_size_placeholder, learning_rate_placeholder, phase_train_placeholder, enqueue_op, input_queue, global_step, 
                     embeddings, total_loss, train_op, summary_op, summary_writer, args.learning_rate_schedule_file,
-                    args.embedding_size, None, None, None, triplet_loss, active_triplets_fraction)
+                    args.embedding_size, None, None, None, triplet_loss, debug, log, log_file_name)
 
                 # Save variables and the metagraph if it doesn't exist already
                 save_variables_and_metagraph(sess, saver, summary_writer, model_dir, subdir, step)
@@ -191,7 +200,7 @@ def main(args):
 def train(args, sess, dataset, epoch, image_paths_placeholder, labels_placeholder, labels_batch,
           batch_size_placeholder, learning_rate_placeholder, phase_train_placeholder, enqueue_op, input_queue, global_step, 
           embeddings, loss, train_op, summary_op, summary_writer, learning_rate_schedule_file,
-          embedding_size, anchor, positive, negative, triplet_loss, active_triplets_fraction):
+          embedding_size, anchor, positive, negative, triplet_loss, debug, log, log_file_name):
     
     if args.learning_rate>0.0:
         lr = args.learning_rate
@@ -202,26 +211,43 @@ def train(args, sess, dataset, epoch, image_paths_placeholder, labels_placeholde
     
     # Perform training on the selected triplets
     sess.run(enqueue_op, {image_paths_placeholder: image_paths, labels_placeholder: labels_array})
-    #nrof_examples = len(triplet_paths)
-    train_time = 0
-    #i = 0
-    #emb_array = np.zeros((nrof_examples, embedding_size))
-    #loss_array = np.zeros((nrof_triplets,))
-    #while i < nrof_batches:
+    percentiles = [ 5.0, 50.0, 95.0 ]
+    neg_dist_percs = np.zeros(shape=(1,len(percentiles),), dtype=np.float)
+    pos_dist_percs = np.zeros(shape=(1,len(percentiles),), dtype=np.float)
+    temp_log = {
+        'total_loss': np.zeros((args.epoch_size,), np.float),
+        'triplet_loss': np.zeros((args.epoch_size,), np.float),
+        'neg_dist_percs': np.zeros((args.epoch_size,3), np.float),
+        'pos_dist_percs': np.zeros((args.epoch_size,3), np.float)
+        }
+    
     for i in range(args.epoch_size):
         start_time = time.time()
         feed_dict = {batch_size_placeholder: args.batch_size, learning_rate_placeholder: lr, phase_train_placeholder: True}
-        err, _, step, _, acf = sess.run([loss, train_op, global_step, labels_batch, active_triplets_fraction], feed_dict=feed_dict)
+        loss_, triplet_loss_, _, step_, _, acf_, neg_dist_, pos_dist_ = sess.run([loss, triplet_loss, train_op, global_step, 
+            labels_batch, debug['active_triplets_fraction'], debug['negative_dist_vector'], debug['positive_dist_vector']], feed_dict=feed_dict)
+        for ip, p in enumerate(percentiles):
+            neg_dist_percs[0,ip] = np.percentile(neg_dist_, p)
+            pos_dist_percs[0,ip] = np.percentile(pos_dist_, p)
         duration = time.time() - start_time
-        print('Epoch: [%d][%d/%d]\tTime %.3f\tLoss %2.3f\tAcf %2.3f' %
-              (epoch, i+1, args.epoch_size, duration, err, acf))
-        train_time += duration
-        
-    # Add validation loss and accuracy to summary
-    summary = tf.Summary()
-    #pylint: disable=maybe-no-member
-    summary_writer.add_summary(summary, step)
-    return step
+        print('Epoch: [%d][%d/%d]\tTime %.3f\tLoss %2.3f\tTripletLoss %2.3f\tAcf %2.3f\tNegDists (%2.3f,%2.3f,%2.3f)\tPosDists (%2.3f,%2.3f,%2.3f)' %
+              (epoch, i+1, args.epoch_size, duration, loss_, triplet_loss_, acf_, neg_dist_percs[0,0], neg_dist_percs[0,1], neg_dist_percs[0,2],
+               pos_dist_percs[0,0], pos_dist_percs[0,1], pos_dist_percs[0,2]))
+        temp_log['total_loss'][i] = loss_
+        temp_log['triplet_loss'][i] = triplet_loss_
+        temp_log['neg_dist_percs'][i] = neg_dist_percs
+        temp_log['pos_dist_percs'][i] = pos_dist_percs
+    
+    log['total_loss'] = np.append(log['total_loss'], temp_log['total_loss'])
+    log['triplet_loss'] = np.append(log['triplet_loss'], temp_log['triplet_loss'])
+    log['neg_dist_percs'] = np.append(log['neg_dist_percs'], temp_log['neg_dist_percs'])
+    log['pos_dist_percs'] = np.append(log['pos_dist_percs'], temp_log['pos_dist_percs'])
+    with h5py.File(log_file_name, 'w') as f:
+        for key, value in log.iteritems():
+            f.create_dataset(key, data=value)
+
+    
+    return step_
   
 def sample_people(dataset, people_per_batch, images_per_person, nrof_batches):
     # Sample classes from the dataset
@@ -359,6 +385,8 @@ def parse_arguments(argv):
         help='Number of batches per epoch.', default=1000)
     parser.add_argument('--use_softplus', 
         help='Use soft plus function instead of hinge function in triplet loss.', action='store_true')
+    parser.add_argument('--use_nonsquared_distance', 
+        help='Use the non-squared Euclidian distance as distance measure.', action='store_true')
     parser.add_argument('--alpha', type=float,
         help='Positive to negative triplet distance margin.', default=0.2)
     parser.add_argument('--embedding_size', type=int,
