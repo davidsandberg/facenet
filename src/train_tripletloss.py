@@ -173,7 +173,9 @@ def main(args):
                 'total_loss': np.zeros((0,), np.float),
                 'triplet_loss': np.zeros((0,), np.float),
                 'neg_dist_percs': np.zeros((0,3), np.float),
-                'pos_dist_percs': np.zeros((0,3), np.float)
+                'pos_dist_percs': np.zeros((0,3), np.float),
+                'accuracy': np.zeros((0,), np.float),
+                'val_rate': np.zeros((0,), np.float),
                 }
             while epoch < args.max_nrof_epochs:
                 step = sess.run(global_step, feed_dict=None)
@@ -182,7 +184,7 @@ def main(args):
                 train(args, sess, train_set, epoch, image_paths_placeholder, labels_placeholder, labels_batch,
                     batch_size_placeholder, learning_rate_placeholder, phase_train_placeholder, enqueue_op, input_queue, global_step, 
                     embeddings, total_loss, train_op, summary_op, summary_writer, args.learning_rate_schedule_file,
-                    args.embedding_size, None, None, None, triplet_loss, debug, log, log_file_name)
+                    args.embedding_size, None, None, None, triplet_loss, debug, log)
 
                 # Save variables and the metagraph if it doesn't exist already
                 save_variables_and_metagraph(sess, saver, summary_writer, model_dir, subdir, step)
@@ -191,7 +193,11 @@ def main(args):
                 if args.lfw_dir:
                     evaluate(sess, lfw_paths, embeddings, labels_batch, image_paths_placeholder, labels_placeholder, 
                             batch_size_placeholder, learning_rate_placeholder, phase_train_placeholder, enqueue_op, actual_issame, args.batch_size,
-                            args.lfw_nrof_folds, log_dir, step, summary_writer, args.embedding_size, args.images_per_person)
+                            args.lfw_nrof_folds, log_dir, step, summary_writer, args.embedding_size, args.images_per_person, log)
+
+            with h5py.File(log_file_name, 'w') as f:
+                for key, value in log.iteritems():
+                    f.create_dataset(key, data=value)
 
     sess.close()
     return model_dir
@@ -200,7 +206,7 @@ def main(args):
 def train(args, sess, dataset, epoch, image_paths_placeholder, labels_placeholder, labels_batch,
           batch_size_placeholder, learning_rate_placeholder, phase_train_placeholder, enqueue_op, input_queue, global_step, 
           embeddings, loss, train_op, summary_op, summary_writer, learning_rate_schedule_file,
-          embedding_size, anchor, positive, negative, triplet_loss, debug, log, log_file_name):
+          embedding_size, anchor, positive, negative, triplet_loss, debug, log):
     
     if args.learning_rate>0.0:
         lr = args.learning_rate
@@ -237,16 +243,12 @@ def train(args, sess, dataset, epoch, image_paths_placeholder, labels_placeholde
         temp_log['triplet_loss'][i] = triplet_loss_
         temp_log['neg_dist_percs'][i] = neg_dist_percs
         temp_log['pos_dist_percs'][i] = pos_dist_percs
-    
+        
     log['total_loss'] = np.append(log['total_loss'], temp_log['total_loss'])
     log['triplet_loss'] = np.append(log['triplet_loss'], temp_log['triplet_loss'])
     log['neg_dist_percs'] = np.append(log['neg_dist_percs'], temp_log['neg_dist_percs'])
     log['pos_dist_percs'] = np.append(log['pos_dist_percs'], temp_log['pos_dist_percs'])
-    with h5py.File(log_file_name, 'w') as f:
-        for key, value in log.iteritems():
-            f.create_dataset(key, data=value)
-
-    
+            
     return step_
   
 def sample_people(dataset, people_per_batch, images_per_person, nrof_batches):
@@ -280,7 +282,7 @@ def sample_people(dataset, people_per_batch, images_per_person, nrof_batches):
 
 def evaluate(sess, image_paths, embeddings, labels_batch, image_paths_placeholder, labels_placeholder, 
         batch_size_placeholder, learning_rate_placeholder, phase_train_placeholder, enqueue_op, actual_issame, batch_size,
-        nrof_folds, log_dir, step, summary_writer, embedding_size, images_per_person):
+        nrof_folds, log_dir, step, summary_writer, embedding_size, images_per_person, log):
     start_time = time.time()
     # Run forward pass to calculate embeddings
     print('Running forward pass on LFW images: ', end='')
@@ -317,6 +319,9 @@ def evaluate(sess, image_paths, embeddings, labels_batch, image_paths_placeholde
     summary_writer.add_summary(summary, step)
     with open(os.path.join(log_dir,'lfw_result.txt'),'at') as f:
         f.write('%d\t%.5f\t%.5f\n' % (step, np.mean(accuracy), val))
+    log['accuracy'] = np.append(log['accuracy'], np.mean(accuracy))
+    log['val_rate'] = np.append(log['val_rate'], val)
+
 
 def save_variables_and_metagraph(sess, saver, summary_writer, model_dir, model_name, step):
     # Save the model checkpoint

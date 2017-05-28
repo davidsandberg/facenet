@@ -74,9 +74,8 @@ def batch_hard_triplet_loss(embeddings, alpha, nrof_classes, nrof_images_per_cla
         for a in range(K):
             # Add the positives indices to the index vector
             for p in range(K):
-                if a!=p:
-                    positives_index_vector[pos_idx,:] =  [ i*K+a, i*K+p ]
-                    pos_idx += 1
+                positives_index_vector[pos_idx,:] =  [ i*K+a, i*K+p ]
+                pos_idx += 1
                 
             # Add the negatives indices to the index vector
             for j in range(P):
