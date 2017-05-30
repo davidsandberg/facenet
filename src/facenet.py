@@ -352,6 +352,7 @@ def get_triplet_batch(triplets, batch_index, batch_size):
     return batch
 
 def get_learning_rate_from_file(filename, epoch):
+    sched_dict = {}
     with open(filename, 'r') as f:
         for line in f.readlines():
             line = line.split('#', 1)[0]
@@ -359,10 +360,12 @@ def get_learning_rate_from_file(filename, epoch):
                 par = line.strip().split(':')
                 e = int(par[0])
                 lr = float(par[1])
-                if e <= epoch:
-                    learning_rate = lr
-                else:
-                    return learning_rate
+                sched_dict[e] = lr
+    # Interpolate learning rates in the log domain...
+    epochs = np.array(sched_dict.keys())
+    log_lrs = np.log10(np.array(sched_dict.values()))
+    log_lr = np.interp(epoch, epochs, log_lrs, np.NaN, np.NaN)
+    return np.power(10.0, log_lr)
 
 class ImageClass():
     "Stores the paths to images for a given class"
@@ -416,7 +419,7 @@ def split_dataset(dataset, split_ratio, mode):
     else:
         raise ValueError('Invalid train/test split mode "%s"' % mode)
     return train_set, test_set
-
+  
 def load_model(model):
     # Check if the model is a model directory (containing a metagraph and a checkpoint file)
     #  or if it is a protobuf file with a frozen graph

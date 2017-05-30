@@ -38,6 +38,7 @@ import argparse
 import facenet
 import lfw
 import h5py
+import math
 
 from tensorflow.python.ops import data_flow_ops
 
@@ -176,13 +177,15 @@ def main(args):
                 'pos_dist_percs': np.zeros((0,3), np.float),
                 'accuracy': np.zeros((0,), np.float),
                 'val_rate': np.zeros((0,), np.float),
+                'learning_rate': np.zeros((0,), np.float),
                 }
-            while epoch < args.max_nrof_epochs:
+            cont = True
+            while epoch < args.max_nrof_epochs and cont:
                 step = sess.run(global_step, feed_dict=None)
                 epoch = step // args.epoch_size
                 # Train for one epoch
-                train(args, sess, train_set, epoch, image_paths_placeholder, labels_placeholder, labels_batch,
-                    batch_size_placeholder, learning_rate_placeholder, phase_train_placeholder, enqueue_op, input_queue, global_step, 
+                cont = train(args, sess, train_set, epoch, image_paths_placeholder, labels_placeholder, labels_batch,
+                    batch_size_placeholder, learning_rate_placeholder, learning_rate, phase_train_placeholder, enqueue_op, input_queue, global_step, 
                     embeddings, total_loss, train_op, summary_op, summary_writer, args.learning_rate_schedule_file,
                     args.embedding_size, None, None, None, triplet_loss, debug, log)
 
@@ -195,16 +198,16 @@ def main(args):
                             batch_size_placeholder, learning_rate_placeholder, phase_train_placeholder, enqueue_op, actual_issame, args.batch_size,
                             args.lfw_nrof_folds, log_dir, step, summary_writer, args.embedding_size, args.images_per_person, log)
 
-            with h5py.File(log_file_name, 'w') as f:
-                for key, value in log.iteritems():
-                    f.create_dataset(key, data=value)
+                with h5py.File(log_file_name, 'w') as f:
+                    for key, value in log.iteritems():
+                        f.create_dataset(key, data=value)
 
     sess.close()
     return model_dir
 
 
 def train(args, sess, dataset, epoch, image_paths_placeholder, labels_placeholder, labels_batch,
-          batch_size_placeholder, learning_rate_placeholder, phase_train_placeholder, enqueue_op, input_queue, global_step, 
+          batch_size_placeholder, learning_rate_placeholder, learning_rate, phase_train_placeholder, enqueue_op, input_queue, global_step, 
           embeddings, loss, train_op, summary_op, summary_writer, learning_rate_schedule_file,
           embedding_size, anchor, positive, negative, triplet_loss, debug, log):
     
@@ -212,6 +215,8 @@ def train(args, sess, dataset, epoch, image_paths_placeholder, labels_placeholde
         lr = args.learning_rate
     else:
         lr = facenet.get_learning_rate_from_file(learning_rate_schedule_file, epoch)
+    if math.isnan(lr):
+        return False
     # Sample people randomly from the dataset
     image_paths, labels_array = sample_people(dataset, args.people_per_batch, args.images_per_person, args.epoch_size)
     
@@ -224,32 +229,35 @@ def train(args, sess, dataset, epoch, image_paths_placeholder, labels_placeholde
         'total_loss': np.zeros((args.epoch_size,), np.float),
         'triplet_loss': np.zeros((args.epoch_size,), np.float),
         'neg_dist_percs': np.zeros((args.epoch_size,3), np.float),
-        'pos_dist_percs': np.zeros((args.epoch_size,3), np.float)
+        'pos_dist_percs': np.zeros((args.epoch_size,3), np.float),
+        'learning_rate': np.zeros((args.epoch_size,3), np.float),
         }
     
     for i in range(args.epoch_size):
         start_time = time.time()
         feed_dict = {batch_size_placeholder: args.batch_size, learning_rate_placeholder: lr, phase_train_placeholder: True}
-        loss_, triplet_loss_, _, step_, _, acf_, neg_dist_, pos_dist_ = sess.run([loss, triplet_loss, train_op, global_step, 
-            labels_batch, debug['active_triplets_fraction'], debug['negative_dist_vector'], debug['positive_dist_vector']], feed_dict=feed_dict)
+        loss_, triplet_loss_, _, _, _, acf_, neg_dist_, pos_dist_, lr_ = sess.run([loss, triplet_loss, train_op, global_step, 
+            labels_batch, debug['active_triplets_fraction'], debug['negative_dist_vector'], debug['positive_dist_vector'], learning_rate], feed_dict=feed_dict)
         for ip, p in enumerate(percentiles):
             neg_dist_percs[0,ip] = np.percentile(neg_dist_, p)
             pos_dist_percs[0,ip] = np.percentile(pos_dist_, p)
         duration = time.time() - start_time
-        print('Epoch: [%d][%d/%d]\tTime %.3f\tLoss %2.3f\tTripletLoss %2.3f\tAcf %2.3f\tNegDists (%2.3f,%2.3f,%2.3f)\tPosDists (%2.3f,%2.3f,%2.3f)' %
-              (epoch, i+1, args.epoch_size, duration, loss_, triplet_loss_, acf_, neg_dist_percs[0,0], neg_dist_percs[0,1], neg_dist_percs[0,2],
+        print('Epoch: [%d][%d/%d]\tTime %.3f\tLr %2.4f\tLoss %2.3f\tTripletLoss %2.3f\tAcf %2.3f\tNegDists (%2.3f,%2.3f,%2.3f)\tPosDists (%2.3f,%2.3f,%2.3f)' %
+              (epoch, i+1, args.epoch_size, duration, lr_, loss_, triplet_loss_, acf_, neg_dist_percs[0,0], neg_dist_percs[0,1], neg_dist_percs[0,2],
                pos_dist_percs[0,0], pos_dist_percs[0,1], pos_dist_percs[0,2]))
         temp_log['total_loss'][i] = loss_
         temp_log['triplet_loss'][i] = triplet_loss_
         temp_log['neg_dist_percs'][i] = neg_dist_percs
         temp_log['pos_dist_percs'][i] = pos_dist_percs
+        temp_log['learning_rate'][i] = lr_
         
     log['total_loss'] = np.append(log['total_loss'], temp_log['total_loss'])
     log['triplet_loss'] = np.append(log['triplet_loss'], temp_log['triplet_loss'])
     log['neg_dist_percs'] = np.append(log['neg_dist_percs'], temp_log['neg_dist_percs'])
     log['pos_dist_percs'] = np.append(log['pos_dist_percs'], temp_log['pos_dist_percs'])
+    log['learning_rate'] = np.append(log['learning_rate'], temp_log['learning_rate'])
             
-    return step_
+    return True
   
 def sample_people(dataset, people_per_batch, images_per_person, nrof_batches):
     # Sample classes from the dataset
@@ -346,19 +354,6 @@ def save_variables_and_metagraph(sess, saver, summary_writer, model_dir, model_n
     summary_writer.add_summary(summary, step)
   
   
-def get_learning_rate_from_file(filename, epoch):
-    with open(filename, 'r') as f:
-        for line in f.readlines():
-            line = line.split('#', 1)[0]
-            if line:
-                par = line.strip().split(':')
-                e = int(par[0])
-                lr = float(par[1])
-                if e <= epoch:
-                    learning_rate = lr
-                else:
-                    return learning_rate
-    
 
 def parse_arguments(argv):
     parser = argparse.ArgumentParser()
