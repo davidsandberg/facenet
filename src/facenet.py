@@ -352,7 +352,8 @@ def get_triplet_batch(triplets, batch_index, batch_size):
     return batch
 
 def get_learning_rate_from_file(filename, epoch):
-    sched_dict = {}
+    epochs = []
+    lrs = []
     with open(filename, 'r') as f:
         for line in f.readlines():
             line = line.split('#', 1)[0]
@@ -360,10 +361,10 @@ def get_learning_rate_from_file(filename, epoch):
                 par = line.strip().split(':')
                 e = int(par[0])
                 lr = float(par[1])
-                sched_dict[e] = lr
+                epochs.append(e)
+                lrs.append(lr)
     # Interpolate learning rates in the log domain...
-    epochs = np.array(sched_dict.keys())
-    log_lrs = np.log10(np.array(sched_dict.values()))
+    log_lrs = np.log10(np.array(lrs))
     log_lr = np.interp(epoch, epochs, log_lrs, np.NaN, np.NaN)
     return np.power(10.0, log_lr)
 

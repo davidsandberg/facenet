@@ -34,6 +34,7 @@ import sys
 import tensorflow as tf
 import numpy as np
 import importlib
+import itertools
 import argparse
 import facenet
 import lfw
@@ -87,12 +88,12 @@ def main(args):
         
         phase_train_placeholder = tf.placeholder(tf.bool, name='phase_train')
         
-        image_paths_placeholder = tf.placeholder(tf.string, shape=(None,args.images_per_person), name='image_paths')
-        labels_placeholder = tf.placeholder(tf.int64, shape=(None,args.images_per_person), name='labels')
+        image_paths_placeholder = tf.placeholder(tf.string, shape=(None,3), name='image_paths')
+        labels_placeholder = tf.placeholder(tf.int64, shape=(None,3), name='labels')
         
         input_queue = data_flow_ops.FIFOQueue(capacity=100000,
                                     dtypes=[tf.string, tf.int64],
-                                    shapes=[(args.images_per_person,), (args.images_per_person,)],
+                                    shapes=[(3,), (3,)],
                                     shared_name=None, name=None)
         enqueue_op = input_queue.enqueue_many([image_paths_placeholder, labels_placeholder])
         
@@ -129,8 +130,9 @@ def main(args):
             weight_decay=args.weight_decay)
         
         embeddings = tf.nn.l2_normalize(prelogits, 1, 1e-10, name='embeddings')
-        triplet_loss, debug = facenet.batch_hard_triplet_loss(embeddings, args.alpha, 
-            args.people_per_batch, args.images_per_person, args.use_softplus, args.use_nonsquared_distance)
+        # Split embeddings into anchor, positive and negative and calculate triplet loss
+        anchor, positive, negative = tf.unstack(tf.reshape(embeddings, [-1,3,args.embedding_size]), 3, 1)
+        triplet_loss = facenet.triplet_loss(anchor, positive, negative, args.alpha)
         
         learning_rate = tf.train.exponential_decay(learning_rate_placeholder, global_step,
             args.learning_rate_decay_epochs*args.epoch_size, args.learning_rate_decay_factor, staircase=True)
@@ -177,7 +179,9 @@ def main(args):
                 'pos_dist_percs': np.zeros((0,3), np.float),
                 'accuracy': np.zeros((0,), np.float),
                 'val_rate': np.zeros((0,), np.float),
+                'lfw_step': np.zeros((args.epoch_size,), np.float),
                 'learning_rate': np.zeros((0,), np.float),
+                'nrof_triplets': np.zeros((args.epoch_size,), np.float),
                 }
             cont = True
             while epoch < args.max_nrof_epochs and cont:
@@ -187,7 +191,7 @@ def main(args):
                 cont = train(args, sess, train_set, epoch, image_paths_placeholder, labels_placeholder, labels_batch,
                     batch_size_placeholder, learning_rate_placeholder, learning_rate, phase_train_placeholder, enqueue_op, input_queue, global_step, 
                     embeddings, total_loss, train_op, summary_op, summary_writer, args.learning_rate_schedule_file,
-                    args.embedding_size, None, None, None, triplet_loss, debug, log)
+                    args.embedding_size, anchor, positive, negative, triplet_loss, log)
 
                 # Save variables and the metagraph if it doesn't exist already
                 save_variables_and_metagraph(sess, saver, summary_writer, model_dir, subdir, step)
@@ -195,8 +199,8 @@ def main(args):
                 # Evaluate on LFW
                 if args.lfw_dir:
                     evaluate(sess, lfw_paths, embeddings, labels_batch, image_paths_placeholder, labels_placeholder, 
-                            batch_size_placeholder, learning_rate_placeholder, phase_train_placeholder, enqueue_op, actual_issame, args.batch_size,
-                            args.lfw_nrof_folds, log_dir, step, summary_writer, args.embedding_size, args.images_per_person, log, global_step)
+                            batch_size_placeholder, learning_rate_placeholder, phase_train_placeholder, enqueue_op, actual_issame, args.batch_size, 
+                            args.lfw_nrof_folds, log_dir, step, summary_writer, args.embedding_size, log, global_step)
 
                 with h5py.File(log_file_name, 'w') as f:
                     for key, value in log.iteritems():
@@ -209,7 +213,8 @@ def main(args):
 def train(args, sess, dataset, epoch, image_paths_placeholder, labels_placeholder, labels_batch,
           batch_size_placeholder, learning_rate_placeholder, learning_rate, phase_train_placeholder, enqueue_op, input_queue, global_step, 
           embeddings, loss, train_op, summary_op, summary_writer, learning_rate_schedule_file,
-          embedding_size, anchor, positive, negative, triplet_loss, debug, log):
+          embedding_size, anchor, positive, negative, triplet_loss, log):
+    batch_number = 0
     
     if args.learning_rate>0.0:
         lr = args.learning_rate
@@ -217,88 +222,164 @@ def train(args, sess, dataset, epoch, image_paths_placeholder, labels_placeholde
         lr = facenet.get_learning_rate_from_file(learning_rate_schedule_file, epoch)
     if math.isnan(lr):
         return False
-    # Sample people randomly from the dataset
-    image_paths, labels_array = sample_people(dataset, args.people_per_batch, args.images_per_person, args.epoch_size)
-    
-    # Perform training on the selected triplets
-    sess.run(enqueue_op, {image_paths_placeholder: image_paths, labels_placeholder: labels_array})
-    percentiles = [ 5.0, 50.0, 95.0 ]
-    neg_dist_percs = np.zeros(shape=(1,len(percentiles),), dtype=np.float)
-    pos_dist_percs = np.zeros(shape=(1,len(percentiles),), dtype=np.float)
-    temp_log = {
-        'total_loss': np.zeros((args.epoch_size,), np.float),
-        'triplet_loss': np.zeros((args.epoch_size,), np.float),
-        'neg_dist_percs': np.zeros((args.epoch_size,3), np.float),
-        'pos_dist_percs': np.zeros((args.epoch_size,3), np.float),
-        'learning_rate': np.zeros((args.epoch_size,3), np.float),
-        }
-    
-    for i in range(args.epoch_size):
-        start_time = time.time()
-        feed_dict = {batch_size_placeholder: args.batch_size, learning_rate_placeholder: lr, phase_train_placeholder: True}
-        loss_, triplet_loss_, _, step, _, acf_, neg_dist_, pos_dist_, lr_ = sess.run([loss, triplet_loss, train_op, global_step, 
-            labels_batch, debug['active_triplets_fraction'], debug['negative_dist_vector'], debug['positive_dist_vector'], learning_rate], feed_dict=feed_dict)
-        for ip, p in enumerate(percentiles):
-            neg_dist_percs[0,ip] = np.percentile(neg_dist_, p)
-            pos_dist_percs[0,ip] = np.percentile(pos_dist_, p)
-        duration = time.time() - start_time
-        print('Step %d\tTime %.3f\tLr %2.4f\tLoss %2.3f\tTripletLoss %2.3f\tAcf %2.3f\tNegDists (%2.3f,%2.3f,%2.3f)\tPosDists (%2.3f,%2.3f,%2.3f)' %
-              (step, duration, lr_, loss_, triplet_loss_, acf_, neg_dist_percs[0,0], neg_dist_percs[0,1], neg_dist_percs[0,2],
-               pos_dist_percs[0,0], pos_dist_percs[0,1], pos_dist_percs[0,2]))
-        temp_log['total_loss'][i] = loss_
-        temp_log['triplet_loss'][i] = triplet_loss_
-        temp_log['neg_dist_percs'][i] = neg_dist_percs
-        temp_log['pos_dist_percs'][i] = pos_dist_percs
-        temp_log['learning_rate'][i] = lr_
+    while batch_number < args.epoch_size:
+        # Sample people randomly from the dataset
+        image_paths, num_per_class = sample_people(dataset, args.people_per_batch, args.images_per_person)
         
-    log['total_loss'] = np.append(log['total_loss'], temp_log['total_loss'])
-    log['triplet_loss'] = np.append(log['triplet_loss'], temp_log['triplet_loss'])
-    log['neg_dist_percs'] = np.append(log['neg_dist_percs'], temp_log['neg_dist_percs'])
-    log['pos_dist_percs'] = np.append(log['pos_dist_percs'], temp_log['pos_dist_percs'])
-    log['learning_rate'] = np.append(log['learning_rate'], temp_log['learning_rate'])
+        print('Running forward pass on sampled images: ', end='')
+        start_time = time.time()
+        nrof_examples = args.people_per_batch * args.images_per_person
+        labels_array = np.reshape(np.arange(nrof_examples),(-1,3))
+        image_paths_array = np.reshape(np.expand_dims(np.array(image_paths),1), (-1,3))
+        sess.run(enqueue_op, {image_paths_placeholder: image_paths_array, labels_placeholder: labels_array})
+        emb_array = np.zeros((nrof_examples, embedding_size))
+        nrof_batches = int(np.ceil(nrof_examples / args.batch_size))
+        for i in xrange(nrof_batches):
+            batch_size = min(nrof_examples-i*args.batch_size, args.batch_size)
+            emb, lab = sess.run([embeddings, labels_batch], feed_dict={batch_size_placeholder: batch_size, 
+                learning_rate_placeholder: lr, phase_train_placeholder: True})
+            emb_array[lab,:] = emb
+        print('%.3f' % (time.time()-start_time))
+
+        # Select triplets based on the embeddings
+        print('Selecting suitable triplets for training')
+        triplets, nrof_random_negs, nrof_triplets = select_triplets(emb_array, num_per_class, 
+            image_paths, args.people_per_batch, args.alpha, log)
+        selection_time = time.time() - start_time
+        print('(nrof_random_negs, nrof_triplets) = (%d, %d): time=%.3f seconds' % 
+            (nrof_random_negs, nrof_triplets, selection_time))
+
+        # Perform training on the selected triplets
+        nrof_batches = int(np.ceil(nrof_triplets*3/args.batch_size))
+        triplet_paths = list(itertools.chain(*triplets))
+        labels_array = np.reshape(np.arange(len(triplet_paths)),(-1,3))
+        triplet_paths_array = np.reshape(np.expand_dims(np.array(triplet_paths),1), (-1,3))
+        sess.run(enqueue_op, {image_paths_placeholder: triplet_paths_array, labels_placeholder: labels_array})
+        nrof_examples = len(triplet_paths)
+        train_time = 0
+        i = 0
+        emb_array = np.zeros((nrof_examples, embedding_size))
+        temp_log = {
+            'total_loss': np.zeros((nrof_batches,), np.float),
+            'triplet_loss': np.zeros((nrof_batches,), np.float),
+            'neg_dist_percs': np.zeros((nrof_batches,3), np.float),
+            'pos_dist_percs': np.zeros((nrof_batches,3), np.float),
+            'learning_rate': np.zeros((nrof_batches,3), np.float),
+            }
+        while i < nrof_batches:
+            start_time = time.time()
+            batch_size = min(nrof_examples-i*args.batch_size, args.batch_size)
+            feed_dict = {batch_size_placeholder: batch_size, learning_rate_placeholder: lr, phase_train_placeholder: True}
+            loss_, triplet_loss_, _, step, emb, lab, lr_ = sess.run([loss, triplet_loss, train_op, global_step, embeddings, labels_batch, learning_rate], feed_dict=feed_dict)
+            emb_array[lab,:] = emb
+            duration = time.time() - start_time
+            print('Step %d\tTime %.3f\tLr %.5f\tLoss %2.3f\tTripletLoss %2.3f' %
+                  (step, duration, lr_, loss_, triplet_loss_))
+            temp_log['total_loss'][i] = loss_
+            temp_log['triplet_loss'][i] = triplet_loss_
+            temp_log['neg_dist_percs'][i] = np.NaN
+            temp_log['pos_dist_percs'][i] = np.NaN
+            temp_log['learning_rate'][i] = lr_
+            batch_number += 1
+            i += 1
+            train_time += duration
             
+        # Add validation loss and accuracy to summary
+        summary = tf.Summary()
+        #pylint: disable=maybe-no-member
+        summary.value.add(tag='time/selection', simple_value=selection_time)
+        summary_writer.add_summary(summary, step)
+
+        log['total_loss'] = np.append(log['total_loss'], temp_log['total_loss'])
+        log['triplet_loss'] = np.append(log['triplet_loss'], temp_log['triplet_loss'])
+        log['neg_dist_percs'] = np.append(log['neg_dist_percs'], temp_log['neg_dist_percs'])
+        log['pos_dist_percs'] = np.append(log['pos_dist_percs'], temp_log['pos_dist_percs'])
+        log['learning_rate'] = np.append(log['learning_rate'], temp_log['learning_rate'])
+
     return True
   
-def sample_people(dataset, people_per_batch, images_per_person, nrof_batches):
+def select_triplets(embeddings, nrof_images_per_class, image_paths, people_per_batch, alpha, log):
+    """ Select the triplets for training
+    """
+    trip_idx = 0
+    emb_start_idx = 0
+    num_trips = 0
+    triplets = []
+    
+    # VGG Face: Choosing good triplets is crucial and should strike a balance between
+    #  selecting informative (i.e. challenging) examples and swamping training with examples that
+    #  are too hard. This is achieve by extending each pair (a, p) to a triplet (a, p, n) by sampling
+    #  the image n at random, but only between the ones that violate the triplet loss margin. The
+    #  latter is a form of hard-negative mining, but it is not as aggressive (and much cheaper) than
+    #  choosing the maximally violating example, as often done in structured output learning.
+
+    for i in xrange(people_per_batch):
+        nrof_images = int(nrof_images_per_class[i])
+        for j in xrange(1,nrof_images):
+            a_idx = emb_start_idx + j - 1
+            neg_dists_sqr = np.sum(np.square(embeddings[a_idx] - embeddings), 1)
+            for pair in xrange(j, nrof_images): # For every possible positive pair.
+                p_idx = emb_start_idx + pair
+                pos_dist_sqr = np.sum(np.square(embeddings[a_idx]-embeddings[p_idx]))
+                neg_dists_sqr[emb_start_idx:emb_start_idx+nrof_images] = np.NaN
+                #all_neg = np.where(np.logical_and(neg_dists_sqr-pos_dist_sqr<alpha, pos_dist_sqr<neg_dists_sqr))[0]  # FaceNet selection
+                all_neg = np.where(neg_dists_sqr-pos_dist_sqr<alpha)[0] # VGG Face selection
+                nrof_random_negs = all_neg.shape[0]
+                if nrof_random_negs>0:
+                    rnd_idx = np.random.randint(nrof_random_negs)
+                    n_idx = all_neg[rnd_idx]
+                    triplets.append((image_paths[a_idx], image_paths[p_idx], image_paths[n_idx]))
+                    #print('Triplet %d: (%d, %d, %d), pos_dist=%2.6f, neg_dist=%2.6f (%d, %d, %d, %d, %d)' % 
+                    #    (trip_idx, a_idx, p_idx, n_idx, pos_dist_sqr, neg_dists_sqr[n_idx], nrof_random_negs, rnd_idx, i, j, emb_start_idx))
+                    trip_idx += 1
+
+                num_trips += 1
+
+        emb_start_idx += nrof_images
+
+    log['nrof_triplets'] = np.append(log['nrof_triplets'], len(triplets))
+    np.random.shuffle(triplets)
+    return triplets, num_trips, len(triplets)
+
+def sample_people(dataset, people_per_batch, images_per_person):
+    nrof_images = people_per_batch * images_per_person
+  
     # Sample classes from the dataset
     nrof_classes = len(dataset)
     class_indices = np.arange(nrof_classes)
     np.random.shuffle(class_indices)
     
+    i = 0
     image_paths = []
-    labels = []
-    for batch_index in range(nrof_batches):
-        for i in range(people_per_batch):
-            class_index = class_indices[(batch_index*people_per_batch + i) % nrof_classes]
-            nrof_images_in_class = len(dataset[class_index])
-            if (nrof_images_in_class<images_per_person):
-                nrof_duplications = (images_per_person+nrof_images_in_class-1) // nrof_images_in_class
-                image_paths_for_class = dataset[class_index].image_paths * nrof_duplications
-                np.random.shuffle(image_paths_for_class)
-                image_paths_for_class = image_paths_for_class[:images_per_person]
-            else:
-                image_indices = np.arange(nrof_images_in_class)
-                np.random.shuffle(image_indices)
-                image_paths_for_class = [dataset[class_index].image_paths[j] for j in image_indices[:images_per_person]]
-            labels += [class_index] * images_per_person
-            image_paths += image_paths_for_class
+    num_per_class = []
+    sampled_class_indices = []
+    # Sample images from these classes until we have enough
+    while len(image_paths)<nrof_images:
+        class_index = class_indices[i]
+        nrof_images_in_class = len(dataset[class_index])
+        image_indices = np.arange(nrof_images_in_class)
+        np.random.shuffle(image_indices)
+        nrof_images_from_class = min(nrof_images_in_class, images_per_person, nrof_images-len(image_paths))
+        idx = image_indices[0:nrof_images_from_class]
+        image_paths_for_class = [dataset[class_index].image_paths[j] for j in idx]
+        sampled_class_indices += [class_index]*nrof_images_from_class
+        image_paths += image_paths_for_class
+        num_per_class.append(nrof_images_from_class)
+        i+=1
   
-    shape = (nrof_batches*people_per_batch, images_per_person)
-    image_paths_arr = np.reshape(image_paths, shape)
-    labels_arr = np.reshape(labels, shape)
-    return image_paths_arr, labels_arr
+    return image_paths, num_per_class
 
 def evaluate(sess, image_paths, embeddings, labels_batch, image_paths_placeholder, labels_placeholder, 
-        batch_size_placeholder, learning_rate_placeholder, phase_train_placeholder, enqueue_op, actual_issame, batch_size,
-        nrof_folds, log_dir, step, summary_writer, embedding_size, images_per_person, log, global_step):
+        batch_size_placeholder, learning_rate_placeholder, phase_train_placeholder, enqueue_op, actual_issame, batch_size, 
+        nrof_folds, log_dir, step, summary_writer, embedding_size, log, global_step):
     start_time = time.time()
     # Run forward pass to calculate embeddings
     print('Running forward pass on LFW images: ', end='')
     
     nrof_images = len(actual_issame)*2
     assert(len(image_paths)==nrof_images)
-    labels_array = np.reshape(np.arange(nrof_images),(-1,images_per_person))
-    image_paths_array = np.reshape(np.expand_dims(np.array(image_paths),1), (-1,images_per_person))
+    labels_array = np.reshape(np.arange(nrof_images),(-1,3))
+    image_paths_array = np.reshape(np.expand_dims(np.array(image_paths),1), (-1,3))
     sess.run(enqueue_op, {image_paths_placeholder: image_paths_array, labels_placeholder: labels_array})
     emb_array = np.zeros((nrof_images, embedding_size))
     nrof_batches = int(np.ceil(nrof_images / batch_size))
@@ -330,8 +411,7 @@ def evaluate(sess, image_paths, embeddings, labels_batch, image_paths_placeholde
     log['accuracy'] = np.append(log['accuracy'], np.mean(accuracy))
     log['val_rate'] = np.append(log['val_rate'], val)
     step = sess.run(global_step, feed_dict=None)
-    log['lfw_step'] = np.append(log['accuracy'], step)
-
+    log['lfw_step'] = np.append(log['lfw_step'], step)
 
 
 def save_variables_and_metagraph(sess, saver, summary_writer, model_dir, model_name, step):
@@ -377,19 +457,15 @@ def parse_arguments(argv):
     parser.add_argument('--max_nrof_epochs', type=int,
         help='Number of epochs to run.', default=500)
     parser.add_argument('--batch_size', type=int,
-        help='Number of images to process in a batch.', default=128)
+        help='Number of images to process in a batch.', default=90)
     parser.add_argument('--image_size', type=int,
         help='Image size (height, width) in pixels.', default=160)
     parser.add_argument('--people_per_batch', type=int,
-        help='Number of people per batch.', default=32)
+        help='Number of people per batch.', default=45)
     parser.add_argument('--images_per_person', type=int,
-        help='Number of images per person.', default=4)
+        help='Number of images per person.', default=40)
     parser.add_argument('--epoch_size', type=int,
         help='Number of batches per epoch.', default=1000)
-    parser.add_argument('--use_softplus', 
-        help='Use soft plus function instead of hinge function in triplet loss.', action='store_true')
-    parser.add_argument('--use_nonsquared_distance', 
-        help='Use the non-squared Euclidian distance as distance measure.', action='store_true')
     parser.add_argument('--alpha', type=float,
         help='Positive to negative triplet distance margin.', default=0.2)
     parser.add_argument('--embedding_size', type=int,

@@ -42,6 +42,7 @@ class GetLearningRateFromFileTest(unittest.TestCase):
     def test_stuff(self):
         schedule_path = os.path.join(self.tmp_dir, 'lr1.txt')
         schedule_dict = { 0: 0.001, 10:0.001, 20:0.0001}
+        #schedule_dict = { 0: 0.05, 30:0.005, 150:0.0001, 200:0.0001}
         self.write_learning_rate_schedule_file(schedule_path, schedule_dict)
         self.assertTrue(math.isnan(facenet.get_learning_rate_from_file(schedule_path, -1)))
         self.assertAlmostEqual(facenet.get_learning_rate_from_file(schedule_path, 0), 0.001, 1e-6)

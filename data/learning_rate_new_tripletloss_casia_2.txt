@@ -2,4 +2,4 @@
 # Maps an epoch number to a learning rate
 0:   0.05
 30:  0.005
-150: 0.0001
+150: 0.0002
