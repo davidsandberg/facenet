@@ -57,6 +57,10 @@ def main(args):
     if not os.path.isdir(model_dir):  # Create the model directory if it doesn't exist
         os.makedirs(model_dir)
     log_file_name = os.path.join(model_dir, 'logs.h5')
+    
+    # Store some git revision info in a text file in the log directory
+    src_path,_ = os.path.split(os.path.realpath(__file__))
+    facenet.store_revision_info(src_path, model_dir, ' '.join(sys.argv))
         
     with tf.Graph().as_default():
         tf.set_random_seed(args.seed)
@@ -128,7 +132,6 @@ def main(args):
         tf.train.start_queue_runners(coord=coord, sess=sess)
 
         with sess.as_default():
-            #feed_dict = {images_placeholder: np.random.normal(size=(batch_size,64,64,3))}
             
             log = {
                 'total_loss': np.zeros((0,), np.float),
@@ -137,7 +140,8 @@ def main(args):
                 'learning_rate': np.zeros((0,), np.float),
                 }
             
-            for _ in range(args.max_nrof_steps):
+            step = 0
+            while step < args.max_nrof_steps:
                 start_time = time.time()
                 step, _, reconstruction_loss_, kl_loss_mean_, total_loss_, _, _, learning_rate_ = sess.run(
                       [global_step, train_op, reconstruction_loss, kl_loss_mean, total_loss, mean, log_variance, learning_rate])
@@ -149,7 +153,7 @@ def main(args):
                 duration = time.time() - start_time
                 print('Step: %d \tTime: %.3f \trec_loss: %.3f \tkl_loss: %.3f \ttotal_loss: %.3f' % (step, duration, reconstruction_loss_, kl_loss_mean_, total_loss_))
 
-                if step % args.save_every_n_steps==0:
+                if step % args.save_every_n_steps==0 or step==args.max_nrof_steps:
                     print('Saving checkpoint file')
                     checkpoint_path = os.path.join(model_dir, 'model.ckpt')
                     saver.save(sess, checkpoint_path, global_step=step, write_meta_graph=False)
@@ -227,8 +231,7 @@ def parse_arguments(argv):
     parser.add_argument('--embedding_size', type=int,
         help='Dimensionality of the embedding.', default=100)
     parser.add_argument('--initial_learning_rate', type=float,
-        help='Initial learning rate. If set to a negative value a learning rate ' +
-        'schedule can be specified in the file "learning_rate_schedule.txt"', default=0.0005)
+        help='Initial learning rate.', default=0.0005)
     parser.add_argument('--learning_rate_decay_steps', type=int,
         help='Number of steps between learning rate decay.', default=1)
     parser.add_argument('--learning_rate_decay_factor', type=float,
