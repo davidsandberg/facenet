@@ -37,6 +37,7 @@ import numpy as np
 import h5py
 import os
 from datetime import datetime
+from tensorflow.python.platform import gfile
 
 def main(args):
   
@@ -101,7 +102,32 @@ def main(args):
         
         # Create reconstruction loss (perceptual loss)
         #   This requires an instance of the facenet model
-        reconstruction_loss = tf.reduce_mean(tf.reduce_sum(tf.pow(image_batch - reconstructed,2)))
+        if args.reconstruction_loss_type=='PLAIN':
+            reconstruction_loss = tf.reduce_mean(tf.reduce_sum(tf.pow(image_batch - reconstructed,2)))
+        elif args.reconstruction_loss_type=='PERCEPTUAL':
+            model_file = '~/models/export/20170512-110547/20170512-110547.pb'
+            feature_list = ['embeddings:0']
+            model_file_exp = os.path.expanduser(model_file)
+            image_batch_resize = tf.image.resize_images(image_batch, (160,160))
+            
+            with gfile.FastGFile(model_file_exp,'rb') as f:
+                graph_def = tf.GraphDef()
+                graph_def.ParseFromString(f.read())
+
+                image_batch_resize = tf.image.resize_images(image_batch, (160,160))
+                image_features = tf.import_graph_def(graph_def, input_map={ 'input': image_batch_resize, 'phase_train':False }, 
+                    return_elements=feature_list, name='ploss1')
+
+                reconstructed_resize = tf.image.resize_images(reconstructed, (160,160))
+                reconstruction_features = tf.import_graph_def(graph_def, input_map={ 'input': reconstructed_resize, 'phase_train':False }, 
+                    return_elements=feature_list, name='ploss2')
+
+                reconstruction_loss_list = []
+                for image_feature, reconstruction_feature in zip(image_features, reconstruction_features):
+                    reconstruction_loss_list.append(tf.reduce_mean(tf.reduce_sum(tf.pow(image_feature - reconstruction_feature,2))))
+                reconstruction_loss = tf.add_n(reconstruction_loss_list, 'reconstruction_loss')
+        else:
+            pass
         
         # Create KL divergence loss
         kl_loss = kl_divergence_loss(mean, log_variance)
@@ -141,6 +167,7 @@ def main(args):
                 }
             
             step = 0
+            print('Running training')
             while step < args.max_nrof_steps:
                 start_time = time.time()
                 step, _, reconstruction_loss_, kl_loss_mean_, total_loss_, _, _, learning_rate_ = sess.run(
@@ -220,6 +247,8 @@ def parse_arguments(argv):
     parser.add_argument('--data_dir', type=str,
         help='Path to the data directory containing aligned face patches. Multiple directories are separated with colon.',
         default='/home/david/datasets/casia/casia_maxpy_mtcnnpy_64')
+    parser.add_argument('--reconstruction_loss_type', type=str, choices=['PLAIN', 'PERCEPTUAL'],
+        help='The type of reconstruction loss to use', default='PERCEPTUAL')
     parser.add_argument('--max_nrof_steps', type=int,
         help='Number of steps to run.', default=50000)
     parser.add_argument('--save_every_n_steps', type=int,
