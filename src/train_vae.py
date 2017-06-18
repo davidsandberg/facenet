@@ -31,16 +31,18 @@ import tensorflow.contrib.slim as slim
 from tensorflow.python.framework import ops
 import sys
 import time
+import importlib
 import argparse
 import facenet
 import numpy as np
 import h5py
 import os
 from datetime import datetime
-from tensorflow.python.platform import gfile
 
 def main(args):
   
+    network = importlib.import_module(args.model_def)
+    pretrained_model = '/home/david/models/export/20170512-110547/model-20170512-110547.ckpt-250000'
 
     batch_norm_params = {
         # Decay for the moving averages.
@@ -105,27 +107,27 @@ def main(args):
         if args.reconstruction_loss_type=='PLAIN':
             reconstruction_loss = tf.reduce_mean(tf.reduce_sum(tf.pow(image_batch - reconstructed,2)))
         elif args.reconstruction_loss_type=='PERCEPTUAL':
-            model_file = '~/models/export/20170512-110547/20170512-110547.pb'
-            feature_list = ['embeddings:0']
-            model_file_exp = os.path.expanduser(model_file)
-            image_batch_resize = tf.image.resize_images(image_batch, (160,160))
+
+            shp = image_batch.get_shape().as_list()
+            shp[0] = -1
+            #reconstructed = tf.zeros((128, 64, 64, 3), tf.float32, 'zeros')
+            xxx = tf.reshape(tf.stack([image_batch, reconstructed], axis=0), shp)
+            images_resize = tf.image.resize_images(xxx, (160,160))
+            prelogits, _ = network.inference(images_resize, 1.0, 
+                phase_train=False, bottleneck_layer_size=128, weight_decay=0.0)
+            #prelogits = slim.fully_connected(slim.flatten(images_resize), 128, weights_initializer=tf.truncated_normal_initializer(stddev=0.1))
+            #embeddings = tf.nn.l2_normalize(prelogits, 1, 1e-10, name='embeddings')
+            embeddings = tf.identity(prelogits, 'embeddings')
+            #feature_list = ['embeddings:0']
             
-            with gfile.FastGFile(model_file_exp,'rb') as f:
-                graph_def = tf.GraphDef()
-                graph_def.ParseFromString(f.read())
 
-                image_batch_resize = tf.image.resize_images(image_batch, (160,160))
-                image_features = tf.import_graph_def(graph_def, input_map={ 'input': image_batch_resize, 'phase_train':False }, 
-                    return_elements=feature_list, name='ploss1')
-
-                reconstructed_resize = tf.image.resize_images(reconstructed, (160,160))
-                reconstruction_features = tf.import_graph_def(graph_def, input_map={ 'input': reconstructed_resize, 'phase_train':False }, 
-                    return_elements=feature_list, name='ploss2')
-
-                reconstruction_loss_list = []
-                for image_feature, reconstruction_feature in zip(image_features, reconstruction_features):
-                    reconstruction_loss_list.append(tf.reduce_mean(tf.reduce_sum(tf.pow(image_feature - reconstruction_feature,2))))
-                reconstruction_loss = tf.add_n(reconstruction_loss_list, 'reconstruction_loss')
+            #reconstruction_loss_list = []
+            #for image_feature, reconstruction_feature in zip(image_features, reconstruction_features):
+            #image_feature, reconstructed_feature = tf.unstack(tf.reshape(embeddings, [-1,2,128]), 2, 1)
+            image_feature, reconstructed_feature = tf.unstack(tf.reshape(embeddings, [2,-1,128]), num=2, axis=0)
+            reconstruction_loss = tf.reduce_mean(tf.reduce_sum(tf.pow(image_feature - reconstructed_feature,2)))
+            #    reconstruction_loss_list.append(tf.reduce_mean(tf.reduce_sum(tf.pow(image_feature - reconstructed_feature,2))))
+            #reconstruction_loss = tf.add_n(reconstruction_loss_list, 'reconstruction_loss')
         else:
             pass
         
@@ -137,8 +139,9 @@ def main(args):
         
         learning_rate = tf.train.exponential_decay(args.initial_learning_rate, global_step,
             args.learning_rate_decay_steps, args.learning_rate_decay_factor, staircase=True)
+        
         opt = tf.train.AdamOptimizer(learning_rate)
-        grads = opt.compute_gradients(total_loss)
+        grads = opt.compute_gradients(total_loss, var_list=get_variables_to_train())
         
         # Apply gradients
         apply_gradient_op = opt.apply_gradients(grads, global_step=global_step)
@@ -147,6 +150,8 @@ def main(args):
 
         # Create a saver
         saver = tf.train.Saver(tf.trainable_variables(), max_to_keep=3)
+        
+        #facenet_saver = tf.train.Saver(get_facenet_variables_to_restore())
 
         # Start running operations on the Graph
         gpu_memory_fraction = 1.0
@@ -159,6 +164,10 @@ def main(args):
 
         with sess.as_default():
             
+            if pretrained_model:
+                print('Restoring pretrained model: %s' % pretrained_model)
+                #facenet_saver.restore(sess, pretrained_model)
+          
             log = {
                 'total_loss': np.zeros((0,), np.float),
                 'reconstruction_loss': np.zeros((0,), np.float),
@@ -170,8 +179,8 @@ def main(args):
             print('Running training')
             while step < args.max_nrof_steps:
                 start_time = time.time()
-                step, _, reconstruction_loss_, kl_loss_mean_, total_loss_, _, _, learning_rate_ = sess.run(
-                      [global_step, train_op, reconstruction_loss, kl_loss_mean, total_loss, mean, log_variance, learning_rate])
+                step, _, reconstruction_loss_, kl_loss_mean_, total_loss_, learning_rate_ = sess.run(
+                      [global_step, train_op, reconstruction_loss, kl_loss_mean, total_loss, learning_rate])
                 log['total_loss'] = np.append(log['total_loss'], total_loss_)
                 log['reconstruction_loss'] = np.append(log['reconstruction_loss'], reconstruction_loss_)
                 log['kl_loss'] = np.append(log['kl_loss'], kl_loss_mean_)
@@ -189,7 +198,20 @@ def main(args):
                         for key, value in log.iteritems():
                             f.create_dataset(key, data=value)
 
-                
+def get_variables_to_train():
+    train_variables = []
+    for var in tf.trainable_variables():
+        if 'Inception' not in var.name:
+            train_variables.append(var)
+    return train_variables
+
+def get_facenet_variables_to_restore():
+    facenet_variables = []
+    for var in tf.all_variables():
+        if var.name.startswith('Inception'):
+            if 'Adam' not in var.name:
+                facenet_variables.append(var)
+    return facenet_variables
 
 def kl_divergence_loss(mean, log_variance):
     kl = 0.5 * tf.reduce_sum( tf.exp(log_variance) + tf.square(mean) - 1.0 - log_variance, reduction_indices = 1)
@@ -271,6 +293,8 @@ def parse_arguments(argv):
         help='Kullback-Leibler divergence loss factor.', default=1.0)
     parser.add_argument('--beta', type=float,
         help='Reconstruction loss factor.', default=0.5)
+    parser.add_argument('--model_def', type=str,
+        help='Model definition. Points to a module containing the definition of the inference graph.', default='models.inception_resnet_v1')
 
     return parser.parse_args(argv)
   
