@@ -20,7 +20,7 @@
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 # SOFTWARE.
 
-"""Train a Variational Autoencoder
+"""Generate images or latent variables using a Variational Autoencoder
 """
 from __future__ import absolute_import
 from __future__ import division
@@ -28,26 +28,22 @@ from __future__ import print_function
 
 import tensorflow as tf
 import tensorflow.contrib.slim as slim
-from tensorflow.python.framework import ops
 import sys
-import time
-import importlib
 import argparse
 import facenet
-import numpy as np
-import h5py
 import os
 from datetime import datetime
-from scipy import misc
+import matplotlib.pyplot as plt
 
 def main(args):
   
-    img_mean = np.array([134.10714722, 102.52040863, 87.15436554])
-    img_stddev = np.sqrt(np.array([3941.30175781, 2856.94287109, 2519.35791016]))
+    #pretrained_model = '/home/david/vae/20170617-232027/model.ckpt-50000'
+    pretrained_model = '/home/david/vae/20170620-224017/model.ckpt-41000'
+    
+    # Create encoder
+    # Create decoder
+    # Load parameters 
   
-    network = importlib.import_module(args.model_def)
-    pretrained_model = '/home/david/models/export/20170512-110547/model-20170512-110547.ckpt-250000'
-
     batch_norm_params = {
         # Decay for the moving averages.
         'decay': 0.995,
@@ -63,7 +59,6 @@ def main(args):
     model_dir = os.path.join(os.path.expanduser(args.models_base_dir), subdir)
     if not os.path.isdir(model_dir):  # Create the model directory if it doesn't exist
         os.makedirs(model_dir)
-    log_file_name = os.path.join(model_dir, 'logs.h5')
     
     # Store some git revision info in a text file in the log directory
     src_path,_ = os.path.split(os.path.realpath(__file__))
@@ -71,92 +66,23 @@ def main(args):
         
     with tf.Graph().as_default():
         tf.set_random_seed(args.seed)
-        global_step = tf.Variable(0, trainable=False)
         
         train_set = facenet.get_dataset(args.data_dir)
         image_list, _ = facenet.get_image_paths_and_labels(train_set)
         
-        images_tensor = ops.convert_to_tensor(image_list, dtype=tf.string)
-        
-        # Makes an input queue
-        input_queue = tf.train.string_input_producer(images_tensor, shuffle=True)
-    
-        nrof_preprocess_threads = 4
-        imagesx = []
-        for _ in range(nrof_preprocess_threads):
-            file_contents = tf.read_file(input_queue.dequeue())
-            image = tf.image.decode_png(file_contents, channels=3)
-            image.set_shape((args.image_size, args.image_size, 3))
-            image = tf.cast(image, tf.float32)
-            #pylint: disable=no-member
-            imagesx.append([image])
-    
-        image_batch = tf.train.batch_join(
-            imagesx, batch_size=args.batch_size,
-            capacity=4 * nrof_preprocess_threads * args.batch_size,
-            allow_smaller_final_batch=False)
-
-        # Normalize
-        image_batch_norm = (image_batch-img_mean) / img_stddev
+        images_placeholder = tf.placeholder(tf.float32, shape=(None,64,64,3), name='input')
         
         # Create encoder network
-        mean, log_variance = encoder(image_batch_norm, batch_norm_params, args.embedding_size)
+        mean, log_variance = encoder(images_placeholder, batch_norm_params, args.embedding_size)
         
         epsilon = tf.random_normal((args.batch_size, args.embedding_size))
         std = tf.exp(log_variance/2)
         latent_var = mean + epsilon * std
         
         # Create decoder network
-        reconstructed_norm = decoder(latent_var, batch_norm_params)
+        reconstructed = decoder(latent_var, batch_norm_params)
         
-        # Un-normalize
-        reconstructed = (reconstructed_norm*img_stddev) + img_mean
         
-        # Create reconstruction loss (perceptual loss)
-        #   This requires an instance of the facenet model
-        if args.reconstruction_loss_type=='PLAIN':
-            reconstruction_loss = tf.reduce_mean(tf.reduce_sum(tf.pow(image_batch - reconstructed,2)))
-        elif args.reconstruction_loss_type=='PERCEPTUAL':
-
-            shp = image_batch.get_shape().as_list()
-            shp[0] = -1
-            #reconstructed = tf.zeros((128, 64, 64, 3), tf.float32, 'zeros')
-            images = tf.reshape(tf.stack([image_batch_norm, reconstructed_norm], axis=0), shp)
-            images = tf.image.resize_images(images, (160,160))
-            prelogits, _ = network.inference(images, 1.0, 
-                phase_train=False, bottleneck_layer_size=128, weight_decay=0.0)
-            #prelogits = slim.fully_connected(slim.flatten(images_resize), 128, weights_initializer=tf.truncated_normal_initializer(stddev=0.1))
-            #embeddings = tf.nn.l2_normalize(prelogits, 1, 1e-10, name='embeddings')
-            embeddings = tf.identity(prelogits, 'embeddings')
-            #feature_list = ['embeddings:0']
-            
-
-            #reconstruction_loss_list = []
-            #for image_feature, reconstruction_feature in zip(image_features, reconstruction_features):
-            #image_feature, reconstructed_feature = tf.unstack(tf.reshape(embeddings, [-1,2,128]), 2, 1)
-            image_feature, reconstructed_feature = tf.unstack(tf.reshape(embeddings, [2,-1,128]), num=2, axis=0)
-            reconstruction_loss = tf.reduce_mean(tf.reduce_sum(tf.pow(image_feature - reconstructed_feature,2)))
-            #    reconstruction_loss_list.append(tf.reduce_mean(tf.reduce_sum(tf.pow(image_feature - reconstructed_feature,2))))
-            #reconstruction_loss = tf.add_n(reconstruction_loss_list, 'reconstruction_loss')
-        else:
-            pass
-        
-        # Create KL divergence loss
-        kl_loss = kl_divergence_loss(mean, log_variance)
-        kl_loss_mean = tf.reduce_mean(kl_loss)
-        
-        total_loss = args.alfa*kl_loss_mean + args.beta*reconstruction_loss
-        
-        learning_rate = tf.train.exponential_decay(args.initial_learning_rate, global_step,
-            args.learning_rate_decay_steps, args.learning_rate_decay_factor, staircase=True)
-        
-        opt = tf.train.AdamOptimizer(learning_rate)
-        grads = opt.compute_gradients(total_loss, var_list=get_variables_to_train())
-        
-        # Apply gradients
-        apply_gradient_op = opt.apply_gradients(grads, global_step=global_step)
-        with tf.control_dependencies([apply_gradient_op]):
-            train_op = tf.no_op(name='train')
 
         # Create a saver
         saver = tf.train.Saver(tf.trainable_variables(), max_to_keep=3)
@@ -176,71 +102,19 @@ def main(args):
             
             if pretrained_model:
                 print('Restoring pretrained model: %s' % pretrained_model)
-                #facenet_saver.restore(sess, pretrained_model)
+                saver.restore(sess, pretrained_model)
           
-            log = {
-                'total_loss': np.zeros((0,), np.float),
-                'reconstruction_loss': np.zeros((0,), np.float),
-                'kl_loss': np.zeros((0,), np.float),
-                'learning_rate': np.zeros((0,), np.float),
-                }
+            image_paths = image_list[0:128]
+            imgs = facenet.load_data(image_paths, False, False, 64, True)
+            recon_ = sess.run([reconstructed], feed_dict={images_placeholder:imgs})
             
-            step = 0
-            print('Running training')
-            while step < args.max_nrof_steps:
-                start_time = time.time()
-                if step % 500 == 0:
-                    step, _, reconstruction_loss_, kl_loss_mean_, total_loss_, learning_rate_, rec_ = sess.run(
-                          [global_step, train_op, reconstruction_loss, kl_loss_mean, total_loss, learning_rate, reconstructed])
-                    img = get_images_on_grid(rec_, shape=(16,8))
-                    misc.imsave(os.path.join(model_dir, 'reconstructed_%06d.png' % step), img)
-                else:
-                    step, _, reconstruction_loss_, kl_loss_mean_, total_loss_, learning_rate_ = sess.run(
-                          [global_step, train_op, reconstruction_loss, kl_loss_mean, total_loss, learning_rate])
-                log['total_loss'] = np.append(log['total_loss'], total_loss_)
-                log['reconstruction_loss'] = np.append(log['reconstruction_loss'], reconstruction_loss_)
-                log['kl_loss'] = np.append(log['kl_loss'], kl_loss_mean_)
-                log['learning_rate'] = np.append(log['learning_rate'], learning_rate_)
+            xxx = 1
+            
+            plt.imshow((recon_[0][0,:,:,:]+127)*50)
+            plt.imshow((imgs[0,:,:,:]+127)*10)
+            
 
-                duration = time.time() - start_time
-                print('Step: %d \tTime: %.3f \trec_loss: %.3f \tkl_loss: %.3f \ttotal_loss: %.3f' % (step, duration, reconstruction_loss_, kl_loss_mean_, total_loss_))
 
-                if step % args.save_every_n_steps==0 or step==args.max_nrof_steps:
-                    print('Saving checkpoint file')
-                    checkpoint_path = os.path.join(model_dir, 'model.ckpt')
-                    saver.save(sess, checkpoint_path, global_step=step, write_meta_graph=False)
-                    print('Saving log')
-                    with h5py.File(log_file_name, 'w') as f:
-                        for key, value in log.iteritems():
-                            f.create_dataset(key, data=value)
-
-def get_images_on_grid(images, shape=(16,8)):
-    img = np.zeros((shape[1]*(64+3)+3, shape[0]*(64+3)+3, 3), np.float32)
-    for i in range(shape[1]):
-        x_start = i*(64+3)+3
-        for j in range(shape[0]):
-            y_start = j*(64+3)+3
-            img[x_start:x_start+64, y_start:y_start+64, :] = images[i*shape[0]+j, :, :, :]
-    return img
-
-def get_variables_to_train():
-    train_variables = []
-    for var in tf.trainable_variables():
-        if 'Inception' not in var.name:
-            train_variables.append(var)
-    return train_variables
-
-def get_facenet_variables_to_restore():
-    facenet_variables = []
-    for var in tf.all_variables():
-        if var.name.startswith('Inception'):
-            if 'Adam' not in var.name:
-                facenet_variables.append(var)
-    return facenet_variables
-
-def kl_divergence_loss(mean, log_variance):
-    kl = 0.5 * tf.reduce_sum( tf.exp(log_variance) + tf.square(mean) - 1.0 - log_variance, reduction_indices = 1)
-    return kl
 
 def encoder(images, batch_norm_params, latent_variable_dim):
     # Note: change relu to leaky relu
@@ -320,7 +194,7 @@ def parse_arguments(argv):
         help='Reconstruction loss factor.', default=0.5)
     parser.add_argument('--model_def', type=str,
         help='Model definition. Points to a module containing the definition of the inference graph.', default='models.inception_resnet_v1')
-    
+
     return parser.parse_args(argv)
   
     
