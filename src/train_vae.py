@@ -46,7 +46,6 @@ def main(args):
     img_stddev = np.sqrt(np.array([3941.30175781, 2856.94287109, 2519.35791016]))
   
     network = importlib.import_module(args.model_def)
-    pretrained_model = '/home/david/models/export/20170512-110547/model-20170512-110547.ckpt-250000'
 
     batch_norm_params = {
         # Decay for the moving averages.
@@ -112,32 +111,29 @@ def main(args):
         # Un-normalize
         reconstructed = (reconstructed_norm*img_stddev) + img_mean
         
-        # Create reconstruction loss (perceptual loss)
-        #   This requires an instance of the facenet model
+        # Create reconstruction loss
         if args.reconstruction_loss_type=='PLAIN':
             reconstruction_loss = tf.reduce_mean(tf.reduce_sum(tf.pow(image_batch - reconstructed,2)))
         elif args.reconstruction_loss_type=='PERCEPTUAL':
-
-            shp = image_batch.get_shape().as_list()
-            shp[0] = -1
-            #reconstructed = tf.zeros((128, 64, 64, 3), tf.float32, 'zeros')
+            # Stack images from both the input batch and the reconstructed batch in a new tensor 
+            shp = [-1] + image_batch.get_shape().as_list()[1:]
             images = tf.reshape(tf.stack([image_batch_norm, reconstructed_norm], axis=0), shp)
+            # Resize images to the native size of the preceptual loss model
             images = tf.image.resize_images(images, (160,160))
-            prelogits, _ = network.inference(images, 1.0, 
+            _, end_points = network.inference(images, 1.0, 
                 phase_train=False, bottleneck_layer_size=128, weight_decay=0.0)
-            #prelogits = slim.fully_connected(slim.flatten(images_resize), 128, weights_initializer=tf.truncated_normal_initializer(stddev=0.1))
-            #embeddings = tf.nn.l2_normalize(prelogits, 1, 1e-10, name='embeddings')
-            embeddings = tf.identity(prelogits, 'embeddings')
-            #feature_list = ['embeddings:0']
-            
+            # Get a list of feature names to use for loss terms
+            feature_names = args.loss_features.replace(' ', '').split(',')
 
-            #reconstruction_loss_list = []
-            #for image_feature, reconstruction_feature in zip(image_features, reconstruction_features):
-            #image_feature, reconstructed_feature = tf.unstack(tf.reshape(embeddings, [-1,2,128]), 2, 1)
-            image_feature, reconstructed_feature = tf.unstack(tf.reshape(embeddings, [2,-1,128]), num=2, axis=0)
-            reconstruction_loss = tf.reduce_mean(tf.reduce_sum(tf.pow(image_feature - reconstructed_feature,2)))
-            #    reconstruction_loss_list.append(tf.reduce_mean(tf.reduce_sum(tf.pow(image_feature - reconstructed_feature,2))))
-            #reconstruction_loss = tf.add_n(reconstruction_loss_list, 'reconstruction_loss')
+            # Calculate L2 loss between original and reconstructed images in feature space
+            reconstruction_loss_list = []
+            for feature_name in feature_names:
+                feature_flat = slim.flatten(end_points[feature_name])
+                image_feature, reconstructed_feature = tf.unstack(tf.reshape(feature_flat, [2,args.batch_size,-1]), num=2, axis=0)
+                reconstruction_loss = tf.reduce_mean(tf.reduce_sum(tf.pow(image_feature-reconstructed_feature, 2)), name=feature_name+'_loss')
+                reconstruction_loss_list.append(reconstruction_loss)
+            # Sum up the losses in for the different features
+            reconstruction_loss = tf.add_n(reconstruction_loss_list, 'reconstruction_loss')
         else:
             pass
         
@@ -150,6 +146,7 @@ def main(args):
         learning_rate = tf.train.exponential_decay(args.initial_learning_rate, global_step,
             args.learning_rate_decay_steps, args.learning_rate_decay_factor, staircase=True)
         
+        # Calculate gradients and make sure not to include parameters for the perceptual loss model
         opt = tf.train.AdamOptimizer(learning_rate)
         grads = opt.compute_gradients(total_loss, var_list=get_variables_to_train())
         
@@ -161,7 +158,7 @@ def main(args):
         # Create a saver
         saver = tf.train.Saver(tf.trainable_variables(), max_to_keep=3)
         
-        #facenet_saver = tf.train.Saver(get_facenet_variables_to_restore())
+        facenet_saver = tf.train.Saver(get_facenet_variables_to_restore())
 
         # Start running operations on the Graph
         gpu_memory_fraction = 1.0
@@ -174,9 +171,12 @@ def main(args):
 
         with sess.as_default():
             
-            if pretrained_model:
-                print('Restoring pretrained model: %s' % pretrained_model)
-                #facenet_saver.restore(sess, pretrained_model)
+            if args.reconstruction_loss_type=='PERCEPTUAL':
+                if not args.pretrained_model:
+                    raise ValueError('A pretrained model must be specified when using perceptual loss')
+                pretrained_model_exp = os.path.expanduser(args.pretrained_model)
+                print('Restoring pretrained model: %s' % pretrained_model_exp)
+                facenet_saver.restore(sess, pretrained_model_exp)
           
             log = {
                 'total_loss': np.zeros((0,), np.float),
@@ -192,7 +192,7 @@ def main(args):
                 if step % 500 == 0:
                     step, _, reconstruction_loss_, kl_loss_mean_, total_loss_, learning_rate_, rec_ = sess.run(
                           [global_step, train_op, reconstruction_loss, kl_loss_mean, total_loss, learning_rate, reconstructed])
-                    img = get_images_on_grid(rec_, shape=(16,8))
+                    img = put_images_on_grid(rec_, shape=(16,8))
                     misc.imsave(os.path.join(model_dir, 'reconstructed_%06d.png' % step), img)
                 else:
                     step, _, reconstruction_loss_, kl_loss_mean_, total_loss_, learning_rate_ = sess.run(
@@ -214,7 +214,8 @@ def main(args):
                         for key, value in log.iteritems():
                             f.create_dataset(key, data=value)
 
-def get_images_on_grid(images, shape=(16,8)):
+def put_images_on_grid(images, shape=(16,8)):
+    # TODO: Make this nicer!!
     img = np.zeros((shape[1]*(64+3)+3, shape[0]*(64+3)+3, 3), np.float32)
     for i in range(shape[1]):
         x_start = i*(64+3)+3
@@ -232,7 +233,7 @@ def get_variables_to_train():
 
 def get_facenet_variables_to_restore():
     facenet_variables = []
-    for var in tf.all_variables():
+    for var in tf.global_variables():
         if var.name.startswith('Inception'):
             if 'Adam' not in var.name:
                 facenet_variables.append(var)
@@ -319,7 +320,13 @@ def parse_arguments(argv):
     parser.add_argument('--beta', type=float,
         help='Reconstruction loss factor.', default=0.5)
     parser.add_argument('--model_def', type=str,
-        help='Model definition. Points to a module containing the definition of the inference graph.', default='models.inception_resnet_v1')
+        help='Model definition. Points to a module containing the definition of the inference graph.', 
+        default='models.inception_resnet_v1')
+    parser.add_argument('--loss_features', type=str,
+        help='Comma separated list of features to use for perceptual loss. Features should be defined ' +
+          'in the end_points dictionary.', default='Conv2d_1a_3x3,Conv2d_2a_3x3, Conv2d_2b_3x3')
+    parser.add_argument('--pretrained_model', type=str,
+        help='Pretrained model to use to calculate features for perceptual loss.')
     
     return parser.parse_args(argv)
   

@@ -205,6 +205,7 @@ def inception_resnet_v1(inputs, is_training=True,
                 
                 # 5 x Inception-resnet-A
                 net = slim.repeat(net, 5, block35, scale=0.17)
+                end_points['Mixed_5a'] = net
         
                 # Reduction-A
                 with tf.variable_scope('Mixed_6a'):
@@ -213,6 +214,7 @@ def inception_resnet_v1(inputs, is_training=True,
                 
                 # 10 x Inception-Resnet-B
                 net = slim.repeat(net, 10, block17, scale=0.10)
+                end_points['Mixed_6b'] = net
                 
                 # Reduction-B
                 with tf.variable_scope('Mixed_7a'):
@@ -221,7 +223,10 @@ def inception_resnet_v1(inputs, is_training=True,
                 
                 # 5 x Inception-Resnet-C
                 net = slim.repeat(net, 5, block8, scale=0.20)
+                end_points['Mixed_8a'] = net
+                
                 net = block8(net, activation_fn=None)
+                end_points['Mixed_8b'] = net
                 
                 with tf.variable_scope('Logits'):
                     end_points['PrePool'] = net
