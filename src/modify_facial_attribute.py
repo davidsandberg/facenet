@@ -20,7 +20,7 @@
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 # SOFTWARE.
 
-"""Generate images or latent variables using a Variational Autoencoder
+"""Calculate average latent variables for the different attributes in CelebA
 """
 from __future__ import absolute_import
 from __future__ import division
@@ -33,17 +33,21 @@ import argparse
 import facenet
 import os
 from datetime import datetime
-import matplotlib.pyplot as plt
+import numpy as np
+import math
+import time
+import h5py
+from scipy import misc
 
 def main(args):
   
-    #pretrained_model = '/home/david/vae/20170617-232027/model.ckpt-50000'
-    pretrained_model = '/home/david/vae/20170620-224017/model.ckpt-41000'
+    img_mean = np.array([134.10714722, 102.52040863, 87.15436554])
+    img_stddev = np.sqrt(np.array([3941.30175781, 2856.94287109, 2519.35791016]))
     
-    # Create encoder
-    # Create decoder
-    # Load parameters 
-  
+    pretrained_model = '/home/david/vae/20170627-224709/model.ckpt-50000'
+    
+    fields, attribs_dict = read_annotations('/media/deep/datasets/CelebA/Anno/list_attr_celeba.txt')
+    
     batch_norm_params = {
         # Decay for the moving averages.
         'decay': 0.995,
@@ -70,25 +74,58 @@ def main(args):
         train_set = facenet.get_dataset(args.data_dir)
         image_list, _ = facenet.get_image_paths_and_labels(train_set)
         
-        images_placeholder = tf.placeholder(tf.float32, shape=(None,64,64,3), name='input')
+        # Get attributes for images
+        nrof_attributes = len(fields)
+        attribs_list = []
+        for img in image_list:
+            key = os.path.split(img)[1].split('.')[0]
+            attr = attribs_dict[key]
+            assert len(attr)==nrof_attributes
+            attribs_list.append(attr)
+            
+        # Create the input queue
+        input_queue = tf.train.slice_input_producer([image_list, attribs_list], num_epochs=1, shuffle=False)        
         
+        nrof_preprocess_threads = 4
+        imagesx = []
+        for _ in range(nrof_preprocess_threads):
+            filename = input_queue[0]
+            file_contents = tf.read_file(filename)
+            image = tf.image.decode_image(file_contents, channels=3)
+            image = tf.image.resize_image_with_crop_or_pad(image, 160, 160)
+            image = tf.image.resize_images(image, (64,64))
+            image.set_shape((args.image_size, args.image_size, 3))
+            attribs = input_queue[1]
+            attribs.set_shape((nrof_attributes,))
+            image = tf.cast(image, tf.float32)
+            imagesx.append([image, attribs])
+    
+        image_batch, attribs_batch = tf.train.batch_join(
+            imagesx, batch_size=args.batch_size, 
+            shapes=[(args.image_size, args.image_size, 3), (nrof_attributes,)], enqueue_many=False,
+            capacity=4 * nrof_preprocess_threads * args.batch_size,
+            allow_smaller_final_batch=True)
+
+
+        # Normalize
+        image_batch_norm = (image_batch-img_mean) / img_stddev
+
         # Create encoder network
-        mean, log_variance = encoder(images_placeholder, batch_norm_params, args.embedding_size)
+        mean, log_variance = encoder(image_batch_norm, batch_norm_params, args.latent_var_size)
         
-        epsilon = tf.random_normal((args.batch_size, args.embedding_size))
+        epsilon = tf.random_normal((tf.shape(mean)[0], args.latent_var_size))
         std = tf.exp(log_variance/2)
         latent_var = mean + epsilon * std
         
         # Create decoder network
-        reconstructed = decoder(latent_var, batch_norm_params)
+        reconstructed_norm = decoder(latent_var, batch_norm_params)
         
-        
+        # Un-normalize
+        reconstructed = (reconstructed_norm*img_stddev) + img_mean
 
         # Create a saver
         saver = tf.train.Saver(tf.trainable_variables(), max_to_keep=3)
         
-        #facenet_saver = tf.train.Saver(get_facenet_variables_to_restore())
-
         # Start running operations on the Graph
         gpu_memory_fraction = 1.0
         gpu_options = tf.GPUOptions(per_process_gpu_memory_fraction=gpu_memory_fraction)
@@ -97,24 +134,94 @@ def main(args):
         sess.run(tf.local_variables_initializer())
         coord = tf.train.Coordinator()
         tf.train.start_queue_runners(coord=coord, sess=sess)
+        
 
         with sess.as_default():
-            
+          
             if pretrained_model:
                 print('Restoring pretrained model: %s' % pretrained_model)
                 saver.restore(sess, pretrained_model)
-          
-            image_paths = image_list[0:128]
-            imgs = facenet.load_data(image_paths, False, False, 64, True)
-            recon_ = sess.run([reconstructed], feed_dict={images_placeholder:imgs})
+#           
+#             nrof_images = len(image_list)
+#             nrof_batches = int(math.ceil(len(image_list) / args.batch_size))
+#             latent_vars = np.zeros((nrof_images, args.latent_var_size))
+#             attributes = np.zeros((nrof_images, nrof_attributes))
+#             for i in range(nrof_batches):
+#                 start_time = time.time()
+#                 latent_var_, attribs_ = sess.run([latent_var, attribs_batch])
+#                 latent_vars[i:i+latent_var_.shape[0],:] = latent_var_
+#                 attributes[i:i+attribs_.shape[0],:] = attribs_
+#                 duration = time.time() - start_time
+#                 print('Batch %d/%d: %.3f seconds' % (i+1, nrof_batches, duration))
+#             
+#             print('Writing latent variables and attributes to %s' % args.data_file_name)
+#             mdict = {'latent_vars':latent_vars, 'attributes':attributes, 'fields':fields }
+#             filename = os.path.join(model_dir, 'latent_vars_and_attributes.h5')
+#             with h5py.File(filename, 'w') as f:
+#                 for key, value in mdict.iteritems():
+#                     f.create_dataset(key, data=value)
+                    
+            filename = '/home/david/latent.h5'
+            with h5py.File(filename,'r') as f:
+                latent_vars = np.array(f.get('latent_vars'))
+                attributes = np.array(f.get('attributes'))
+                fields = np.array(f.get('fields'))
+                    
+            # Calculate average change in the latent variable when each attribute changes
+            attribute_vector = np.zeros((nrof_attributes, args.latent_var_size), np.float32)
+            for i in range(nrof_attributes):
+                pos_idx = np.argwhere(attributes[:,i]==1)[:,0]
+                neg_idx = np.argwhere(attributes[:,i]==-1)[:,0]
+                pos_avg = np.mean(latent_vars[pos_idx,:], 0)
+                neg_avg = np.mean(latent_vars[neg_idx,:], 0)
+                attribute_vector[i,:] = pos_avg - neg_avg
+                
+            # Reconstruct faces while adding varying amount of the selected attribute vector
+            attribute_index = 31 # 31: 'Smiling'
+            image_index = 0
+            idx = np.argwhere(attributes[:,i]==-1)[image_index,0]
+            nrof_interp_steps = 10
+            sweep_latent_var = np.zeros((nrof_interp_steps, args.latent_var_size), np.float32)
+            for i in range(nrof_interp_steps):
+                sweep_latent_var[i,:] = latent_vars[idx,:] + 5.0*i/nrof_interp_steps*attribute_vector[attribute_index,:]
+                
+            recon = sess.run(reconstructed, feed_dict={latent_var:sweep_latent_var})
+            
+            img = put_images_on_grid(recon, shape=(nrof_interp_steps,1))
+            misc.imsave(os.path.join(model_dir, 'reconstructed_%06d.png' % idx), img)
+                
             
             xxx = 1
             
-            plt.imshow((recon_[0][0,:,:,:]+127)*50)
-            plt.imshow((imgs[0,:,:,:]+127)*10)
+                    
+                    
+def put_images_on_grid(images, shape=(16,8)):
+    # TODO: Make this nicer!!
+    img = np.zeros((shape[1]*(64+3)+3, shape[0]*(64+3)+3, 3), np.float32)
+    for i in range(shape[1]):
+        x_start = i*(64+3)+3
+        for j in range(shape[0]):
+            y_start = j*(64+3)+3
+            img[x_start:x_start+64, y_start:y_start+64, :] = images[i*shape[0]+j, :, :, :]
+    return img
+
             
-
-
+            
+            
+def read_annotations(filename):
+    attribs = {}    
+    with open(filename, 'r') as f:
+        for i, line in enumerate(f.readlines()):
+            if i==0:
+                continue  # First line is the number of entries in the file
+            elif i==1:
+                fields = line.strip().split() # Second line is the field names
+            else:
+                line = line.split()
+                img_name = line[0].split('.')[0]
+                img_attribs = map(int, line[1:])
+                attribs[img_name] = img_attribs
+    return fields, attribs
 
 def encoder(images, batch_norm_params, latent_variable_dim):
     # Note: change relu to leaky relu
@@ -168,32 +275,14 @@ def parse_arguments(argv):
     parser.add_argument('--data_dir', type=str,
         help='Path to the data directory containing aligned face patches. Multiple directories are separated with colon.',
         default='/home/david/datasets/casia/casia_maxpy_mtcnnpy_64')
-    parser.add_argument('--reconstruction_loss_type', type=str, choices=['PLAIN', 'PERCEPTUAL'],
-        help='The type of reconstruction loss to use', default='PERCEPTUAL')
-    parser.add_argument('--max_nrof_steps', type=int,
-        help='Number of steps to run.', default=50000)
-    parser.add_argument('--save_every_n_steps', type=int,
-        help='Number of steps between storing of model checkpoint and log files', default=1000)
     parser.add_argument('--batch_size', type=int,
         help='Number of images to process in a batch.', default=128)
     parser.add_argument('--image_size', type=int,
         help='Image size (height, width) in pixels.', default=64)
-    parser.add_argument('--embedding_size', type=int,
-        help='Dimensionality of the embedding.', default=100)
-    parser.add_argument('--initial_learning_rate', type=float,
-        help='Initial learning rate.', default=0.0005)
-    parser.add_argument('--learning_rate_decay_steps', type=int,
-        help='Number of steps between learning rate decay.', default=1)
-    parser.add_argument('--learning_rate_decay_factor', type=float,
-        help='Learning rate decay factor.', default=1.0)
+    parser.add_argument('--latent_var_size', type=int,
+        help='Dimensionality of the latent variable.', default=100)
     parser.add_argument('--seed', type=int,
         help='Random seed.', default=666)
-    parser.add_argument('--alfa', type=float,
-        help='Kullback-Leibler divergence loss factor.', default=1.0)
-    parser.add_argument('--beta', type=float,
-        help='Reconstruction loss factor.', default=0.5)
-    parser.add_argument('--model_def', type=str,
-        help='Model definition. Points to a module containing the definition of the inference graph.', default='models.inception_resnet_v1')
 
     return parser.parse_args(argv)
   

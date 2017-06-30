@@ -28,7 +28,6 @@ from __future__ import print_function
 
 import tensorflow as tf
 import tensorflow.contrib.slim as slim
-from tensorflow.python.framework import ops
 import sys
 import time
 import importlib
@@ -75,10 +74,9 @@ def main(args):
         train_set = facenet.get_dataset(args.data_dir)
         image_list, _ = facenet.get_image_paths_and_labels(train_set)
         
-        images_tensor = ops.convert_to_tensor(image_list, dtype=tf.string)
-        
         # Makes an input queue
-        input_queue = tf.train.string_input_producer(images_tensor, shuffle=True)
+        #images_tensor = ops.convert_to_tensor(image_list, dtype=tf.string)
+        input_queue = tf.train.string_input_producer(image_list, shuffle=True)
     
         nrof_preprocess_threads = 4
         imagesx = []
@@ -99,9 +97,9 @@ def main(args):
         image_batch_norm = (image_batch-img_mean) / img_stddev
         
         # Create encoder network
-        mean, log_variance = encoder(image_batch_norm, batch_norm_params, args.embedding_size)
+        mean, log_variance = encoder(image_batch_norm, batch_norm_params, args.latent_var_size)
         
-        epsilon = tf.random_normal((args.batch_size, args.embedding_size))
+        epsilon = tf.random_normal((args.batch_size, args.latent_var_size))
         std = tf.exp(log_variance/2)
         latent_var = mean + epsilon * std
         
@@ -305,8 +303,8 @@ def parse_arguments(argv):
         help='Number of images to process in a batch.', default=128)
     parser.add_argument('--image_size', type=int,
         help='Image size (height, width) in pixels.', default=64)
-    parser.add_argument('--embedding_size', type=int,
-        help='Dimensionality of the embedding.', default=100)
+    parser.add_argument('--latent_var_size', type=int,
+        help='Dimensionality of the latent variable.', default=100)
     parser.add_argument('--initial_learning_rate', type=float,
         help='Initial learning rate.', default=0.0005)
     parser.add_argument('--learning_rate_decay_steps', type=int,
