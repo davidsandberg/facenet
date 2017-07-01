@@ -38,17 +38,14 @@ import h5py
 import os
 from datetime import datetime
 from scipy import misc
-import generative.models.vae_base  # @UnresolvedImport
 
 def main(args):
   
     img_mean = np.array([134.10714722, 102.52040863, 87.15436554])
     img_stddev = np.sqrt(np.array([3941.30175781, 2856.94287109, 2519.35791016]))
   
-    #network = importlib.import_module(args.model_def, package='src.models')
-    network = importlib.import_module(args.model_def)
-
-    vae = generative.models.vae_base.Vae(args.latent_var_size)
+    vae_def = importlib.import_module(args.vae_def)
+    vae = vae_def.Vae(args.latent_var_size)
 
     subdir = datetime.strftime(datetime.now(), '%Y%m%d-%H%M%S')
     model_dir = os.path.join(os.path.expanduser(args.models_base_dir), subdir)
@@ -105,6 +102,8 @@ def main(args):
         if args.reconstruction_loss_type=='PLAIN':
             reconstruction_loss = tf.reduce_mean(tf.reduce_sum(tf.pow(image_batch - reconstructed,2)))
         elif args.reconstruction_loss_type=='PERCEPTUAL':
+            network = importlib.import_module(args.model_def)
+
             # Stack images from both the input batch and the reconstructed batch in a new tensor 
             shp = [-1] + image_batch.get_shape().as_list()[1:]
             images = tf.reshape(tf.stack([image_batch_norm, reconstructed_norm], axis=0), shp)
@@ -257,7 +256,10 @@ def parse_arguments(argv):
         help='Reconstruction loss factor.', default=0.5)
     parser.add_argument('--model_def', type=str,
         help='Model definition. Points to a module containing the definition of the inference graph.', 
-        default='models.inception_resnet_v1')
+        default='src.models.inception_resnet_v1')
+    parser.add_argument('--vae_def', type=str,
+        help='Model definition for the variational autoencoder. Points to a module containing the definition.', 
+        default='src.generative.models.dfc_vae')
     parser.add_argument('--loss_features', type=str,
         help='Comma separated list of features to use for perceptual loss. Features should be defined ' +
           'in the end_points dictionary.', default='Conv2d_1a_3x3,Conv2d_2a_3x3, Conv2d_2b_3x3')

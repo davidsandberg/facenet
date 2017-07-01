@@ -20,7 +20,8 @@
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 # SOFTWARE.
 
-"""Calculate average latent variables for the different attributes in CelebA
+"""Calculate average latent variables (here called attribute vectors) 
+for the different attributes in CelebA
 """
 from __future__ import absolute_import
 from __future__ import division
@@ -29,6 +30,7 @@ from __future__ import print_function
 import tensorflow as tf
 import sys
 import argparse
+import importlib
 import facenet
 import os
 from datetime import datetime
@@ -37,7 +39,6 @@ import math
 import time
 import h5py
 from scipy import misc
-import generative.models.vae_base  # @UnresolvedImport
 
 def main(args):
   
@@ -48,7 +49,8 @@ def main(args):
     
     fields, attribs_dict = read_annotations('/media/deep/datasets/CelebA/Anno/list_attr_celeba.txt')
     
-    vae = generative.models.vae_base.Vae(args.latent_var_size)
+    vae_def = importlib.import_module(args.vae_def)
+    vae = vae_def.Vae(args.latent_var_size)
     
     subdir = datetime.strftime(datetime.now(), '%Y%m%d-%H%M%S')
     model_dir = os.path.join(os.path.expanduser(args.models_base_dir), subdir)
@@ -124,7 +126,7 @@ def main(args):
         sess.run(tf.global_variables_initializer())
         sess.run(tf.local_variables_initializer())
         coord = tf.train.Coordinator()
-        tf.train.start_queue_runners(coord=coord, sess=sess)
+        threads = tf.train.start_queue_runners(coord=coord, sess=sess)
         
 
         with sess.as_default():
@@ -144,6 +146,8 @@ def main(args):
                 attributes[i:i+attribs_.shape[0],:] = attribs_
                 duration = time.time() - start_time
                 print('Batch %d/%d: %.3f seconds' % (i+1, nrof_batches, duration))
+            coord.request_stop()
+            coord.join(threads)                
              
             # Calculate average change in the latent variable when each attribute changes
             attribute_vectors = np.zeros((nrof_attributes, args.latent_var_size), np.float32)
@@ -203,6 +207,9 @@ def parse_arguments(argv):
     
     parser.add_argument('--models_base_dir', type=str,
         help='Directory where to write trained models and checkpoints.', default='~/vae')
+    parser.add_argument('--vae_def', type=str,
+        help='Model definition for the variational autoencoder. Points to a module containing the definition.', 
+        default='src.generative.models.dfc_vae')
     parser.add_argument('--data_dir', type=str,
         help='Path to the data directory containing aligned face patches. Multiple directories are separated with colon.',
         default='/home/david/datasets/casia/casia_maxpy_mtcnnpy_64')
