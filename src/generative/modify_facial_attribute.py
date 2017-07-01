@@ -126,7 +126,7 @@ def main(args):
         sess.run(tf.global_variables_initializer())
         sess.run(tf.local_variables_initializer())
         coord = tf.train.Coordinator()
-        threads = tf.train.start_queue_runners(coord=coord, sess=sess)
+        tf.train.start_queue_runners(coord=coord, sess=sess)
         
 
         with sess.as_default():
@@ -146,8 +146,8 @@ def main(args):
                 attributes[i:i+attribs_.shape[0],:] = attribs_
                 duration = time.time() - start_time
                 print('Batch %d/%d: %.3f seconds' % (i+1, nrof_batches, duration))
-            coord.request_stop()
-            coord.join(threads)                
+            # NOTE: This will print the 'Out of range' warning if the last batch is not full,
+            #  as described by https://github.com/tensorflow/tensorflow/issues/8330
              
             # Calculate average change in the latent variable when each attribute changes
             attribute_vectors = np.zeros((nrof_attributes, args.latent_var_size), np.float32)
