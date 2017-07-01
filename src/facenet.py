@@ -514,3 +514,20 @@ def list_variables(filename):
     variable_map = reader.get_variable_to_shape_map()
     names = sorted(variable_map.keys())
     return names
+
+def put_images_on_grid(images, shape=(16,8)):
+    nrof_images = images.shape[0]
+    img_size = images.shape[1]
+    bw = 3
+    img = np.zeros((shape[1]*(img_size+bw)+bw, shape[0]*(img_size+bw)+bw, 3), np.float32)
+    for i in range(shape[1]):
+        x_start = i*(img_size+bw)+bw
+        for j in range(shape[0]):
+            img_index = i*shape[0]+j
+            if img_index>=nrof_images:
+                break
+            y_start = j*(img_size+bw)+bw
+            img[x_start:x_start+img_size, y_start:y_start+img_size, :] = images[img_index, :, :, :]
+        if img_index>=nrof_images:
+            break
+    return img

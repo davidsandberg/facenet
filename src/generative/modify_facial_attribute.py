@@ -27,7 +27,6 @@ from __future__ import division
 from __future__ import print_function
 
 import tensorflow as tf
-import tensorflow.contrib.slim as slim
 import sys
 import argparse
 import facenet
@@ -38,6 +37,7 @@ import math
 import time
 import h5py
 from scipy import misc
+import generative.models.vae_base  # @UnresolvedImport
 
 def main(args):
   
@@ -48,16 +48,7 @@ def main(args):
     
     fields, attribs_dict = read_annotations('/media/deep/datasets/CelebA/Anno/list_attr_celeba.txt')
     
-    batch_norm_params = {
-        # Decay for the moving averages.
-        'decay': 0.995,
-        # epsilon to prevent 0s in variance.
-        'epsilon': 0.001,
-        # force in-place updates of mean and variance estimates
-        'updates_collections': None,
-        # Moving averages ends up in the trainable variables collection
-        'variables_collections': [ tf.GraphKeys.TRAINABLE_VARIABLES ],
-    }
+    vae = generative.models.vae_base.Vae(args.latent_var_size)
     
     subdir = datetime.strftime(datetime.now(), '%Y%m%d-%H%M%S')
     model_dir = os.path.join(os.path.expanduser(args.models_base_dir), subdir)
@@ -110,15 +101,15 @@ def main(args):
         # Normalize
         image_batch_norm = (image_batch-img_mean) / img_stddev
 
-        # Create encoder network
-        mean, log_variance = encoder(image_batch_norm, batch_norm_params, args.latent_var_size)
+        # Create encoder
+        mean, log_variance = vae.encoder(image_batch_norm)
         
         epsilon = tf.random_normal((tf.shape(mean)[0], args.latent_var_size))
         std = tf.exp(log_variance/2)
         latent_var = mean + epsilon * std
         
-        # Create decoder network
-        reconstructed_norm = decoder(latent_var, batch_norm_params)
+        # Create decoder
+        reconstructed_norm = vae.decoder(latent_var)
         
         # Un-normalize
         reconstructed = (reconstructed_norm*img_stddev) + img_mean
@@ -162,16 +153,15 @@ def main(args):
                 pos_avg = np.mean(latent_vars[pos_idx,:], 0)
                 neg_avg = np.mean(latent_vars[neg_idx,:], 0)
                 attribute_vectors[i,:] = pos_avg - neg_avg
-                
-            print('Writing latent variables and attributes to %s' % args.data_file_name)
+            
+            filename = os.path.join(model_dir, 'attribute_vectors.h5')
+            print('Writing attribute vectors, latent variables and attributes to %s' % filename)
             mdict = {'latent_vars':latent_vars, 'attributes':attributes, 
                      'fields':fields, 'attribute_vectors':attribute_vectors }
-            filename = os.path.join(model_dir, 'latent_vars_and_attributes.h5')
             with h5py.File(filename, 'w') as f:
                 for key, value in mdict.iteritems():
                     f.create_dataset(key, data=value)
                     
-            filename = '/home/david/latent.h5'
             with h5py.File(filename,'r') as f:
                 latent_vars = np.array(f.get('latent_vars'))
                 attributes = np.array(f.get('attributes'))
@@ -189,23 +179,10 @@ def main(args):
                 
             recon = sess.run(reconstructed, feed_dict={latent_var:sweep_latent_var})
             
-            img = put_images_on_grid(recon, shape=(nrof_interp_steps,1))
+            img = facenet.put_images_on_grid(recon, shape=(nrof_interp_steps,1))
             misc.imsave(os.path.join(model_dir, 'reconstructed_%06d.png' % idx), img)
 
                     
-def put_images_on_grid(images, shape=(16,8)):
-    # TODO: Make this nicer!!
-    img = np.zeros((shape[1]*(64+3)+3, shape[0]*(64+3)+3, 3), np.float32)
-    for i in range(shape[1]):
-        x_start = i*(64+3)+3
-        for j in range(shape[0]):
-            y_start = j*(64+3)+3
-            img[x_start:x_start+64, y_start:y_start+64, :] = images[i*shape[0]+j, :, :, :]
-    return img
-
-            
-            
-            
 def read_annotations(filename):
     attribs = {}    
     with open(filename, 'r') as f:
@@ -221,50 +198,6 @@ def read_annotations(filename):
                 attribs[img_name] = img_attribs
     return fields, attribs
 
-def encoder(images, batch_norm_params, latent_variable_dim):
-    # Note: change relu to leaky relu
-    weight_decay = 0.0
-    with tf.variable_scope('encoder'):
-        with slim.arg_scope([slim.conv2d, slim.fully_connected],
-                            weights_initializer=tf.truncated_normal_initializer(stddev=0.1),
-                            weights_regularizer=slim.l2_regularizer(weight_decay),
-                            normalizer_fn=slim.batch_norm,
-                            normalizer_params=batch_norm_params):
-            net = slim.conv2d(images, 32, [4, 4], 2, activation_fn=tf.nn.relu, scope='Conv2d_1')
-            net = slim.conv2d(net, 64, [4, 4], 2, activation_fn=tf.nn.relu, scope='Conv2d_2')
-            net = slim.conv2d(net, 128, [4, 4], 2, activation_fn=tf.nn.relu, scope='Conv2d_3')
-            net = slim.conv2d(net, 256, [4, 4], 2, activation_fn=tf.nn.relu, scope='Conv2d_4')
-            net = slim.flatten(net)
-            fc1 = slim.fully_connected(net, latent_variable_dim, activation_fn=None, normalizer_fn=None, scope='Fc_1')
-            fc2 = slim.fully_connected(net, latent_variable_dim, activation_fn=None, normalizer_fn=None, scope='Fc_2')
-    return fc1, fc2
-  
-def decoder(latent, batch_norm_params):
-    # Note: change relu to leaky relu
-    weight_decay = 0.0
-    with tf.variable_scope('decoder'):
-        with slim.arg_scope([slim.conv2d, slim.fully_connected],
-                            weights_initializer=tf.truncated_normal_initializer(stddev=0.1),
-                            weights_regularizer=slim.l2_regularizer(weight_decay),
-                            normalizer_fn=slim.batch_norm,
-                            normalizer_params=batch_norm_params):
-            net = slim.fully_connected(latent, 4096, activation_fn=None, normalizer_fn=None, scope='Fc_1')
-            net = tf.reshape(net, [-1,4,4,256], name='Reshape')
-            
-            net = tf.image.resize_nearest_neighbor(net, size=(8,8), name='Upsample_1')
-            net = slim.conv2d(net, 128, [3, 3], 1, activation_fn=tf.nn.relu, scope='Conv2d_1')
-    
-            net = tf.image.resize_nearest_neighbor(net, size=(16,16), name='Upsample_2')
-            net = slim.conv2d(net, 64, [3, 3], 1, activation_fn=tf.nn.relu, scope='Conv2d_2')
-    
-            net = tf.image.resize_nearest_neighbor(net, size=(32,32), name='Upsample_3')
-            net = slim.conv2d(net, 32, [3, 3], 1, activation_fn=tf.nn.relu, scope='Conv2d_3')
-    
-            net = tf.image.resize_nearest_neighbor(net, size=(64,64), name='Upsample_4')
-            net = slim.conv2d(net, 3, [3, 3], 1, activation_fn=None, scope='Conv2d_4')
-        
-    return net
-
 def parse_arguments(argv):
     parser = argparse.ArgumentParser()
     
@@ -273,6 +206,8 @@ def parse_arguments(argv):
     parser.add_argument('--data_dir', type=str,
         help='Path to the data directory containing aligned face patches. Multiple directories are separated with colon.',
         default='/home/david/datasets/casia/casia_maxpy_mtcnnpy_64')
+    parser.add_argument('--output_filename', type=str,
+        help='Filename to use for the file containing the attribute vectors.')
     parser.add_argument('--batch_size', type=int,
         help='Number of images to process in a batch.', default=128)
     parser.add_argument('--image_size', type=int,

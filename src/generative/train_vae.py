@@ -38,25 +38,18 @@ import h5py
 import os
 from datetime import datetime
 from scipy import misc
+import generative.models.vae_base  # @UnresolvedImport
 
 def main(args):
   
     img_mean = np.array([134.10714722, 102.52040863, 87.15436554])
     img_stddev = np.sqrt(np.array([3941.30175781, 2856.94287109, 2519.35791016]))
   
+    #network = importlib.import_module(args.model_def, package='src.models')
     network = importlib.import_module(args.model_def)
 
-    batch_norm_params = {
-        # Decay for the moving averages.
-        'decay': 0.995,
-        # epsilon to prevent 0s in variance.
-        'epsilon': 0.001,
-        # force in-place updates of mean and variance estimates
-        'updates_collections': None,
-        # Moving averages ends up in the trainable variables collection
-        'variables_collections': [ tf.GraphKeys.TRAINABLE_VARIABLES ],
-    }
-    
+    vae = generative.models.vae_base.Vae(args.latent_var_size)
+
     subdir = datetime.strftime(datetime.now(), '%Y%m%d-%H%M%S')
     model_dir = os.path.join(os.path.expanduser(args.models_base_dir), subdir)
     if not os.path.isdir(model_dir):  # Create the model directory if it doesn't exist
@@ -74,8 +67,7 @@ def main(args):
         train_set = facenet.get_dataset(args.data_dir)
         image_list, _ = facenet.get_image_paths_and_labels(train_set)
         
-        # Makes an input queue
-        #images_tensor = ops.convert_to_tensor(image_list, dtype=tf.string)
+        # Create the input queue
         input_queue = tf.train.string_input_producer(image_list, shuffle=True)
     
         nrof_preprocess_threads = 4
@@ -97,14 +89,14 @@ def main(args):
         image_batch_norm = (image_batch-img_mean) / img_stddev
         
         # Create encoder network
-        mean, log_variance = encoder(image_batch_norm, batch_norm_params, args.latent_var_size)
+        mean, log_variance = vae.encoder(image_batch_norm)
         
         epsilon = tf.random_normal((args.batch_size, args.latent_var_size))
         std = tf.exp(log_variance/2)
         latent_var = mean + epsilon * std
         
         # Create decoder network
-        reconstructed_norm = decoder(latent_var, batch_norm_params)
+        reconstructed_norm = vae.decoder(latent_var)
         
         # Un-normalize
         reconstructed = (reconstructed_norm*img_stddev) + img_mean
@@ -190,7 +182,7 @@ def main(args):
                 if step % 500 == 0:
                     step, _, reconstruction_loss_, kl_loss_mean_, total_loss_, learning_rate_, rec_ = sess.run(
                           [global_step, train_op, reconstruction_loss, kl_loss_mean, total_loss, learning_rate, reconstructed])
-                    img = put_images_on_grid(rec_, shape=(16,8))
+                    img = facenet.put_images_on_grid(rec_, shape=(16,8))
                     misc.imsave(os.path.join(model_dir, 'reconstructed_%06d.png' % step), img)
                 else:
                     step, _, reconstruction_loss_, kl_loss_mean_, total_loss_, learning_rate_ = sess.run(
@@ -212,16 +204,6 @@ def main(args):
                         for key, value in log.iteritems():
                             f.create_dataset(key, data=value)
 
-def put_images_on_grid(images, shape=(16,8)):
-    # TODO: Make this nicer!!
-    img = np.zeros((shape[1]*(64+3)+3, shape[0]*(64+3)+3, 3), np.float32)
-    for i in range(shape[1]):
-        x_start = i*(64+3)+3
-        for j in range(shape[0]):
-            y_start = j*(64+3)+3
-            img[x_start:x_start+64, y_start:y_start+64, :] = images[i*shape[0]+j, :, :, :]
-    return img
-
 def get_variables_to_train():
     train_variables = []
     for var in tf.trainable_variables():
@@ -240,50 +222,6 @@ def get_facenet_variables_to_restore():
 def kl_divergence_loss(mean, log_variance):
     kl = 0.5 * tf.reduce_sum( tf.exp(log_variance) + tf.square(mean) - 1.0 - log_variance, reduction_indices = 1)
     return kl
-
-def encoder(images, batch_norm_params, latent_variable_dim):
-    # Note: change relu to leaky relu
-    weight_decay = 0.0
-    with tf.variable_scope('encoder'):
-        with slim.arg_scope([slim.conv2d, slim.fully_connected],
-                            weights_initializer=tf.truncated_normal_initializer(stddev=0.1),
-                            weights_regularizer=slim.l2_regularizer(weight_decay),
-                            normalizer_fn=slim.batch_norm,
-                            normalizer_params=batch_norm_params):
-            net = slim.conv2d(images, 32, [4, 4], 2, activation_fn=tf.nn.relu, scope='Conv2d_1')
-            net = slim.conv2d(net, 64, [4, 4], 2, activation_fn=tf.nn.relu, scope='Conv2d_2')
-            net = slim.conv2d(net, 128, [4, 4], 2, activation_fn=tf.nn.relu, scope='Conv2d_3')
-            net = slim.conv2d(net, 256, [4, 4], 2, activation_fn=tf.nn.relu, scope='Conv2d_4')
-            net = slim.flatten(net)
-            fc1 = slim.fully_connected(net, latent_variable_dim, activation_fn=None, normalizer_fn=None, scope='Fc_1')
-            fc2 = slim.fully_connected(net, latent_variable_dim, activation_fn=None, normalizer_fn=None, scope='Fc_2')
-    return fc1, fc2
-  
-def decoder(latent, batch_norm_params):
-    # Note: change relu to leaky relu
-    weight_decay = 0.0
-    with tf.variable_scope('decoder'):
-        with slim.arg_scope([slim.conv2d, slim.fully_connected],
-                            weights_initializer=tf.truncated_normal_initializer(stddev=0.1),
-                            weights_regularizer=slim.l2_regularizer(weight_decay),
-                            normalizer_fn=slim.batch_norm,
-                            normalizer_params=batch_norm_params):
-            net = slim.fully_connected(latent, 4096, activation_fn=None, normalizer_fn=None, scope='Fc_1')
-            net = tf.reshape(net, [-1,4,4,256], name='Reshape')
-            
-            net = tf.image.resize_nearest_neighbor(net, size=(8,8), name='Upsample_1')
-            net = slim.conv2d(net, 128, [3, 3], 1, activation_fn=tf.nn.relu, scope='Conv2d_1')
-    
-            net = tf.image.resize_nearest_neighbor(net, size=(16,16), name='Upsample_2')
-            net = slim.conv2d(net, 64, [3, 3], 1, activation_fn=tf.nn.relu, scope='Conv2d_2')
-    
-            net = tf.image.resize_nearest_neighbor(net, size=(32,32), name='Upsample_3')
-            net = slim.conv2d(net, 32, [3, 3], 1, activation_fn=tf.nn.relu, scope='Conv2d_3')
-    
-            net = tf.image.resize_nearest_neighbor(net, size=(64,64), name='Upsample_4')
-            net = slim.conv2d(net, 3, [3, 3], 1, activation_fn=None, scope='Conv2d_4')
-        
-    return net
 
 def parse_arguments(argv):
     parser = argparse.ArgumentParser()
