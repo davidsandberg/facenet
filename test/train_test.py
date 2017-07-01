@@ -40,7 +40,7 @@ def memory_usage_psutil():
     mem = process.memory_info()[0] / float(2 ** 20)
     return mem
 
-class TrainTest(unittest.TestCase):
+class TrainTest1(unittest.TestCase):
   
     @classmethod
     def setUpClass(self):
@@ -63,9 +63,11 @@ class TrainTest(unittest.TestCase):
         print('tearDownClass')
         # Recursively remove the temporary directory
         shutil.rmtree(self.tmp_dir)
+
+    def setUp(self):
+        print('Memory utilization (SetUp): %.3f MB' % memory_usage_psutil())
         
     def tearDown(self):
-        print('tearDown')
         print('Memory utilization (TearDown): %.3f MB' % memory_usage_psutil())
 
     # test_align_dataset_mtcnn
@@ -88,6 +90,36 @@ class TrainTest(unittest.TestCase):
         args = train_softmax.parse_arguments(argv)
         train_softmax.main(args)
 
+class TrainTest2(unittest.TestCase):
+  
+    @classmethod
+    def setUpClass(self):
+        print('setUpClass')
+        self.tmp_dir = tempfile.mkdtemp()
+        self.dataset_dir = os.path.join(self.tmp_dir, 'dataset')
+        create_mock_dataset(self.dataset_dir, 160)
+        self.lfw_pairs_file = create_mock_lfw_pairs(self.tmp_dir)
+        print(self.lfw_pairs_file)
+        self.pretrained_model_name = '20170512-110547'
+        download_and_extract_model.download_and_extract_model(self.pretrained_model_name, 'data/')
+        self.model_file = os.path.join('data', self.pretrained_model_name, 'model-%s.ckpt-250000' % self.pretrained_model_name)
+        self.pretrained_model = os.path.join('data', self.pretrained_model_name)
+        self.frozen_graph_filename = os.path.join('data', self.pretrained_model_name+'.pb')
+        print('Memory utilization (SetUpClass): %.3f MB' % memory_usage_psutil())
+
+        
+    @classmethod
+    def tearDownClass(self):
+        print('tearDownClass')
+        # Recursively remove the temporary directory
+        shutil.rmtree(self.tmp_dir)
+
+    def setUp(self):
+        print('Memory utilization (SetUp): %.3f MB' % memory_usage_psutil())
+        
+    def tearDown(self):
+        print('Memory utilization (TearDown): %.3f MB' % memory_usage_psutil())
+
     def test_training_classifier_inception_resnet_v2(self):
         print('test_training_classifier_inception_resnet_v2')
         argv = ['--logs_base_dir', self.tmp_dir,
@@ -104,6 +136,36 @@ class TrainTest(unittest.TestCase):
         args = train_softmax.parse_arguments(argv)
         train_softmax.main(args)
  
+class TrainTest3(unittest.TestCase):
+  
+    @classmethod
+    def setUpClass(self):
+        print('setUpClass')
+        self.tmp_dir = tempfile.mkdtemp()
+        self.dataset_dir = os.path.join(self.tmp_dir, 'dataset')
+        create_mock_dataset(self.dataset_dir, 160)
+        self.lfw_pairs_file = create_mock_lfw_pairs(self.tmp_dir)
+        print(self.lfw_pairs_file)
+        self.pretrained_model_name = '20170512-110547'
+        download_and_extract_model.download_and_extract_model(self.pretrained_model_name, 'data/')
+        self.model_file = os.path.join('data', self.pretrained_model_name, 'model-%s.ckpt-250000' % self.pretrained_model_name)
+        self.pretrained_model = os.path.join('data', self.pretrained_model_name)
+        self.frozen_graph_filename = os.path.join('data', self.pretrained_model_name+'.pb')
+        print('Memory utilization (SetUpClass): %.3f MB' % memory_usage_psutil())
+
+        
+    @classmethod
+    def tearDownClass(self):
+        print('tearDownClass')
+        # Recursively remove the temporary directory
+        shutil.rmtree(self.tmp_dir)
+
+    def setUp(self):
+        print('Memory utilization (SetUp): %.3f MB' % memory_usage_psutil())
+        
+    def tearDown(self):
+        print('Memory utilization (TearDown): %.3f MB' % memory_usage_psutil())
+
     def test_training_classifier_squeezenet(self):
         print('test_training_classifier_squeezenet')
         argv = ['--logs_base_dir', self.tmp_dir,
@@ -120,6 +182,36 @@ class TrainTest(unittest.TestCase):
                 '--nrof_preprocess_threads', '1' ]
         args = train_softmax.parse_arguments(argv)
         train_softmax.main(args)
+
+class TrainTest4(unittest.TestCase):
+  
+    @classmethod
+    def setUpClass(self):
+        print('setUpClass')
+        self.tmp_dir = tempfile.mkdtemp()
+        self.dataset_dir = os.path.join(self.tmp_dir, 'dataset')
+        create_mock_dataset(self.dataset_dir, 160)
+        self.lfw_pairs_file = create_mock_lfw_pairs(self.tmp_dir)
+        print(self.lfw_pairs_file)
+        self.pretrained_model_name = '20170512-110547'
+        download_and_extract_model.download_and_extract_model(self.pretrained_model_name, 'data/')
+        self.model_file = os.path.join('data', self.pretrained_model_name, 'model-%s.ckpt-250000' % self.pretrained_model_name)
+        self.pretrained_model = os.path.join('data', self.pretrained_model_name)
+        self.frozen_graph_filename = os.path.join('data', self.pretrained_model_name+'.pb')
+        print('Memory utilization (SetUpClass): %.3f MB' % memory_usage_psutil())
+
+        
+    @classmethod
+    def tearDownClass(self):
+        print('tearDownClass')
+        # Recursively remove the temporary directory
+        shutil.rmtree(self.tmp_dir)
+
+    def setUp(self):
+        print('Memory utilization (SetUp): %.3f MB' % memory_usage_psutil())
+        
+    def tearDown(self):
+        print('Memory utilization (TearDown): %.3f MB' % memory_usage_psutil())
 
     def test_train_tripletloss_inception_resnet_v1(self):
         print('test_train_tripletloss_inception_resnet_v1')
@@ -138,6 +230,36 @@ class TrainTest(unittest.TestCase):
         args = train_tripletloss.parse_arguments(argv)
         train_tripletloss.main(args)
  
+class TrainTest5(unittest.TestCase):
+  
+    @classmethod
+    def setUpClass(self):
+        print('setUpClass')
+        self.tmp_dir = tempfile.mkdtemp()
+        self.dataset_dir = os.path.join(self.tmp_dir, 'dataset')
+        create_mock_dataset(self.dataset_dir, 160)
+        self.lfw_pairs_file = create_mock_lfw_pairs(self.tmp_dir)
+        print(self.lfw_pairs_file)
+        self.pretrained_model_name = '20170512-110547'
+        download_and_extract_model.download_and_extract_model(self.pretrained_model_name, 'data/')
+        self.model_file = os.path.join('data', self.pretrained_model_name, 'model-%s.ckpt-250000' % self.pretrained_model_name)
+        self.pretrained_model = os.path.join('data', self.pretrained_model_name)
+        self.frozen_graph_filename = os.path.join('data', self.pretrained_model_name+'.pb')
+        print('Memory utilization (SetUpClass): %.3f MB' % memory_usage_psutil())
+
+        
+    @classmethod
+    def tearDownClass(self):
+        print('tearDownClass')
+        # Recursively remove the temporary directory
+        shutil.rmtree(self.tmp_dir)
+
+    def setUp(self):
+        print('Memory utilization (SetUp): %.3f MB' % memory_usage_psutil())
+        
+    def tearDown(self):
+        print('Memory utilization (TearDown): %.3f MB' % memory_usage_psutil())
+
     def test_finetune_tripletloss_inception_resnet_v1(self):
         print('test_finetune_tripletloss_inception_resnet_v1')
         argv = ['--logs_base_dir', self.tmp_dir,
@@ -156,6 +278,36 @@ class TrainTest(unittest.TestCase):
         args = train_tripletloss.parse_arguments(argv)
         train_tripletloss.main(args)
  
+class TrainTest6(unittest.TestCase):
+  
+    @classmethod
+    def setUpClass(self):
+        print('setUpClass')
+        self.tmp_dir = tempfile.mkdtemp()
+        self.dataset_dir = os.path.join(self.tmp_dir, 'dataset')
+        create_mock_dataset(self.dataset_dir, 160)
+        self.lfw_pairs_file = create_mock_lfw_pairs(self.tmp_dir)
+        print(self.lfw_pairs_file)
+        self.pretrained_model_name = '20170512-110547'
+        download_and_extract_model.download_and_extract_model(self.pretrained_model_name, 'data/')
+        self.model_file = os.path.join('data', self.pretrained_model_name, 'model-%s.ckpt-250000' % self.pretrained_model_name)
+        self.pretrained_model = os.path.join('data', self.pretrained_model_name)
+        self.frozen_graph_filename = os.path.join('data', self.pretrained_model_name+'.pb')
+        print('Memory utilization (SetUpClass): %.3f MB' % memory_usage_psutil())
+
+        
+    @classmethod
+    def tearDownClass(self):
+        print('tearDownClass')
+        # Recursively remove the temporary directory
+        shutil.rmtree(self.tmp_dir)
+
+    def setUp(self):
+        print('Memory utilization (SetUp): %.3f MB' % memory_usage_psutil())
+        
+    def tearDown(self):
+        print('Memory utilization (TearDown): %.3f MB' % memory_usage_psutil())
+
     def test_compare(self):
         print('test_compare')
         argv = [os.path.join('data/', self.pretrained_model_name),
@@ -164,6 +316,36 @@ class TrainTest(unittest.TestCase):
         args = compare.parse_arguments(argv)
         compare.main(args)
         
+class TrainTest7(unittest.TestCase):
+  
+    @classmethod
+    def setUpClass(self):
+        print('setUpClass')
+        self.tmp_dir = tempfile.mkdtemp()
+        self.dataset_dir = os.path.join(self.tmp_dir, 'dataset')
+        create_mock_dataset(self.dataset_dir, 160)
+        self.lfw_pairs_file = create_mock_lfw_pairs(self.tmp_dir)
+        print(self.lfw_pairs_file)
+        self.pretrained_model_name = '20170512-110547'
+        download_and_extract_model.download_and_extract_model(self.pretrained_model_name, 'data/')
+        self.model_file = os.path.join('data', self.pretrained_model_name, 'model-%s.ckpt-250000' % self.pretrained_model_name)
+        self.pretrained_model = os.path.join('data', self.pretrained_model_name)
+        self.frozen_graph_filename = os.path.join('data', self.pretrained_model_name+'.pb')
+        print('Memory utilization (SetUpClass): %.3f MB' % memory_usage_psutil())
+
+        
+    @classmethod
+    def tearDownClass(self):
+        print('tearDownClass')
+        # Recursively remove the temporary directory
+        shutil.rmtree(self.tmp_dir)
+
+    def setUp(self):
+        print('Memory utilization (SetUp): %.3f MB' % memory_usage_psutil())
+        
+    def tearDown(self):
+        print('Memory utilization (TearDown): %.3f MB' % memory_usage_psutil())
+
     def test_validate_on_lfw(self):
         print('test_validate_on_lfw')
         argv = [self.dataset_dir,
@@ -173,6 +355,36 @@ class TrainTest(unittest.TestCase):
                 '--lfw_batch_size', '6']
         args = validate_on_lfw.parse_arguments(argv)
         validate_on_lfw.main(args)
+
+class TrainTest8(unittest.TestCase):
+  
+    @classmethod
+    def setUpClass(self):
+        print('setUpClass')
+        self.tmp_dir = tempfile.mkdtemp()
+        self.dataset_dir = os.path.join(self.tmp_dir, 'dataset')
+        create_mock_dataset(self.dataset_dir, 160)
+        self.lfw_pairs_file = create_mock_lfw_pairs(self.tmp_dir)
+        print(self.lfw_pairs_file)
+        self.pretrained_model_name = '20170512-110547'
+        download_and_extract_model.download_and_extract_model(self.pretrained_model_name, 'data/')
+        self.model_file = os.path.join('data', self.pretrained_model_name, 'model-%s.ckpt-250000' % self.pretrained_model_name)
+        self.pretrained_model = os.path.join('data', self.pretrained_model_name)
+        self.frozen_graph_filename = os.path.join('data', self.pretrained_model_name+'.pb')
+        print('Memory utilization (SetUpClass): %.3f MB' % memory_usage_psutil())
+
+        
+    @classmethod
+    def tearDownClass(self):
+        print('tearDownClass')
+        # Recursively remove the temporary directory
+        shutil.rmtree(self.tmp_dir)
+
+    def setUp(self):
+        print('Memory utilization (SetUp): %.3f MB' % memory_usage_psutil())
+        
+    def tearDown(self):
+        print('Memory utilization (TearDown): %.3f MB' % memory_usage_psutil())
 
     def test_validate_on_lfw_frozen_graph(self):
         print('test_validate_on_lfw_frozen_graph')
