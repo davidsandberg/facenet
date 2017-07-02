@@ -86,14 +86,14 @@ def main(args):
         image_batch_norm = (image_batch-img_mean) / img_stddev
         
         # Create encoder network
-        mean, log_variance = vae.encoder(image_batch_norm)
+        mean, log_variance = vae.encoder(image_batch_norm, True)
         
         epsilon = tf.random_normal((args.batch_size, args.latent_var_size))
         std = tf.exp(log_variance/2)
         latent_var = mean + epsilon * std
         
         # Create decoder network
-        reconstructed_norm = vae.decoder(latent_var)
+        reconstructed_norm = vae.decoder(latent_var, True)
         
         # Un-normalize
         reconstructed = (reconstructed_norm*img_stddev) + img_mean

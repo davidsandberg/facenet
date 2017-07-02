@@ -44,10 +44,10 @@ class Vae(object):
         'variables_collections': [ tf.GraphKeys.TRAINABLE_VARIABLES ],
     }
   
-    def encoder(self, images):
+    def encoder(self, images, is_training):
         # Must be overridden in implementation classes
         raise NotImplementedError
       
-    def decoder(self, latent_var):
+    def decoder(self, latent_var, is_training):
         # Must be overridden in implementation classes
         raise NotImplementedError      
