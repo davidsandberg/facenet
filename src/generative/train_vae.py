@@ -72,21 +72,26 @@ def main(args):
         for _ in range(nrof_preprocess_threads):
             file_contents = tf.read_file(input_queue.dequeue())
             image = tf.image.decode_png(file_contents, channels=3)
-            image.set_shape((args.image_size, args.image_size, 3))
+            image = tf.image.resize_image_with_crop_or_pad(image, args.input_image_size, args.input_image_size)
+            image.set_shape((args.input_image_size, args.input_image_size, 3))
             image = tf.cast(image, tf.float32)
             #pylint: disable=no-member
             imagesx.append([image])
     
-        image_batch = tf.train.batch_join(
+        images = tf.train.batch_join(
             imagesx, batch_size=args.batch_size,
             capacity=4 * nrof_preprocess_threads * args.batch_size,
             allow_smaller_final_batch=False)
-
+        
         # Normalize
-        image_batch_norm = (image_batch-img_mean) / img_stddev
+        images_norm = (images-img_mean) / img_stddev
+
+        # Resize to appropriate size for the encoder 
+        images_norm_resize = tf.image.resize_images(images_norm, (args.gen_image_size,args.gen_image_size))
+        images_resize = tf.image.resize_images(image, (args.gen_image_size,args.gen_image_size))
         
         # Create encoder network
-        mean, log_variance = vae.encoder(image_batch_norm, True)
+        mean, log_variance = vae.encoder(images_norm_resize, True)
         
         epsilon = tf.random_normal((args.batch_size, args.latent_var_size))
         std = tf.exp(log_variance/2)
@@ -94,21 +99,20 @@ def main(args):
         
         # Create decoder network
         reconstructed_norm = vae.decoder(latent_var, True)
+        reconstructed_norm_resize = tf.image.resize_images(reconstructed_norm, (args.input_image_size,args.input_image_size))
         
         # Un-normalize
         reconstructed = (reconstructed_norm*img_stddev) + img_mean
         
         # Create reconstruction loss
         if args.reconstruction_loss_type=='PLAIN':
-            reconstruction_loss = tf.reduce_mean(tf.reduce_sum(tf.pow(image_batch - reconstructed,2)))
+            reconstruction_loss = tf.reduce_mean(tf.reduce_sum(tf.pow(images_resize - reconstructed,2)))
         elif args.reconstruction_loss_type=='PERCEPTUAL':
             network = importlib.import_module(args.model_def)
 
             # Stack images from both the input batch and the reconstructed batch in a new tensor 
-            shp = [-1] + image_batch.get_shape().as_list()[1:]
-            images = tf.reshape(tf.stack([image_batch_norm, reconstructed_norm], axis=0), shp)
-            # Resize images to the native size of the preceptual loss model
-            images = tf.image.resize_images(images, (160,160))
+            shp = [-1] + images_norm.get_shape().as_list()[1:]
+            images = tf.reshape(tf.stack([images_norm, reconstructed_norm_resize], axis=0), shp)
             _, end_points = network.inference(images, 1.0, 
                 phase_train=False, bottleneck_layer_size=128, weight_decay=0.0)
             # Get a list of feature names to use for loss terms
@@ -238,8 +242,11 @@ def parse_arguments(argv):
         help='Number of steps between storing of model checkpoint and log files', default=1000)
     parser.add_argument('--batch_size', type=int,
         help='Number of images to process in a batch.', default=128)
-    parser.add_argument('--image_size', type=int,
-        help='Image size (height, width) in pixels.', default=64)
+    parser.add_argument('--input_image_size', type=int,
+        help='Image size of input images (height, width) in pixels. If perceptual loss is used this ' 
+        + 'should be the input image size for the perceptual loss model', default=160)
+    parser.add_argument('--gen_image_size', type=int,
+        help='Image size of generated images (height, width) in pixels.', default=64)
     parser.add_argument('--latent_var_size', type=int,
         help='Dimensionality of the latent variable.', default=100)
     parser.add_argument('--initial_learning_rate', type=float,
