@@ -68,7 +68,7 @@ def main(args):
         input_queue = tf.train.string_input_producer(image_list, shuffle=True)
     
         nrof_preprocess_threads = 4
-        imagesx = []
+        image_per_thread = []
         for _ in range(nrof_preprocess_threads):
             file_contents = tf.read_file(input_queue.dequeue())
             image = tf.image.decode_png(file_contents, channels=3)
@@ -76,10 +76,10 @@ def main(args):
             image.set_shape((args.input_image_size, args.input_image_size, 3))
             image = tf.cast(image, tf.float32)
             #pylint: disable=no-member
-            imagesx.append([image])
+            image_per_thread.append([image])
     
         images = tf.train.batch_join(
-            imagesx, batch_size=args.batch_size,
+            image_per_thread, batch_size=args.batch_size,
             capacity=4 * nrof_preprocess_threads * args.batch_size,
             allow_smaller_final_batch=False)
         
@@ -88,7 +88,7 @@ def main(args):
 
         # Resize to appropriate size for the encoder 
         images_norm_resize = tf.image.resize_images(images_norm, (args.gen_image_size,args.gen_image_size))
-        images_resize = tf.image.resize_images(image, (args.gen_image_size,args.gen_image_size))
+        images_resize = tf.image.resize_images(images, (args.gen_image_size,args.gen_image_size))
         
         # Create encoder network
         mean, log_variance = vae.encoder(images_norm_resize, True)
@@ -182,14 +182,14 @@ def main(args):
             print('Running training')
             while step < args.max_nrof_steps:
                 start_time = time.time()
-                if step % 500 == 0:
-                    step, _, reconstruction_loss_, kl_loss_mean_, total_loss_, learning_rate_, rec_ = sess.run(
-                          [global_step, train_op, reconstruction_loss, kl_loss_mean, total_loss, learning_rate, reconstructed])
+                if step>0 and (step % args.save_every_n_steps==0 or step==args.max_nrof_steps-1):
+                    _, reconstruction_loss_, kl_loss_mean_, total_loss_, learning_rate_, rec_ = sess.run(
+                          [train_op, reconstruction_loss, kl_loss_mean, total_loss, learning_rate, reconstructed])
                     img = facenet.put_images_on_grid(rec_, shape=(16,8))
                     misc.imsave(os.path.join(model_dir, 'reconstructed_%06d.png' % step), img)
                 else:
-                    step, _, reconstruction_loss_, kl_loss_mean_, total_loss_, learning_rate_ = sess.run(
-                          [global_step, train_op, reconstruction_loss, kl_loss_mean, total_loss, learning_rate])
+                    _, reconstruction_loss_, kl_loss_mean_, total_loss_, learning_rate_ = sess.run(
+                          [train_op, reconstruction_loss, kl_loss_mean, total_loss, learning_rate])
                 log['total_loss'] = np.append(log['total_loss'], total_loss_)
                 log['reconstruction_loss'] = np.append(log['reconstruction_loss'], reconstruction_loss_)
                 log['kl_loss'] = np.append(log['kl_loss'], kl_loss_mean_)
@@ -198,7 +198,7 @@ def main(args):
                 duration = time.time() - start_time
                 print('Step: %d \tTime: %.3f \trec_loss: %.3f \tkl_loss: %.3f \ttotal_loss: %.3f' % (step, duration, reconstruction_loss_, kl_loss_mean_, total_loss_))
 
-                if step % args.save_every_n_steps==0 or step==args.max_nrof_steps:
+                if step>0 and (step % args.save_every_n_steps==0 or step==args.max_nrof_steps-1):
                     print('Saving checkpoint file')
                     checkpoint_path = os.path.join(model_dir, 'model.ckpt')
                     saver.save(sess, checkpoint_path, global_step=step, write_meta_graph=False)
@@ -206,6 +206,7 @@ def main(args):
                     with h5py.File(log_file_name, 'w') as f:
                         for key, value in log.iteritems():
                             f.create_dataset(key, data=value)
+                step = sess.run(global_step)
 
 def get_variables_to_train():
     train_variables = []
@@ -239,7 +240,7 @@ def parse_arguments(argv):
     parser.add_argument('--max_nrof_steps', type=int,
         help='Number of steps to run.', default=50000)
     parser.add_argument('--save_every_n_steps', type=int,
-        help='Number of steps between storing of model checkpoint and log files', default=1000)
+        help='Number of steps between storing of model checkpoint and log files', default=500)
     parser.add_argument('--batch_size', type=int,
         help='Number of images to process in a batch.', default=128)
     parser.add_argument('--input_image_size', type=int,
