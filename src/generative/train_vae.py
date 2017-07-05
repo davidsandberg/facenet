@@ -88,7 +88,6 @@ def main(args):
 
         # Resize to appropriate size for the encoder 
         images_norm_resize = tf.image.resize_images(images_norm, (args.gen_image_size,args.gen_image_size))
-        images_resize = tf.image.resize_images(images, (args.gen_image_size,args.gen_image_size))
         
         # Create encoder network
         mean, log_variance = vae.encoder(images_norm_resize, True)
@@ -99,22 +98,25 @@ def main(args):
         
         # Create decoder network
         reconstructed_norm = vae.decoder(latent_var, True)
-        reconstructed_norm_resize = tf.image.resize_images(reconstructed_norm, (args.input_image_size,args.input_image_size))
         
         # Un-normalize
         reconstructed = (reconstructed_norm*img_stddev) + img_mean
         
         # Create reconstruction loss
         if args.reconstruction_loss_type=='PLAIN':
+            images_resize = tf.image.resize_images(images, (args.gen_image_size,args.gen_image_size))
             reconstruction_loss = tf.reduce_mean(tf.reduce_sum(tf.pow(images_resize - reconstructed,2)))
         elif args.reconstruction_loss_type=='PERCEPTUAL':
             network = importlib.import_module(args.model_def)
 
+            reconstructed_norm_resize = tf.image.resize_images(reconstructed_norm, (args.input_image_size,args.input_image_size))
+
             # Stack images from both the input batch and the reconstructed batch in a new tensor 
             shp = [-1] + images_norm.get_shape().as_list()[1:]
-            images = tf.reshape(tf.stack([images_norm, reconstructed_norm_resize], axis=0), shp)
-            _, end_points = network.inference(images, 1.0, 
+            input_images = tf.reshape(tf.stack([images_norm, reconstructed_norm_resize], axis=0), shp)
+            _, end_points = network.inference(input_images, 1.0, 
                 phase_train=False, bottleneck_layer_size=128, weight_decay=0.0)
+
             # Get a list of feature names to use for loss terms
             feature_names = args.loss_features.replace(' ', '').split(',')
 
@@ -234,7 +236,7 @@ def parse_arguments(argv):
         help='Directory where to write trained models and checkpoints.', default='~/vae')
     parser.add_argument('--data_dir', type=str,
         help='Path to the data directory containing aligned face patches. Multiple directories are separated with colon.',
-        default='/home/david/datasets/casia/casia_maxpy_mtcnnpy_64')
+        default='/home/david/datasets/casia/casia_maxpy_mtcnnpy_182')
     parser.add_argument('--reconstruction_loss_type', type=str, choices=['PLAIN', 'PERCEPTUAL'],
         help='The type of reconstruction loss to use', default='PERCEPTUAL')
     parser.add_argument('--max_nrof_steps', type=int,
