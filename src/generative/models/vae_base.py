@@ -31,8 +31,9 @@ import tensorflow as tf
 
 class Vae(object):
   
-    def __init__(self, latent_variable_dim):
+    def __init__(self, latent_variable_dim, image_size):
         self.latent_variable_dim = latent_variable_dim
+        self.image_size = image_size
         self.batch_norm_params = {
         # Decay for the moving averages.
         'decay': 0.995,
@@ -50,4 +51,8 @@ class Vae(object):
       
     def decoder(self, latent_var, is_training):
         # Must be overridden in implementation classes
-        raise NotImplementedError      
+        raise NotImplementedError
+
+    def get_image_size(self):
+        return self.image_size
+        

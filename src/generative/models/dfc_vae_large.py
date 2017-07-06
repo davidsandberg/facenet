@@ -22,7 +22,7 @@
 
 """Variational autoencoder based on the paper 
 'Deep Feature Consistent Variational Autoencoder'
-(https://arxiv.org/pdf/1610.00291.pdf)
+(https://arxiv.org/pdf/1610.00291.pdf) but with a larger image size (128x128 pixels)
 """
 
 from __future__ import absolute_import
@@ -37,8 +37,9 @@ import generative.models.vae_base  # @UnresolvedImport
 class Vae(generative.models.vae_base.Vae):
   
     def __init__(self, latent_variable_dim):
-        super(Vae, self).__init__(latent_variable_dim, 64)
-  
+        super(Vae, self).__init__(latent_variable_dim, 128)
+        
+      
     def encoder(self, images, is_training):
         activation_fn = leaky_relu  # tf.nn.relu
         weight_decay = 0.0
@@ -54,6 +55,7 @@ class Vae(generative.models.vae_base.Vae):
                     net = slim.conv2d(net, 64, [4, 4], 2, activation_fn=activation_fn, scope='Conv2d_2')
                     net = slim.conv2d(net, 128, [4, 4], 2, activation_fn=activation_fn, scope='Conv2d_3')
                     net = slim.conv2d(net, 256, [4, 4], 2, activation_fn=activation_fn, scope='Conv2d_4')
+                    net = slim.conv2d(net, 512, [4, 4], 2, activation_fn=activation_fn, scope='Conv2d_5')
                     net = slim.flatten(net)
                     fc1 = slim.fully_connected(net, self.latent_variable_dim, activation_fn=None, normalizer_fn=None, scope='Fc_1')
                     fc2 = slim.fully_connected(net, self.latent_variable_dim, activation_fn=None, normalizer_fn=None, scope='Fc_2')
@@ -83,10 +85,11 @@ class Vae(generative.models.vae_base.Vae):
                     net = slim.conv2d(net, 32, [3, 3], 1, activation_fn=activation_fn, scope='Conv2d_3')
             
                     net = tf.image.resize_nearest_neighbor(net, size=(64,64), name='Upsample_4')
-                    net = slim.conv2d(net, 3, [3, 3], 1, activation_fn=None, scope='Conv2d_4')
+                    net = slim.conv2d(net, 3, [3, 3], 1, activation_fn=activation_fn, scope='Conv2d_4')
                 
+                    net = tf.image.resize_nearest_neighbor(net, size=(128,128), name='Upsample_5')
+                    net = slim.conv2d(net, 3, [3, 3], 1, activation_fn=None, scope='Conv2d_5')
         return net
-      
+
 def leaky_relu(x):
-    return tf.maximum(0.1*x,x)
-  
+    return tf.maximum(0.1*x,x)  
