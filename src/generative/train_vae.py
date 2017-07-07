@@ -46,6 +46,7 @@ def main(args):
   
     vae_def = importlib.import_module(args.vae_def)
     vae = vae_def.Vae(args.latent_var_size)
+    gen_image_size = vae.get_image_size()
 
     subdir = datetime.strftime(datetime.now(), '%Y%m%d-%H%M%S')
     model_dir = os.path.join(os.path.expanduser(args.models_base_dir), subdir)
@@ -87,7 +88,7 @@ def main(args):
         images_norm = (images-img_mean) / img_stddev
 
         # Resize to appropriate size for the encoder 
-        images_norm_resize = tf.image.resize_images(images_norm, (args.gen_image_size,args.gen_image_size))
+        images_norm_resize = tf.image.resize_images(images_norm, (gen_image_size,gen_image_size))
         
         # Create encoder network
         mean, log_variance = vae.encoder(images_norm_resize, True)
@@ -104,7 +105,7 @@ def main(args):
         
         # Create reconstruction loss
         if args.reconstruction_loss_type=='PLAIN':
-            images_resize = tf.image.resize_images(images, (args.gen_image_size,args.gen_image_size))
+            images_resize = tf.image.resize_images(images, (gen_image_size,gen_image_size))
             reconstruction_loss = tf.reduce_mean(tf.reduce_sum(tf.pow(images_resize - reconstructed,2)))
         elif args.reconstruction_loss_type=='PERCEPTUAL':
             network = importlib.import_module(args.model_def)
@@ -184,7 +185,9 @@ def main(args):
             print('Running training')
             while step < args.max_nrof_steps:
                 start_time = time.time()
-                if step>0 and (step % args.save_every_n_steps==0 or step==args.max_nrof_steps-1):
+                step += 1
+                save_state = step>0 and (step % args.save_every_n_steps==0 or step==args.max_nrof_steps)
+                if save_state:
                     _, reconstruction_loss_, kl_loss_mean_, total_loss_, learning_rate_, rec_ = sess.run(
                           [train_op, reconstruction_loss, kl_loss_mean, total_loss, learning_rate, reconstructed])
                     img = facenet.put_images_on_grid(rec_, shape=(16,8))
@@ -200,7 +203,7 @@ def main(args):
                 duration = time.time() - start_time
                 print('Step: %d \tTime: %.3f \trec_loss: %.3f \tkl_loss: %.3f \ttotal_loss: %.3f' % (step, duration, reconstruction_loss_, kl_loss_mean_, total_loss_))
 
-                if step>0 and (step % args.save_every_n_steps==0 or step==args.max_nrof_steps-1):
+                if save_state:
                     print('Saving checkpoint file')
                     checkpoint_path = os.path.join(model_dir, 'model.ckpt')
                     saver.save(sess, checkpoint_path, global_step=step, write_meta_graph=False)
@@ -208,7 +211,6 @@ def main(args):
                     with h5py.File(log_file_name, 'w') as f:
                         for key, value in log.iteritems():
                             f.create_dataset(key, data=value)
-                step = sess.run(global_step)
 
 def get_variables_to_train():
     train_variables = []
@@ -248,8 +250,6 @@ def parse_arguments(argv):
     parser.add_argument('--input_image_size', type=int,
         help='Image size of input images (height, width) in pixels. If perceptual loss is used this ' 
         + 'should be the input image size for the perceptual loss model', default=160)
-    parser.add_argument('--gen_image_size', type=int,
-        help='Image size of generated images (height, width) in pixels.', default=64)
     parser.add_argument('--latent_var_size', type=int,
         help='Dimensionality of the latent variable.', default=100)
     parser.add_argument('--initial_learning_rate', type=float,

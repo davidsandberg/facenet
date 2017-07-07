@@ -322,7 +322,7 @@ class ImageClass():
     def __len__(self):
         return len(self.image_paths)
   
-def get_dataset(paths):
+def get_dataset(paths, has_class_directories=True):
     dataset = []
     for path in paths.split(':'):
         path_exp = os.path.expanduser(path)
@@ -332,13 +332,18 @@ def get_dataset(paths):
         for i in range(nrof_classes):
             class_name = classes[i]
             facedir = os.path.join(path_exp, class_name)
-            if os.path.isdir(facedir):
-                images = os.listdir(facedir)
-                image_paths = [os.path.join(facedir,img) for img in images]
-                dataset.append(ImageClass(class_name, image_paths))
+            image_paths = get_image_paths(facedir)
+            dataset.append(ImageClass(class_name, image_paths))
   
     return dataset
 
+def get_image_paths(facedir):
+    image_paths = []
+    if os.path.isdir(facedir):
+        images = os.listdir(facedir)
+        image_paths = [os.path.join(facedir,img) for img in images]
+    return image_paths
+  
 def split_dataset(dataset, split_ratio, mode):
     if mode=='SPLIT_CLASSES':
         nrof_classes = len(dataset)

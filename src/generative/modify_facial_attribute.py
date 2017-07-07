@@ -20,8 +20,8 @@
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 # SOFTWARE.
 
-"""Calculate average latent variables (here called attribute vectors) 
-for the different attributes in CelebA
+"""Modify attributes of images using attribute vectors calculated using
+'calculate_attribute_vectors.py' 
 """
 from __future__ import absolute_import
 from __future__ import division
@@ -33,11 +33,9 @@ import argparse
 import importlib
 import facenet
 import os
-from datetime import datetime
 import numpy as np
-import math
-import time
 import h5py
+import math
 from scipy import misc
 
 def main(args):
@@ -45,66 +43,25 @@ def main(args):
     img_mean = np.array([134.10714722, 102.52040863, 87.15436554])
     img_stddev = np.sqrt(np.array([3941.30175781, 2856.94287109, 2519.35791016]))
     
-    pretrained_model = '/home/david/vae/20170627-224709/model.ckpt-50000'
-    
-    fields, attribs_dict = read_annotations('/media/deep/datasets/CelebA/Anno/list_attr_celeba.txt')
-    
     vae_def = importlib.import_module(args.vae_def)
     vae = vae_def.Vae(args.latent_var_size)
-    
-    subdir = datetime.strftime(datetime.now(), '%Y%m%d-%H%M%S')
-    model_dir = os.path.join(os.path.expanduser(args.models_base_dir), subdir)
-    if not os.path.isdir(model_dir):  # Create the model directory if it doesn't exist
-        os.makedirs(model_dir)
-    
-    # Store some git revision info in a text file in the log directory
-    src_path,_ = os.path.split(os.path.realpath(__file__))
-    facenet.store_revision_info(src_path, model_dir, ' '.join(sys.argv))
-        
+    gen_image_size = vae.get_image_size()
+
     with tf.Graph().as_default():
         tf.set_random_seed(args.seed)
         
-        train_set = facenet.get_dataset(args.data_dir)
-        image_list, _ = facenet.get_image_paths_and_labels(train_set)
+        #image_list = facenet.get_image_paths(args.data_dir)
         
-        # Get attributes for images
-        nrof_attributes = len(fields)
-        attribs_list = []
-        for img in image_list:
-            key = os.path.split(img)[1].split('.')[0]
-            attr = attribs_dict[key]
-            assert len(attr)==nrof_attributes
-            attribs_list.append(attr)
-            
-        # Create the input queue
-        input_queue = tf.train.slice_input_producer([image_list, attribs_list], num_epochs=1, shuffle=False)        
+        images = tf.placeholder(tf.float32, shape=(None,gen_image_size,gen_image_size,3), name='input')
         
-        nrof_preprocess_threads = 4
-        imagesx = []
-        for _ in range(nrof_preprocess_threads):
-            filename = input_queue[0]
-            file_contents = tf.read_file(filename)
-            image = tf.image.decode_image(file_contents, channels=3)
-            image = tf.image.resize_image_with_crop_or_pad(image, 160, 160)
-            image = tf.image.resize_images(image, (64,64))
-            image.set_shape((args.image_size, args.image_size, 3))
-            attribs = input_queue[1]
-            attribs.set_shape((nrof_attributes,))
-            image = tf.cast(image, tf.float32)
-            imagesx.append([image, attribs])
-    
-        image_batch, attribs_batch = tf.train.batch_join(
-            imagesx, batch_size=args.batch_size, 
-            shapes=[(args.image_size, args.image_size, 3), (nrof_attributes,)], enqueue_many=False,
-            capacity=4 * nrof_preprocess_threads * args.batch_size,
-            allow_smaller_final_batch=True)
-
-
         # Normalize
-        image_batch_norm = (image_batch-img_mean) / img_stddev
+        images_norm = (images-img_mean) / img_stddev
 
-        # Create encoder
-        mean, log_variance = vae.encoder(image_batch_norm, False)
+        # Resize to appropriate size for the encoder 
+        images_norm_resize = tf.image.resize_images(images_norm, (gen_image_size,gen_image_size))
+        
+        # Create encoder network
+        mean, log_variance = vae.encoder(images_norm_resize, True)
         
         epsilon = tf.random_normal((tf.shape(mean)[0], args.latent_var_size))
         std = tf.exp(log_variance/2)
@@ -131,94 +88,55 @@ def main(args):
 
         with sess.as_default():
           
-            if pretrained_model:
-                print('Restoring pretrained model: %s' % pretrained_model)
-                saver.restore(sess, pretrained_model)
+            vae_checkpoint = os.path.expanduser(args.vae_checkpoint)
+            print('Restoring VAE checkpoint: %s' % vae_checkpoint)
+            saver.restore(sess, vae_checkpoint)
            
-            nrof_images = len(image_list)
-            nrof_batches = int(math.ceil(len(image_list) / args.batch_size))
-            latent_vars = np.zeros((nrof_images, args.latent_var_size))
-            attributes = np.zeros((nrof_images, nrof_attributes))
-            for i in range(nrof_batches):
-                start_time = time.time()
-                latent_var_, attribs_ = sess.run([latent_var, attribs_batch])
-                latent_vars[i:i+latent_var_.shape[0],:] = latent_var_
-                attributes[i:i+attribs_.shape[0],:] = attribs_
-                duration = time.time() - start_time
-                print('Batch %d/%d: %.3f seconds' % (i+1, nrof_batches, duration))
-            # NOTE: This will print the 'Out of range' warning if the last batch is not full,
-            #  as described by https://github.com/tensorflow/tensorflow/issues/8330
-             
-            # Calculate average change in the latent variable when each attribute changes
-            attribute_vectors = np.zeros((nrof_attributes, args.latent_var_size), np.float32)
-            for i in range(nrof_attributes):
-                pos_idx = np.argwhere(attributes[:,i]==1)[:,0]
-                neg_idx = np.argwhere(attributes[:,i]==-1)[:,0]
-                pos_avg = np.mean(latent_vars[pos_idx,:], 0)
-                neg_avg = np.mean(latent_vars[neg_idx,:], 0)
-                attribute_vectors[i,:] = pos_avg - neg_avg
-            
-            filename = os.path.join(model_dir, 'attribute_vectors.h5')
-            print('Writing attribute vectors, latent variables and attributes to %s' % filename)
-            mdict = {'latent_vars':latent_vars, 'attributes':attributes, 
-                     'fields':fields, 'attribute_vectors':attribute_vectors }
-            with h5py.File(filename, 'w') as f:
-                for key, value in mdict.iteritems():
-                    f.create_dataset(key, data=value)
-                    
+            filename = os.path.expanduser(args.attributes_filename)
             with h5py.File(filename,'r') as f:
                 latent_vars = np.array(f.get('latent_vars'))
                 attributes = np.array(f.get('attributes'))
-                fields = np.array(f.get('fields'))
+                #fields = np.array(f.get('fields'))
                 attribute_vectors = np.array(f.get('attribute_vectors'))
 
             # Reconstruct faces while adding varying amount of the selected attribute vector
             attribute_index = 31 # 31: 'Smiling'
-            image_index = 0
-            idx = np.argwhere(attributes[:,i]==-1)[image_index,0]
+            image_indices = [8,11,13,18,19,25,26,31,36,39,41,47,54,56,57,58,59,60,73,86]
+            nrof_images = len(image_indices)
             nrof_interp_steps = 10
-            sweep_latent_var = np.zeros((nrof_interp_steps, args.latent_var_size), np.float32)
-            for i in range(nrof_interp_steps):
-                sweep_latent_var[i,:] = latent_vars[idx,:] + 5.0*i/nrof_interp_steps*attribute_vectors[attribute_index,:]
+            sweep_latent_var = np.zeros((nrof_interp_steps*nrof_images, args.latent_var_size), np.float32)
+            for j in range(nrof_images):
+                image_index = image_indices[j]
+                idx = np.argwhere(attributes[:,attribute_index]==-1)[image_index,0]
+                for i in range(nrof_interp_steps):
+                    sweep_latent_var[i+nrof_interp_steps*j,:] = latent_vars[idx,:] + 5.0*i/nrof_interp_steps*attribute_vectors[attribute_index,:]
                 
             recon = sess.run(reconstructed, feed_dict={latent_var:sweep_latent_var})
             
-            img = facenet.put_images_on_grid(recon, shape=(nrof_interp_steps,1))
-            misc.imsave(os.path.join(model_dir, 'reconstructed_%06d.png' % idx), img)
+            img = facenet.put_images_on_grid(recon, shape=(nrof_interp_steps*2,int(math.ceil(nrof_images/2))))
+            
+            image_filename = os.path.expanduser(args.output_image_filename)
+            print('Writing generated image to %s' % image_filename)
+            misc.imsave(image_filename, img)
 
                     
-def read_annotations(filename):
-    attribs = {}    
-    with open(filename, 'r') as f:
-        for i, line in enumerate(f.readlines()):
-            if i==0:
-                continue  # First line is the number of entries in the file
-            elif i==1:
-                fields = line.strip().split() # Second line is the field names
-            else:
-                line = line.split()
-                img_name = line[0].split('.')[0]
-                img_attribs = map(int, line[1:])
-                attribs[img_name] = img_attribs
-    return fields, attribs
-
 def parse_arguments(argv):
     parser = argparse.ArgumentParser()
     
-    parser.add_argument('--models_base_dir', type=str,
-        help='Directory where to write trained models and checkpoints.', default='~/vae')
-    parser.add_argument('--vae_def', type=str,
-        help='Model definition for the variational autoencoder. Points to a module containing the definition.', 
-        default='src.generative.models.dfc_vae')
-    parser.add_argument('--data_dir', type=str,
-        help='Path to the data directory containing aligned face patches. Multiple directories are separated with colon.',
-        default='/home/david/datasets/casia/casia_maxpy_mtcnnpy_64')
-    parser.add_argument('--output_filename', type=str,
-        help='Filename to use for the file containing the attribute vectors.')
-    parser.add_argument('--batch_size', type=int,
-        help='Number of images to process in a batch.', default=128)
-    parser.add_argument('--image_size', type=int,
-        help='Image size (height, width) in pixels.', default=64)
+    parser.add_argument('vae_def', type=str,
+        help='Model definition for the variational autoencoder. Points to a module containing the definition.')
+    parser.add_argument('vae_checkpoint', type=str,
+        help='Checkpoint file of a pre-trained variational autoencoder.')
+#     parser.add_argument('--data_dir', type=str,
+#         help='Path to the data directory containing aligned face patches.',
+#         default='~/datasets/celeba/')
+#     parser.add_argument('--annotations_filename', type=str,
+#         help='Path to the annotations file',
+#         default='/media/deep/datasets/CelebA/Anno/list_attr_celeba.txt')
+    parser.add_argument('attributes_filename', type=str,
+        help='The file containing the attribute vectors, as generated by calculate_attribute_vectors.py.')
+    parser.add_argument('output_image_filename', type=str,
+        help='File to write the generated image to.')
     parser.add_argument('--latent_var_size', type=int,
         help='Dimensionality of the latent variable.', default=100)
     parser.add_argument('--seed', type=int,
