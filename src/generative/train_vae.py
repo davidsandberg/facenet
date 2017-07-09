@@ -54,10 +54,13 @@ def main(args):
         os.makedirs(model_dir)
     log_file_name = os.path.join(model_dir, 'logs.h5')
     
+    # Write arguments to a text file
+    facenet.write_arguments_to_file(args, os.path.join(model_dir, 'arguments.txt'))
+        
     # Store some git revision info in a text file in the log directory
     src_path,_ = os.path.split(os.path.realpath(__file__))
     facenet.store_revision_info(src_path, model_dir, ' '.join(sys.argv))
-        
+    
     with tf.Graph().as_default():
         tf.set_random_seed(args.seed)
         global_step = tf.Variable(0, trainable=False)
