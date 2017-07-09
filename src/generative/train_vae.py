@@ -93,7 +93,7 @@ def main(args):
         # Create encoder network
         mean, log_variance = vae.encoder(images_norm_resize, True)
         
-        epsilon = tf.random_normal((args.batch_size, args.latent_var_size))
+        epsilon = tf.random_normal((tf.shape(mean)[0], args.latent_var_size))
         std = tf.exp(log_variance/2)
         latent_var = mean + epsilon * std
         
@@ -234,11 +234,19 @@ def kl_divergence_loss(mean, log_variance):
 def parse_arguments(argv):
     parser = argparse.ArgumentParser()
     
+    parser.add_argument('vae_def', type=str,
+        help='Model definition for the variational autoencoder. Points to a module containing the definition.')
+    parser.add_argument('data_dir', type=str,
+        help='Path to the data directory containing aligned face patches. Multiple directories are separated with colon.')
+    parser.add_argument('model_def', type=str,
+        help='Model definition. Points to a module containing the definition of the inference graph.')
+    parser.add_argument('pretrained_model', type=str,
+        help='Pretrained model to use to calculate features for perceptual loss.')
     parser.add_argument('--models_base_dir', type=str,
         help='Directory where to write trained models and checkpoints.', default='~/vae')
-    parser.add_argument('--data_dir', type=str,
-        help='Path to the data directory containing aligned face patches. Multiple directories are separated with colon.',
-        default='/home/david/datasets/casia/casia_maxpy_mtcnnpy_182')
+    parser.add_argument('--loss_features', type=str,
+        help='Comma separated list of features to use for perceptual loss. Features should be defined ' +
+          'in the end_points dictionary.', default='Conv2d_1a_3x3,Conv2d_2a_3x3, Conv2d_2b_3x3')
     parser.add_argument('--reconstruction_loss_type', type=str, choices=['PLAIN', 'PERCEPTUAL'],
         help='The type of reconstruction loss to use', default='PERCEPTUAL')
     parser.add_argument('--max_nrof_steps', type=int,
@@ -264,17 +272,6 @@ def parse_arguments(argv):
         help='Kullback-Leibler divergence loss factor.', default=1.0)
     parser.add_argument('--beta', type=float,
         help='Reconstruction loss factor.', default=0.5)
-    parser.add_argument('--model_def', type=str,
-        help='Model definition. Points to a module containing the definition of the inference graph.', 
-        default='src.models.inception_resnet_v1')
-    parser.add_argument('--vae_def', type=str,
-        help='Model definition for the variational autoencoder. Points to a module containing the definition.', 
-        default='src.generative.models.dfc_vae')
-    parser.add_argument('--loss_features', type=str,
-        help='Comma separated list of features to use for perceptual loss. Features should be defined ' +
-          'in the end_points dictionary.', default='Conv2d_1a_3x3,Conv2d_2a_3x3, Conv2d_2b_3x3')
-    parser.add_argument('--pretrained_model', type=str,
-        help='Pretrained model to use to calculate features for perceptual loss.')
     
     return parser.parse_args(argv)
   
