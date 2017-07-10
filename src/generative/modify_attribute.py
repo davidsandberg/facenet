@@ -100,7 +100,7 @@ def main(args):
 
             # Reconstruct faces while adding varying amount of the selected attribute vector
             attribute_index = 31 # 31: 'Smiling'
-            image_indices = [8,11,13,18,19,25,26,31,36,39,41,47,54,56,57,58,59,60,73,86]
+            image_indices = [8,11,13,18,19,26,31,39,47,54,56,57,58,59,60,73]
             nrof_images = len(image_indices)
             nrof_interp_steps = 10
             sweep_latent_var = np.zeros((nrof_interp_steps*nrof_images, args.latent_var_size), np.float32)

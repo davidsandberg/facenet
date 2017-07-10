@@ -66,7 +66,8 @@ def main(args):
             attribs_list.append(attr)
             
         # Create the input queue
-        input_queue = tf.train.slice_input_producer([image_list, attribs_list], num_epochs=1, shuffle=False)        
+        index_list = range(len(image_list))
+        input_queue = tf.train.slice_input_producer([image_list, attribs_list, index_list], num_epochs=1, shuffle=False)        
         
         nrof_preprocess_threads = 4
         image_per_thread = []
@@ -80,11 +81,11 @@ def main(args):
             attrib = input_queue[1]
             attrib.set_shape((nrof_attributes,))
             image = tf.cast(image, tf.float32)
-            image_per_thread.append([image, attrib])
+            image_per_thread.append([image, attrib, input_queue[2]])
     
-        images, attribs = tf.train.batch_join(
+        images, attribs, indices = tf.train.batch_join(
             image_per_thread, batch_size=args.batch_size, 
-            shapes=[(args.image_size, args.image_size, 3), (nrof_attributes,)], enqueue_many=False,
+            shapes=[(args.image_size, args.image_size, 3), (nrof_attributes,), ()], enqueue_many=False,
             capacity=4 * nrof_preprocess_threads * args.batch_size,
             allow_smaller_final_batch=True)
         
@@ -126,9 +127,9 @@ def main(args):
             attributes = np.zeros((nrof_images, nrof_attributes))
             for i in range(nrof_batches):
                 start_time = time.time()
-                latent_var_, attribs_ = sess.run([latent_var, attribs])
-                latent_vars[i:i+latent_var_.shape[0],:] = latent_var_
-                attributes[i:i+attribs_.shape[0],:] = attribs_
+                latent_var_, attribs_, indices_ = sess.run([latent_var, attribs, indices])
+                latent_vars[indices_,:] = latent_var_
+                attributes[indices_,:] = attribs_
                 duration = time.time() - start_time
                 print('Batch %d/%d: %.3f seconds' % (i+1, nrof_batches, duration))
             # NOTE: This will print the 'Out of range' warning if the last batch is not full,
