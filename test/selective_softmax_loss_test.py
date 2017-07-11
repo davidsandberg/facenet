@@ -28,45 +28,54 @@ import numpy as np
 class SelectiveSoftmaxLossTest(unittest.TestCase):
 
     def testSelectiveSoftmaxLoss(self):
+        batch_size = 2
         nrof_classes = 5
+        use_label_probabilities = False
         
         with tf.Graph().as_default():
         
-            logits = tf.placeholder(tf.float32, shape=(None, nrof_classes), name='logits')
-            labels = tf.placeholder(tf.int32, shape=(None,), name='labels')
-            class_thresholds = tf.placeholder(tf.float32, shape=(None,), name='class_thresholds')
-            cross_entropy, max_prob, label_prob = selective_softmax_loss(logits, labels, nrof_classes, class_thresholds)
+            logits = tf.placeholder(tf.float32, shape=(batch_size, nrof_classes), name='logits')
+            labels = tf.placeholder(tf.int32, shape=(batch_size,), name='labels')
+            class_thresholds = tf.placeholder(tf.float32, shape=(batch_size,), name='class_thresholds')
+            cross_entropy_selected, max_class, max_prob = selective_softmax_loss(
+                logits, labels, nrof_classes, class_thresholds, use_label_probabilities)
                 
             sess = tf.Session()
             with sess.as_default():
                 np.random.seed(seed=666)
                 lg = np.array([[0.1, 0.1, 0.7, 0.1, 0.1], [0.2, 0.2, 0.2, 0.2, 0.9]])
                 lb = np.array([2, 4])
-                cth = np.array([0.3, 0.3])
-                cross_entropy_, max_prob_, label_prob_ = sess.run([cross_entropy, max_prob, label_prob], feed_dict={logits:lg, labels:lb, class_thresholds:cth})
+                cth = np.array([0.32, 0.32])
+                cross_entropy_selected_, max_class_, max_prob_ = sess.run(
+                    [cross_entropy_selected, max_class, max_prob], feed_dict={logits:lg, labels:lb, class_thresholds:cth})
                 #print(prob)
-                print(cross_entropy_)
+                #print(cross_entropy_)
+                print(cross_entropy_selected_)
+                print(max_class_)
                 print(max_prob_)
-                print(label_prob_)
                 
                 #np.testing.assert_almost_equal(tf_triplet_loss, np_triplet_loss, decimal=5, err_msg='Triplet loss is incorrect')
                       
-def selective_softmax_loss(logits, labels, nrof_classes, class_thresholds_for_batch):
+def selective_softmax_loss(logits, labels, nrof_classes, class_thresholds_for_batch, use_label_probabilities):
     labels = tf.cast(labels, tf.int32)
     labels_onehot = tf.one_hot(labels, nrof_classes, on_value=1.0, off_value=0.0, axis=1, dtype=tf.float32)
     prob = tf.nn.softmax(logits)
     max_class = tf.cast(tf.argmax(prob, axis=1), tf.int32)
     cross_entropy = -tf.reduce_sum(labels_onehot * tf.log(prob), 1)
     batch_range = tf.range(tf.shape(labels)[0], dtype=tf.int32)
-    max_prob = tf.gather_nd(prob, tf.stack((batch_range, max_class), axis=1))
-    label_prob = tf.gather_nd(prob, tf.stack((batch_range, labels), axis=1))
+    if use_label_probabilities:
+        max_prob = tf.gather_nd(prob, tf.stack((batch_range, labels), axis=1))
+    else:
+        max_prob = tf.gather_nd(prob, tf.stack((batch_range, max_class), axis=1))
+    cross_entropy_selected = tf.where(max_prob>class_thresholds_for_batch, cross_entropy, tf.zeros_like(max_prob, tf.float32))
+    
 
     # One probability threshold per class
     # Update probability threshold every step
     # Set cross_entropy for the example to zero if probability < threshold
     #   - how to get threshold: could be from label or max_class
     
-    return cross_entropy, max_prob, label_prob
+    return cross_entropy_selected, max_class, max_prob
 
 if __name__ == "__main__":
     unittest.main()
