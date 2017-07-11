@@ -28,14 +28,13 @@ import numpy as np
 class SelectiveSoftmaxLossTest(unittest.TestCase):
 
     def testSelectiveSoftmaxLoss(self):
-        batch_size = 2
         nrof_classes = 5
         
         with tf.Graph().as_default():
         
-            logits = tf.placeholder(tf.float32, shape=(batch_size, nrof_classes), name='logits')
-            labels = tf.placeholder(tf.int32, shape=(batch_size,), name='labels')
-            class_thresholds = tf.placeholder(tf.float32, shape=(batch_size,), name='class_thresholds')
+            logits = tf.placeholder(tf.float32, shape=(None, nrof_classes), name='logits')
+            labels = tf.placeholder(tf.int32, shape=(None,), name='labels')
+            class_thresholds = tf.placeholder(tf.float32, shape=(None,), name='class_thresholds')
             cross_entropy, max_prob, label_prob = selective_softmax_loss(logits, labels, nrof_classes, class_thresholds)
                 
             sess = tf.Session()
@@ -53,13 +52,12 @@ class SelectiveSoftmaxLossTest(unittest.TestCase):
                 #np.testing.assert_almost_equal(tf_triplet_loss, np_triplet_loss, decimal=5, err_msg='Triplet loss is incorrect')
                       
 def selective_softmax_loss(logits, labels, nrof_classes, class_thresholds_for_batch):
-    #indices = tf.stack((tf.range(tf.shape(prob)[0], dtype=tf.int64), max_class), axis=1)
     labels = tf.cast(labels, tf.int32)
     labels_onehot = tf.one_hot(labels, nrof_classes, on_value=1.0, off_value=0.0, axis=1, dtype=tf.float32)
     prob = tf.nn.softmax(logits)
     max_class = tf.cast(tf.argmax(prob, axis=1), tf.int32)
     cross_entropy = -tf.reduce_sum(labels_onehot * tf.log(prob), 1)
-    batch_range = tf.range(prob.get_shape()[0], dtype=tf.int32)
+    batch_range = tf.range(tf.shape(labels)[0], dtype=tf.int32)
     max_prob = tf.gather_nd(prob, tf.stack((batch_range, max_class), axis=1))
     label_prob = tf.gather_nd(prob, tf.stack((batch_range, labels), axis=1))
 
