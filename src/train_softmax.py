@@ -56,6 +56,8 @@ def main(args):
     if not os.path.isdir(model_dir):  # Create the model directory if it doesn't exist
         os.makedirs(model_dir)
 
+    stat_file_name = os.path.join(log_dir, 'stat.h5')
+
     # Write arguments to a text file
     facenet.write_arguments_to_file(args, os.path.join(log_dir, 'arguments.txt'))
         
@@ -174,8 +176,17 @@ def main(args):
         tf.summary.scalar('learning_rate', learning_rate)
 
         # Calculate the average cross entropy loss across the batch
-        cross_entropy = tf.nn.sparse_softmax_cross_entropy_with_logits(
-            labels=label_batch, logits=logits, name='cross_entropy_per_example')
+        use_selective_loss = True
+        if use_selective_loss:
+            cross_entropy, max_class, max_prob = facenet.selective_softmax_loss(
+                logits, label_batch, nrof_classes, 0.0, False)
+            
+        else:
+            cross_entropy = tf.nn.sparse_softmax_cross_entropy_with_logits(
+                labels=label_batch, logits=logits, name='cross_entropy_per_example')
+            max_class = tf.zeros_like(label_batch)
+            max_prob = tf.zeros_like(label_batch, tf.float32)
+        
         cross_entropy_mean = tf.reduce_mean(cross_entropy, name='cross_entropy')
         tf.add_to_collection('losses', cross_entropy_mean)
         
@@ -210,6 +221,11 @@ def main(args):
 
             # Training and validation loop
             print('Running training')
+            stat = {
+                'labels': np.zeros((0,), np.int32),
+                'prob_max': np.zeros((0,), np.float32),
+                'class_max': np.zeros((0,), np.int32),
+                }
             epoch = 0
             while epoch < args.max_nrof_epochs:
                 step = sess.run(global_step, feed_dict=None)
@@ -217,7 +233,13 @@ def main(args):
                 # Train for one epoch
                 train(args, sess, epoch, image_list, label_list, index_dequeue_op, enqueue_op, image_paths_placeholder, labels_placeholder,
                     learning_rate_placeholder, phase_train_placeholder, batch_size_placeholder, global_step, 
-                    total_loss, train_op, summary_op, summary_writer, regularization_losses, args.learning_rate_schedule_file)
+                    total_loss, train_op, summary_op, summary_writer, regularization_losses, args.learning_rate_schedule_file,
+                    cross_entropy, max_class, max_prob, label_batch, stat)
+
+                print('Saving statistics')
+                with h5py.File(stat_file_name, 'w') as f:
+                    for key, value in stat.iteritems():
+                        f.create_dataset(key, data=value)
 
                 # Save variables and the metagraph if it doesn't exist already
                 save_variables_and_metagraph(sess, saver, summary_writer, model_dir, subdir, step)
@@ -262,7 +284,8 @@ def filter_dataset(dataset, data_filename, percentile, min_nrof_images_per_class
   
 def train(args, sess, epoch, image_list, label_list, index_dequeue_op, enqueue_op, image_paths_placeholder, labels_placeholder, 
       learning_rate_placeholder, phase_train_placeholder, batch_size_placeholder, global_step, 
-      loss, train_op, summary_op, summary_writer, regularization_losses, learning_rate_schedule_file):
+      loss, train_op, summary_op, summary_writer, regularization_losses, learning_rate_schedule_file,
+      cross_entropy, max_class, max_prob, label_batch, stat):
     batch_number = 0
     
     if args.learning_rate>0.0:
@@ -285,10 +308,13 @@ def train(args, sess, epoch, image_list, label_list, index_dequeue_op, enqueue_o
         start_time = time.time()
         feed_dict = {learning_rate_placeholder: lr, phase_train_placeholder:True, batch_size_placeholder:args.batch_size}
         if (batch_number % 100 == 0):
-            err, _, step, reg_loss, summary_str = sess.run([loss, train_op, global_step, regularization_losses, summary_op], feed_dict=feed_dict)
+            err, _, step, reg_loss, summary_str, max_class_, max_prob_, label_batch_ = sess.run([loss, train_op, global_step, regularization_losses, summary_op, max_class, max_prob, label_batch], feed_dict=feed_dict)
             summary_writer.add_summary(summary_str, global_step=step)
         else:
-            err, _, step, reg_loss = sess.run([loss, train_op, global_step, regularization_losses], feed_dict=feed_dict)
+            err, _, step, reg_loss, max_class_, max_prob_, label_batch_ = sess.run([loss, train_op, global_step, regularization_losses, max_class, max_prob, label_batch], feed_dict=feed_dict)
+        stat['labels'] = np.append(stat['labels'], label_batch_)
+        stat['max_prob'] = np.append(stat['max_prob'], max_prob_)
+        stat['max_class'] = np.append(stat['max_class'], max_class_)
         duration = time.time() - start_time
         print('Epoch: [%d][%d/%d]\tTime %.3f\tLoss %2.3f\tRegLoss %2.3f' %
               (epoch, batch_number+1, args.epoch_size, duration, err, np.sum(reg_loss)))
