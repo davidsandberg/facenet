@@ -105,6 +105,8 @@ def main(args):
         
         learning_rate_placeholder = tf.placeholder(tf.float32, name='learning_rate')
 
+        prob_threshold_placeholder = tf.placeholder(tf.float32, name='probability_trheshold')
+
         batch_size_placeholder = tf.placeholder(tf.int32, name='batch_size')
         
         phase_train_placeholder = tf.placeholder(tf.bool, name='phase_train')
@@ -178,9 +180,9 @@ def main(args):
         # Calculate the average cross entropy loss across the batch
         use_selective_loss = True
         if use_selective_loss:
-            cross_entropy, max_class, max_prob = facenet.selective_softmax_loss(
-                logits, label_batch, nrof_classes, 0.0, False)
-            
+            cross_entropy, cross_entropy_orig, max_class, max_prob = facenet.selective_softmax_loss(
+                logits, label_batch, nrof_classes, prob_threshold_placeholder, False)
+            cross_entropy_orig_mean = tf.reduce_mean(cross_entropy_orig, name='cross_entropy_orig')
         else:
             cross_entropy = tf.nn.sparse_softmax_cross_entropy_with_logits(
                 labels=label_batch, logits=logits, name='cross_entropy_per_example')
@@ -221,25 +223,29 @@ def main(args):
 
             # Training and validation loop
             print('Running training')
+            nrof_examples = (args.max_nrof_epochs+1)*args.epoch_size*args.batch_size
             stat = {
-                'labels': np.zeros((0,), np.int32),
-                'prob_max': np.zeros((0,), np.float32),
-                'class_max': np.zeros((0,), np.int32),
+                'labels': np.zeros((nrof_examples,), np.int32),
+                'prob_max': np.zeros((nrof_examples,), np.float32),
+                'class_max': np.zeros((nrof_examples,), np.int32),
                 }
             epoch = 0
+            prob_threshold = 0.0
             while epoch < args.max_nrof_epochs:
                 step = sess.run(global_step, feed_dict=None)
                 epoch = step // args.epoch_size
                 # Train for one epoch
-                train(args, sess, epoch, image_list, label_list, index_dequeue_op, enqueue_op, image_paths_placeholder, labels_placeholder,
+                step2 = train(args, sess, epoch, image_list, label_list, index_dequeue_op, enqueue_op, image_paths_placeholder, labels_placeholder,
                     learning_rate_placeholder, phase_train_placeholder, batch_size_placeholder, global_step, 
                     total_loss, train_op, summary_op, summary_writer, regularization_losses, args.learning_rate_schedule_file,
-                    cross_entropy, max_class, max_prob, label_batch, stat)
+                    cross_entropy, max_class, max_prob, label_batch, stat, prob_threshold_placeholder, prob_threshold, cross_entropy_mean, cross_entropy_orig_mean)
 
                 print('Saving statistics')
                 with h5py.File(stat_file_name, 'w') as f:
                     for key, value in stat.iteritems():
                         f.create_dataset(key, data=value)
+                        
+                prob_threshold = update_threshold(stat, step2, args.epoch_size, args.batch_size, args.prob_percentile_threshold)
 
                 # Save variables and the metagraph if it doesn't exist already
                 save_variables_and_metagraph(sess, saver, summary_writer, model_dir, subdir, step)
@@ -250,6 +256,19 @@ def main(args):
                         embeddings, label_batch, lfw_paths, actual_issame, args.lfw_batch_size, args.lfw_nrof_folds, log_dir, step, summary_writer)
     sess.close()
     return model_dir
+
+def update_threshold(stat, step, epoch_size, batch_size, percentile):
+    nrof_samples = epoch_size*batch_size*4
+    start_sample = np.maximum(0, step*batch_size - nrof_samples)
+    end_sample = step*batch_size
+    var = stat['prob_max'][start_sample:end_sample]
+    
+    hist, bin_edges = np.histogram(var, 100)
+    cdf = np.float32(np.cumsum(hist)) / np.sum(hist)
+    bin_centers = (bin_edges[:-1]+bin_edges[1:])/2
+    #plt.plot(bin_centers, cdf)
+    threshold = np.interp(percentile*0.01, cdf, bin_centers)
+    return threshold
   
 def find_threshold(var, percentile):
     hist, bin_edges = np.histogram(var, 100)
@@ -285,7 +304,7 @@ def filter_dataset(dataset, data_filename, percentile, min_nrof_images_per_class
 def train(args, sess, epoch, image_list, label_list, index_dequeue_op, enqueue_op, image_paths_placeholder, labels_placeholder, 
       learning_rate_placeholder, phase_train_placeholder, batch_size_placeholder, global_step, 
       loss, train_op, summary_op, summary_writer, regularization_losses, learning_rate_schedule_file,
-      cross_entropy, max_class, max_prob, label_batch, stat):
+      cross_entropy, max_class, max_prob, label_batch, stat, prob_threshold_placeholder, prob_threshold, cross_entropy_mean, cross_entropy_orig_mean):
     batch_number = 0
     
     if args.learning_rate>0.0:
@@ -306,18 +325,19 @@ def train(args, sess, epoch, image_list, label_list, index_dequeue_op, enqueue_o
     train_time = 0
     while batch_number < args.epoch_size:
         start_time = time.time()
-        feed_dict = {learning_rate_placeholder: lr, phase_train_placeholder:True, batch_size_placeholder:args.batch_size}
+        feed_dict = {learning_rate_placeholder: lr, phase_train_placeholder:True, batch_size_placeholder:args.batch_size, prob_threshold_placeholder:prob_threshold}
         if (batch_number % 100 == 0):
-            err, _, step, reg_loss, summary_str, max_class_, max_prob_, label_batch_ = sess.run([loss, train_op, global_step, regularization_losses, summary_op, max_class, max_prob, label_batch], feed_dict=feed_dict)
+            err, _, step, reg_loss, summary_str, max_class_, max_prob_, label_batch_, cross_entropy_mean_, cross_entropy_orig_mean_ = sess.run([loss, train_op, global_step, regularization_losses, summary_op, max_class, max_prob, label_batch, cross_entropy_mean, cross_entropy_orig_mean], feed_dict=feed_dict)
             summary_writer.add_summary(summary_str, global_step=step)
         else:
-            err, _, step, reg_loss, max_class_, max_prob_, label_batch_ = sess.run([loss, train_op, global_step, regularization_losses, max_class, max_prob, label_batch], feed_dict=feed_dict)
-        stat['labels'] = np.append(stat['labels'], label_batch_)
-        stat['max_prob'] = np.append(stat['max_prob'], max_prob_)
-        stat['max_class'] = np.append(stat['max_class'], max_class_)
+            err, _, step, reg_loss, max_class_, max_prob_, label_batch_, cross_entropy_mean_, cross_entropy_orig_mean_ = sess.run([loss, train_op, global_step, regularization_losses, max_class, max_prob, label_batch, cross_entropy_mean, cross_entropy_orig_mean], feed_dict=feed_dict)
+        start_sample = (step-1) * args.batch_size
+        stat['labels'][start_sample:start_sample+args.batch_size] = label_batch_
+        stat['prob_max'][start_sample:start_sample+args.batch_size] = max_prob_
+        stat['class_max'][start_sample:start_sample+args.batch_size] = max_class_
         duration = time.time() - start_time
-        print('Epoch: [%d][%d/%d]\tTime %.3f\tLoss %2.3f\tRegLoss %2.3f' %
-              (epoch, batch_number+1, args.epoch_size, duration, err, np.sum(reg_loss)))
+        print('Epoch: [%d][%d/%d]\tTime %.3f\tLoss %2.3f\tXent %2.3f\tXentOrig %2.3f\tRegLoss %2.3f\tProbThreshold %2.5f' %
+              (epoch, batch_number+1, args.epoch_size, duration, err, cross_entropy_mean_, cross_entropy_orig_mean_, np.sum(reg_loss), prob_threshold))
         batch_number += 1
         train_time += duration
     # Add validation loss and accuracy to summary
@@ -457,6 +477,8 @@ def parse_arguments(argv):
         help='Keep only the percentile images closed to its class center', default=100.0)
     parser.add_argument('--filter_min_nrof_images_per_class', type=int,
         help='Keep only the classes with this number of examples or more', default=0)
+    parser.add_argument('--prob_percentile_threshold', type=float,
+        help='Do not use the loss from the prob_percentile_threshold worst probabilities', default=0.0)
  
     # Parameters for validation on LFW
     parser.add_argument('--lfw_pairs', type=str,

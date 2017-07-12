@@ -99,7 +99,7 @@ def selective_softmax_loss(logits, labels, nrof_classes, class_thresholds_for_ba
     else:
         max_prob = tf.gather_nd(prob, tf.stack((batch_range, max_class), axis=1))
     cross_entropy_selected = tf.where(max_prob>class_thresholds_for_batch, cross_entropy, tf.zeros_like(max_prob, tf.float32))
-    return cross_entropy_selected, max_class, max_prob
+    return cross_entropy_selected, cross_entropy, max_class, max_prob
 
 def get_image_paths_and_labels(dataset):
     image_paths_flat = []
