@@ -37,7 +37,7 @@ class SelectiveSoftmaxLossTest(unittest.TestCase):
             logits = tf.placeholder(tf.float32, shape=(batch_size, nrof_classes), name='logits')
             labels = tf.placeholder(tf.int32, shape=(batch_size,), name='labels')
             class_thresholds = tf.placeholder(tf.float32, shape=(batch_size,), name='class_thresholds')
-            cross_entropy_selected, max_class, max_prob = facenet.selective_softmax_loss(
+            cross_entropy_selected, cross_entropy, max_class, max_prob = facenet.selective_softmax_loss(
                 logits, labels, nrof_classes, class_thresholds, use_label_probabilities)
                 
             sess = tf.Session()
@@ -46,8 +46,8 @@ class SelectiveSoftmaxLossTest(unittest.TestCase):
                 lg = np.array([[0.1, 0.1, 0.7, 0.1, 0.1], [0.2, 0.2, 0.2, 0.2, 0.9]])
                 lb = np.array([2, 4])
                 cth = np.array([0.32, 0.32])
-                cross_entropy_selected_, max_class_, max_prob_ = sess.run(
-                    [cross_entropy_selected, max_class, max_prob], feed_dict={logits:lg, labels:lb, class_thresholds:cth})
+                cross_entropy_selected_, _, max_class_, max_prob_ = sess.run(
+                    [cross_entropy_selected, cross_entropy, max_class, max_prob], feed_dict={logits:lg, labels:lb, class_thresholds:cth})
                 #print(prob)
                 #print(cross_entropy_)
                 print(cross_entropy_selected_)
