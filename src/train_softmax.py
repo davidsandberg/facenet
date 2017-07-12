@@ -253,8 +253,9 @@ def main(args):
                 with h5py.File(stat_file_name, 'w') as f:
                     for key, value in stat.iteritems():
                         f.create_dataset(key, data=value)
-                        
-                prob_threshold = update_threshold(stat, step2, args.epoch_size, args.batch_size, args.prob_percentile_threshold)
+                
+                if args.prob_percentile_threshold>0.0:
+                    prob_threshold = update_threshold(stat, step2, args.epoch_size, args.batch_size, args.prob_percentile_threshold)
                 stat['prob_threshold'][epoch] = prob_threshold
                 
                 # Save variables and the metagraph if it doesn't exist already
