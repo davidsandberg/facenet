@@ -160,7 +160,7 @@ def parse_arguments(argv):
     parser.add_argument('--seed', type=int,
         help='Random seed.', default=666)
     parser.add_argument('--nrof_preprocess_threads', type=int,
-        help='Number of preprocessing (data loading and augumentation) threads.', default=4)
+        help='Number of preprocessing (data loading and augmentation) threads.', default=4)
     parser.add_argument('--log_histograms', 
         help='Enables logging of weight/bias histograms in tensorboard.', action='store_true')
     parser.add_argument('--learning_rate_schedule_file', type=str,
