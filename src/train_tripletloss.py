@@ -122,6 +122,9 @@ def main(args):
             shapes=[(args.image_size, args.image_size, 3), ()], enqueue_many=True,
             capacity=4 * nrof_preprocess_threads * args.batch_size,
             allow_smaller_final_batch=True)
+        image_batch = tf.identity(image_batch, 'image_batch')
+        image_batch = tf.identity(image_batch, 'input')
+        labels_batch = tf.identity(labels_batch, 'label_batch')
 
         # Build the inference graph
         prelogits, _ = network.inference(image_batch, args.keep_probability, 
@@ -189,7 +192,6 @@ def main(args):
                             batch_size_placeholder, learning_rate_placeholder, phase_train_placeholder, enqueue_op, actual_issame, args.batch_size, 
                             args.lfw_nrof_folds, log_dir, step, summary_writer, args.embedding_size)
 
-    sess.close()
     return model_dir
 
 
