@@ -110,7 +110,7 @@ def read_images_from_disk(input_queue):
     """
     label = input_queue[1]
     file_contents = tf.read_file(input_queue[0])
-    example = tf.image.decode_png(file_contents, channels=3)
+    example = tf.image.decode_image(file_contents, channels=3)
     return example, label
   
 def random_rotate_image(image):

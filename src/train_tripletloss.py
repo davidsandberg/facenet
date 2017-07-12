@@ -103,7 +103,7 @@ def main(args):
             images = []
             for filename in tf.unstack(filenames):
                 file_contents = tf.read_file(filename)
-                image = tf.image.decode_png(file_contents)
+                image = tf.image.decode_image(file_contents, channels=3)
                 
                 if args.random_crop:
                     image = tf.random_crop(image, [args.image_size, args.image_size, 3])
