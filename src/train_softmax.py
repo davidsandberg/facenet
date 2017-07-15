@@ -178,7 +178,7 @@ def main(args):
         tf.summary.scalar('learning_rate', learning_rate)
 
         # Calculate the average cross entropy loss across the batch
-        use_selective_loss = True
+        use_selective_loss = False
         if use_selective_loss:
             cross_entropy, cross_entropy_orig, max_class, max_prob = facenet.selective_softmax_loss(
                 logits, label_batch, nrof_classes, prob_threshold_placeholder, False)
@@ -188,6 +188,7 @@ def main(args):
                 labels=label_batch, logits=logits, name='cross_entropy_per_example')
             max_class = tf.zeros_like(label_batch)
             max_prob = tf.zeros_like(label_batch, tf.float32)
+            cross_entropy_orig_mean = tf.zeros_like(label_batch, tf.float32)
         
         cross_entropy_mean = tf.reduce_mean(cross_entropy, name='cross_entropy')
         tf.add_to_collection('losses', cross_entropy_mean)
