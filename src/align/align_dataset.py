@@ -31,7 +31,7 @@ import sys
 import os
 import argparse
 import random
-import align_dlib
+import align_dlib  # @UnresolvedImport
 import facenet
 
 def main(args):

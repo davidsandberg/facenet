@@ -1,5 +1,4 @@
-"""Training a face recognizer with TensorFlow based on the FaceNet paper
-FaceNet: A Unified Embedding for Face Recognition and Clustering: http://arxiv.org/abs/1503.03832
+"""Training a face recognizer with TensorFlow using softmax cross entropy loss
 """
 # MIT License
 # 
@@ -56,16 +55,18 @@ def main(args):
     if not os.path.isdir(model_dir):  # Create the model directory if it doesn't exist
         os.makedirs(model_dir)
 
+    # Write arguments to a text file
+    facenet.write_arguments_to_file(args, os.path.join(log_dir, 'arguments.txt'))
+        
     # Store some git revision info in a text file in the log directory
-    if not args.no_store_revision_info:
-        src_path,_ = os.path.split(os.path.realpath(__file__))
-        facenet.store_revision_info(src_path, log_dir, ' '.join(sys.argv))
+    src_path,_ = os.path.split(os.path.realpath(__file__))
+    facenet.store_revision_info(src_path, log_dir, ' '.join(sys.argv))
 
     np.random.seed(seed=args.seed)
     random.seed(args.seed)
     train_set = facenet.get_dataset(args.data_dir)
     if args.filter_filename:
-        train_set = filter_dataset(train_set, args.filter_filename, 
+        train_set = filter_dataset(train_set, os.path.expanduser(args.filter_filename), 
             args.filter_percentile, args.filter_min_nrof_images_per_class)
     nrof_classes = len(train_set)
     
@@ -122,7 +123,7 @@ def main(args):
             images = []
             for filename in tf.unstack(filenames):
                 file_contents = tf.read_file(filename)
-                image = tf.image.decode_png(file_contents)
+                image = tf.image.decode_image(file_contents, channels=3)
                 if args.random_rotate:
                     image = tf.py_func(facenet.random_rotate_image, [image], tf.uint8)
                 if args.random_crop:
@@ -151,33 +152,16 @@ def main(args):
         
         print('Building training graph')
         
-        batch_norm_params = {
-            # Decay for the moving averages
-            'decay': 0.995,
-            # epsilon to prevent 0s in variance
-            'epsilon': 0.001,
-            # force in-place updates of mean and variance estimates
-            'updates_collections': None,
-            # Moving averages ends up in the trainable variables collection
-            'variables_collections': [ tf.GraphKeys.TRAINABLE_VARIABLES ],
-            # Only update statistics during training mode
-            'is_training': phase_train_placeholder
-        }
         # Build the inference graph
         prelogits, _ = network.inference(image_batch, args.keep_probability, 
-            phase_train=phase_train_placeholder, weight_decay=args.weight_decay)
-        bottleneck = slim.fully_connected(prelogits, args.embedding_size, activation_fn=None, 
-                weights_initializer=tf.truncated_normal_initializer(stddev=0.1), 
-                weights_regularizer=slim.l2_regularizer(args.weight_decay),
-                normalizer_fn=slim.batch_norm,
-                normalizer_params=batch_norm_params,
-                scope='Bottleneck', reuse=False)
-        logits = slim.fully_connected(bottleneck, len(train_set), activation_fn=None, 
+            phase_train=phase_train_placeholder, bottleneck_layer_size=args.embedding_size, 
+            weight_decay=args.weight_decay)
+        logits = slim.fully_connected(prelogits, len(train_set), activation_fn=None, 
                 weights_initializer=tf.truncated_normal_initializer(stddev=0.1), 
                 weights_regularizer=slim.l2_regularizer(args.weight_decay),
                 scope='Logits', reuse=False)
 
-        embeddings = tf.nn.l2_normalize(bottleneck, 1, 1e-10, name='embeddings')
+        embeddings = tf.nn.l2_normalize(prelogits, 1, 1e-10, name='embeddings')
 
         # Add center loss
         if args.center_loss_factor>0.0:
@@ -241,7 +225,6 @@ def main(args):
                 if args.lfw_dir:
                     evaluate(sess, enqueue_op, image_paths_placeholder, labels_placeholder, phase_train_placeholder, batch_size_placeholder, 
                         embeddings, label_batch, lfw_paths, actual_issame, args.lfw_batch_size, args.lfw_nrof_folds, log_dir, step, summary_writer)
-    sess.close()
     return model_dir
   
 def find_threshold(var, percentile):
@@ -391,15 +374,15 @@ def parse_arguments(argv):
         help='Load a pretrained model before training starts.')
     parser.add_argument('--data_dir', type=str,
         help='Path to the data directory containing aligned face patches. Multiple directories are separated with colon.',
-        default='~/datasets/facescrub/fs_aligned:~/datasets/casia/casia-webface-aligned')
+        default='~/datasets/casia/casia_maxpy_mtcnnalign_182_160')
     parser.add_argument('--model_def', type=str,
-        help='Model definition. Points to a module containing the definition of the inference graph.', default='models.nn4')
+        help='Model definition. Points to a module containing the definition of the inference graph.', default='models.inception_resnet_v1')
     parser.add_argument('--max_nrof_epochs', type=int,
         help='Number of epochs to run.', default=500)
     parser.add_argument('--batch_size', type=int,
         help='Number of images to process in a batch.', default=90)
     parser.add_argument('--image_size', type=int,
-        help='Image size (height, width) in pixels.', default=96)
+        help='Image size (height, width) in pixels.', default=160)
     parser.add_argument('--epoch_size', type=int,
         help='Number of batches per epoch.', default=1000)
     parser.add_argument('--embedding_size', type=int,
@@ -415,8 +398,6 @@ def parse_arguments(argv):
         help='Keep probability of dropout for the fully connected layer(s).', default=1.0)
     parser.add_argument('--weight_decay', type=float,
         help='L2 weight regularization.', default=0.0)
-    parser.add_argument('--decov_loss_factor', type=float,
-        help='DeCov loss factor.', default=0.0)
     parser.add_argument('--center_loss_factor', type=float,
         help='Center loss factor.', default=0.0)
     parser.add_argument('--center_loss_alfa', type=float,
@@ -435,7 +416,7 @@ def parse_arguments(argv):
     parser.add_argument('--seed', type=int,
         help='Random seed.', default=666)
     parser.add_argument('--nrof_preprocess_threads', type=int,
-        help='Number of preprocessing (data loading and augumentation) threads.', default=4)
+        help='Number of preprocessing (data loading and augmentation) threads.', default=4)
     parser.add_argument('--log_histograms', 
         help='Enables logging of weight/bias histograms in tensorboard.', action='store_true')
     parser.add_argument('--learning_rate_schedule_file', type=str,
@@ -446,8 +427,6 @@ def parse_arguments(argv):
         help='Keep only the percentile images closed to its class center', default=100.0)
     parser.add_argument('--filter_min_nrof_images_per_class', type=int,
         help='Keep only the classes with this number of examples or more', default=0)
-    parser.add_argument('--no_store_revision_info', 
-        help='Disables storing of git revision info in revision_info.txt.', action='store_true')
  
     # Parameters for validation on LFW
     parser.add_argument('--lfw_pairs', type=str,
