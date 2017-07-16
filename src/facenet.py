@@ -22,8 +22,6 @@
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 # SOFTWARE.
 
-os.environ['TF_CPP_MIN_LOG_LEVEL'] = '2'
-
 # pylint: disable=missing-docstring
 from __future__ import absolute_import
 from __future__ import division
@@ -41,6 +39,9 @@ from tensorflow.python.training import training
 import random
 import re
 from tensorflow.python.platform import gfile
+
+os.environ['TF_CPP_MIN_LOG_LEVEL'] = '2'
+
 
 def triplet_loss(anchor, positive, negative, alpha):
     """Calculate the triplet loss according to the FaceNet paper
