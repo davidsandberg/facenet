@@ -1,5 +1,4 @@
-"""Training a face recognizer with TensorFlow based on the FaceNet paper
-FaceNet: A Unified Embedding for Face Recognition and Clustering: http://arxiv.org/abs/1503.03832
+"""Training a face recognizer with TensorFlow using softmax cross entropy loss
 """
 # MIT License
 # 
@@ -56,6 +55,9 @@ def main(args):
     if not os.path.isdir(model_dir):  # Create the model directory if it doesn't exist
         os.makedirs(model_dir)
 
+    # Write arguments to a text file
+    facenet.write_arguments_to_file(args, os.path.join(log_dir, 'arguments.txt'))
+        
     # Store some git revision info in a text file in the log directory
     src_path,_ = os.path.split(os.path.realpath(__file__))
     facenet.store_revision_info(src_path, log_dir, ' '.join(sys.argv))
@@ -121,7 +123,7 @@ def main(args):
             images = []
             for filename in tf.unstack(filenames):
                 file_contents = tf.read_file(filename)
-                image = tf.image.decode_png(file_contents)
+                image = tf.image.decode_image(file_contents, channels=3)
                 if args.random_rotate:
                     image = tf.py_func(facenet.random_rotate_image, [image], tf.uint8)
                 if args.random_crop:
@@ -223,7 +225,6 @@ def main(args):
                 if args.lfw_dir:
                     evaluate(sess, enqueue_op, image_paths_placeholder, labels_placeholder, phase_train_placeholder, batch_size_placeholder, 
                         embeddings, label_batch, lfw_paths, actual_issame, args.lfw_batch_size, args.lfw_nrof_folds, log_dir, step, summary_writer)
-    sess.close()
     return model_dir
   
 def find_threshold(var, percentile):
@@ -397,8 +398,6 @@ def parse_arguments(argv):
         help='Keep probability of dropout for the fully connected layer(s).', default=1.0)
     parser.add_argument('--weight_decay', type=float,
         help='L2 weight regularization.', default=0.0)
-    parser.add_argument('--decov_loss_factor', type=float,
-        help='DeCov loss factor.', default=0.0)
     parser.add_argument('--center_loss_factor', type=float,
         help='Center loss factor.', default=0.0)
     parser.add_argument('--center_loss_alfa', type=float,
@@ -417,7 +416,7 @@ def parse_arguments(argv):
     parser.add_argument('--seed', type=int,
         help='Random seed.', default=666)
     parser.add_argument('--nrof_preprocess_threads', type=int,
-        help='Number of preprocessing (data loading and augumentation) threads.', default=4)
+        help='Number of preprocessing (data loading and augmentation) threads.', default=4)
     parser.add_argument('--log_histograms', 
         help='Enables logging of weight/bias histograms in tensorboard.', action='store_true')
     parser.add_argument('--learning_rate_schedule_file', type=str,

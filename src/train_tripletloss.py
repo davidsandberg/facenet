@@ -43,7 +43,7 @@ from tensorflow.python.ops import data_flow_ops
 
 def main(args):
   
-    network = importlib.import_module(args.model_def, 'inference')
+    network = importlib.import_module(args.model_def)
 
     subdir = datetime.strftime(datetime.now(), '%Y%m%d-%H%M%S')
     log_dir = os.path.join(os.path.expanduser(args.logs_base_dir), subdir)
@@ -53,6 +53,9 @@ def main(args):
     if not os.path.isdir(model_dir):  # Create the model directory if it doesn't exist
         os.makedirs(model_dir)
 
+    # Write arguments to a text file
+    facenet.write_arguments_to_file(args, os.path.join(log_dir, 'arguments.txt'))
+        
     # Store some git revision info in a text file in the log directory
     src_path,_ = os.path.split(os.path.realpath(__file__))
     facenet.store_revision_info(src_path, log_dir, ' '.join(sys.argv))
@@ -100,7 +103,7 @@ def main(args):
             images = []
             for filename in tf.unstack(filenames):
                 file_contents = tf.read_file(filename)
-                image = tf.image.decode_png(file_contents)
+                image = tf.image.decode_image(file_contents, channels=3)
                 
                 if args.random_crop:
                     image = tf.random_crop(image, [args.image_size, args.image_size, 3])
@@ -119,6 +122,9 @@ def main(args):
             shapes=[(args.image_size, args.image_size, 3), ()], enqueue_many=True,
             capacity=4 * nrof_preprocess_threads * args.batch_size,
             allow_smaller_final_batch=True)
+        image_batch = tf.identity(image_batch, 'image_batch')
+        image_batch = tf.identity(image_batch, 'input')
+        labels_batch = tf.identity(labels_batch, 'label_batch')
 
         # Build the inference graph
         prelogits, _ = network.inference(image_batch, args.keep_probability, 
@@ -186,7 +192,6 @@ def main(args):
                             batch_size_placeholder, learning_rate_placeholder, phase_train_placeholder, enqueue_op, actual_issame, args.batch_size, 
                             args.lfw_nrof_folds, log_dir, step, summary_writer, args.embedding_size)
 
-    sess.close()
     return model_dir
 
 
@@ -212,7 +217,7 @@ def train(args, sess, dataset, epoch, image_paths_placeholder, labels_placeholde
         sess.run(enqueue_op, {image_paths_placeholder: image_paths_array, labels_placeholder: labels_array})
         emb_array = np.zeros((nrof_examples, embedding_size))
         nrof_batches = int(np.ceil(nrof_examples / args.batch_size))
-        for i in xrange(nrof_batches):
+        for i in range(nrof_batches):
             batch_size = min(nrof_examples-i*args.batch_size, args.batch_size)
             emb, lab = sess.run([embeddings, labels_batch], feed_dict={batch_size_placeholder: batch_size, 
                 learning_rate_placeholder: lr, phase_train_placeholder: True})

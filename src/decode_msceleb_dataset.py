@@ -61,20 +61,19 @@ def main(args):
             fields = line.split('\t')
             class_dir = fields[0]
             img_name = fields[1] + '-' + fields[4] + '.' + args.output_format
-            img_string = fields[6]
+            img_string = fields[5]
             img_dec_string = base64.b64decode(img_string)
             img_data = np.fromstring(img_dec_string, dtype=np.uint8)
-            img = cv2.imdecode(img_data, cv2.cv.CV_LOAD_IMAGE_COLOR) #pylint: disable=maybe-no-member
+            img = cv2.imdecode(img_data, cv2.IMREAD_COLOR) #pylint: disable=maybe-no-member
             if args.size:
                 img = misc.imresize(img, (args.size, args.size), interp='bilinear')
             full_class_dir = os.path.join(output_dir, class_dir)
             if not os.path.exists(full_class_dir):
                 os.mkdir(full_class_dir)
-            full_path = os.path.join(full_class_dir, img_name)
+            full_path = os.path.join(full_class_dir, img_name.replace('/','_'))
             cv2.imwrite(full_path, img) #pylint: disable=maybe-no-member
             print('%8d: %s' % (i, full_path))
             i += 1
-
   
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()

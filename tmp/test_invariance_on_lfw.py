@@ -137,7 +137,7 @@ def save_result(aug, acc, filename):
             f.write('%6.4f %6.4f\n' % (aug[i], acc[i]))
             
 def evaluate_accuracy(sess, images_placeholder, phase_train_placeholder, image_size, embeddings, 
-        paths, actual_issame, augument_images, aug_value, batch_size, orig_image_size, seed):
+        paths, actual_issame, augment_images, aug_value, batch_size, orig_image_size, seed):
     nrof_images = len(paths)
     nrof_batches = int(math.ceil(1.0*nrof_images / batch_size))
     emb_list = []
@@ -146,7 +146,7 @@ def evaluate_accuracy(sess, images_placeholder, phase_train_placeholder, image_s
         end_index = min((i+1)*batch_size, nrof_images)
         paths_batch = paths[start_index:end_index]
         images = facenet.load_data(paths_batch, False, False, orig_image_size)
-        images_aug = augument_images(images, aug_value, image_size)
+        images_aug = augment_images(images, aug_value, image_size)
         feed_dict = { images_placeholder: images_aug, phase_train_placeholder: False }
         emb_list += sess.run([embeddings], feed_dict=feed_dict)
     emb_array = np.vstack(emb_list)  # Stack the embeddings to a nrof_examples_per_epoch x 128 matrix

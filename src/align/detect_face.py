@@ -303,7 +303,7 @@ def detect_face(img, minsize, pnet, rnet, onet, threshold, factor):
     # fastresize: resize img from last scale (using in high-resolution images) if fastresize==true
     factor_count=0
     total_boxes=np.empty((0,9))
-    points=[]
+    points=np.empty(0)
     h=img.shape[0]
     w=img.shape[1]
     minl=np.amin([h, w])
