@@ -22,6 +22,8 @@
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 # SOFTWARE.
 
+os.environ['TF_CPP_MIN_LOG_LEVEL'] = '2'
+
 # pylint: disable=missing-docstring
 from __future__ import absolute_import
 from __future__ import division
