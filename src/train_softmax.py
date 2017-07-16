@@ -178,19 +178,19 @@ def main(args):
         tf.summary.scalar('learning_rate', learning_rate)
 
         # Calculate the average cross entropy loss across the batch
-        use_selective_loss = False
-        if use_selective_loss:
-            cross_entropy, cross_entropy_orig, max_class, max_prob = facenet.selective_softmax_loss(
-                logits, label_batch, nrof_classes, prob_threshold_placeholder, False)
-            cross_entropy_orig_mean = tf.reduce_mean(cross_entropy_orig, name='cross_entropy_orig')
+        cross_entropy = tf.nn.sparse_softmax_cross_entropy_with_logits(
+            labels=label_batch, logits=logits, name='cross_entropy_per_example')
+        if args.prob_percentile_threshold>0.0:
+          
+            #batch_range = tf.range(tf.shape(labels)[0], dtype=tf.int32)
+            #max_prob = tf.gather_nd(prob, tf.stack((batch_range, max_class), axis=1))
+            cross_entropy_selected = tf.where(cross_entropy<prob_threshold_placeholder, cross_entropy, tf.zeros_like(cross_entropy, tf.float32))
+            nrof_kept_entries = tf.cast(tf.count_nonzero(cross_entropy_selected), tf.float32)
+            cross_entropy_mean = tf.reduce_sum(cross_entropy_selected) / nrof_kept_entries
+            cross_entropy_orig_mean = tf.reduce_mean(cross_entropy, name='cross_entropy')
         else:
-            cross_entropy = tf.nn.sparse_softmax_cross_entropy_with_logits(
-                labels=label_batch, logits=logits, name='cross_entropy_per_example')
-            max_class = tf.zeros_like(label_batch)
-            max_prob = tf.zeros_like(label_batch, tf.float32)
-            cross_entropy_orig_mean = tf.zeros_like(label_batch, tf.float32)
-        
-        cross_entropy_mean = tf.reduce_mean(cross_entropy, name='cross_entropy')
+            cross_entropy_mean = tf.reduce_mean(cross_entropy, name='cross_entropy')
+            cross_entropy_orig_mean = cross_entropy_mean
         tf.add_to_collection('losses', cross_entropy_mean)
         
         # Calculate the total losses
@@ -227,20 +227,20 @@ def main(args):
             nrof_steps = (args.max_nrof_epochs+1)*args.epoch_size
             nrof_examples = nrof_steps*args.batch_size
             stat = {
-                'labels': np.zeros((nrof_examples,), np.int32),
-                'prob_max': np.zeros((nrof_examples,), np.float32),
-                'class_max': np.zeros((nrof_examples,), np.int32),
-                'loss': np.zeros((nrof_steps,), np.float32),
-                'reg_loss': np.zeros((nrof_steps,), np.float32),
-                'xent_loss': np.zeros((nrof_steps,), np.float32),
-                'xent_orig_loss': np.zeros((nrof_steps,), np.float32),
-                'prob_threshold': np.zeros((args.max_nrof_epochs+1,), np.float32),
-                'lfw_accuracy': np.zeros((args.max_nrof_epochs+1,), np.float32),
-                'lfw_valrate': np.zeros((args.max_nrof_epochs+1,), np.float32),
-                'learning_rate': np.zeros((args.max_nrof_epochs+1,), np.float32),
+                'labels': np.zeros((nrof_examples,), np.float32).fill(np.nan),
+                'xent': np.zeros((nrof_examples,), np.float32).fill(np.nan),
+                'class': np.zeros((nrof_examples,), np.int32).fill(np.nan),
+                'loss': np.zeros((nrof_steps,), np.float32).fill(np.nan),
+                'reg_loss': np.zeros((nrof_steps,), np.float32).fill(np.nan),
+                'xent_loss': np.zeros((nrof_steps,), np.float32).fill(np.nan),
+                'xent_orig_loss': np.zeros((nrof_steps,), np.float32).fill(np.nan),
+                'prob_threshold': np.zeros((args.max_nrof_epochs+1,), np.float32).fill(np.nan),
+                'lfw_accuracy': np.zeros((args.max_nrof_epochs+1,), np.float32).fill(np.nan),
+                'lfw_valrate': np.zeros((args.max_nrof_epochs+1,), np.float32).fill(np.nan),
+                'learning_rate': np.zeros((args.max_nrof_epochs+1,), np.float32).fill(np.nan),
               }
             epoch = 0
-            prob_threshold = 0.0
+            prob_threshold = np.inf
             while epoch < args.max_nrof_epochs:
                 step = sess.run(global_step, feed_dict=None)
                 epoch = step // args.epoch_size
@@ -248,7 +248,7 @@ def main(args):
                 step2 = train(args, sess, epoch, image_list, label_list, index_dequeue_op, enqueue_op, image_paths_placeholder, labels_placeholder,
                     learning_rate_placeholder, phase_train_placeholder, batch_size_placeholder, global_step, 
                     total_loss, train_op, summary_op, summary_writer, regularization_losses, args.learning_rate_schedule_file,
-                    cross_entropy, max_class, max_prob, label_batch, stat, prob_threshold_placeholder, prob_threshold, cross_entropy_mean, cross_entropy_orig_mean, learning_rate)
+                    cross_entropy, label_batch, stat, prob_threshold_placeholder, prob_threshold, cross_entropy_mean, cross_entropy_orig_mean, learning_rate)
 
                 print('Saving statistics')
                 with h5py.File(stat_file_name, 'w') as f:
@@ -273,7 +273,7 @@ def update_threshold(stat, step, epoch_size, batch_size, percentile):
     nrof_samples = epoch_size*batch_size*4
     start_sample = np.maximum(0, step*batch_size - nrof_samples)
     end_sample = step*batch_size
-    var = stat['prob_max'][start_sample:end_sample]
+    var = stat['xent'][start_sample:end_sample]
     
     hist, bin_edges = np.histogram(var, 100)
     cdf = np.float32(np.cumsum(hist)) / np.sum(hist)
@@ -316,7 +316,7 @@ def filter_dataset(dataset, data_filename, percentile, min_nrof_images_per_class
 def train(args, sess, epoch, image_list, label_list, index_dequeue_op, enqueue_op, image_paths_placeholder, labels_placeholder, 
       learning_rate_placeholder, phase_train_placeholder, batch_size_placeholder, global_step, 
       loss, train_op, summary_op, summary_writer, regularization_losses, learning_rate_schedule_file,
-      cross_entropy, max_class, max_prob, label_batch, stat, prob_threshold_placeholder, prob_threshold, cross_entropy_mean, cross_entropy_orig_mean, learning_rate):
+      cross_entropy, label_batch, stat, prob_threshold_placeholder, prob_threshold, cross_entropy_mean, cross_entropy_orig_mean, learning_rate):
     batch_number = 0
     
     if args.learning_rate>0.0:
@@ -339,14 +339,13 @@ def train(args, sess, epoch, image_list, label_list, index_dequeue_op, enqueue_o
         start_time = time.time()
         feed_dict = {learning_rate_placeholder: lr, phase_train_placeholder:True, batch_size_placeholder:args.batch_size, prob_threshold_placeholder:prob_threshold}
         if (batch_number % 100 == 0):
-            err, _, step, reg_loss, summary_str, max_class_, max_prob_, label_batch_, cross_entropy_mean_, cross_entropy_orig_mean_, lr_ = sess.run([loss, train_op, global_step, regularization_losses, summary_op, max_class, max_prob, label_batch, cross_entropy_mean, cross_entropy_orig_mean, learning_rate], feed_dict=feed_dict)
+            err, _, step, reg_loss, summary_str, label_batch_, cross_entropy_mean_, cross_entropy_orig_mean_, lr_, xent_ = sess.run([loss, train_op, global_step, regularization_losses, summary_op, label_batch, cross_entropy_mean, cross_entropy_orig_mean, learning_rate, cross_entropy], feed_dict=feed_dict)
             summary_writer.add_summary(summary_str, global_step=step)
         else:
-            err, _, step, reg_loss, max_class_, max_prob_, label_batch_, cross_entropy_mean_, cross_entropy_orig_mean_, lr_ = sess.run([loss, train_op, global_step, regularization_losses, max_class, max_prob, label_batch, cross_entropy_mean, cross_entropy_orig_mean, learning_rate], feed_dict=feed_dict)
+            err, _, step, reg_loss, label_batch_, cross_entropy_mean_, cross_entropy_orig_mean_, lr_, xent_ = sess.run([loss, train_op, global_step, regularization_losses, label_batch, cross_entropy_mean, cross_entropy_orig_mean, learning_rate, cross_entropy], feed_dict=feed_dict)
         start_sample = (step-1) * args.batch_size
         stat['labels'][start_sample:start_sample+args.batch_size] = label_batch_
-        stat['prob_max'][start_sample:start_sample+args.batch_size] = max_prob_
-        stat['class_max'][start_sample:start_sample+args.batch_size] = max_class_
+        stat['xent'][start_sample:start_sample+args.batch_size] = xent_
         stat['loss'][step-1] = err
         stat['reg_loss'][step-1] = np.sum(reg_loss)
         stat['xent_loss'][step-1] = cross_entropy_mean_
