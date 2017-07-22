@@ -227,17 +227,17 @@ def main(args):
             nrof_steps = (args.max_nrof_epochs+1)*args.epoch_size
             nrof_examples = nrof_steps*args.batch_size
             stat = {
-                'labels': np.zeros((nrof_examples,), np.float32).fill(np.nan),
-                'xent': np.zeros((nrof_examples,), np.float32).fill(np.nan),
-                'class': np.zeros((nrof_examples,), np.int32).fill(np.nan),
-                'loss': np.zeros((nrof_steps,), np.float32).fill(np.nan),
-                'reg_loss': np.zeros((nrof_steps,), np.float32).fill(np.nan),
-                'xent_loss': np.zeros((nrof_steps,), np.float32).fill(np.nan),
-                'xent_orig_loss': np.zeros((nrof_steps,), np.float32).fill(np.nan),
-                'prob_threshold': np.zeros((args.max_nrof_epochs+1,), np.float32).fill(np.nan),
-                'lfw_accuracy': np.zeros((args.max_nrof_epochs+1,), np.float32).fill(np.nan),
-                'lfw_valrate': np.zeros((args.max_nrof_epochs+1,), np.float32).fill(np.nan),
-                'learning_rate': np.zeros((args.max_nrof_epochs+1,), np.float32).fill(np.nan),
+                'labels': np.zeros((nrof_examples,), np.float32),
+                'xent': np.zeros((nrof_examples,), np.float32),
+                'class': np.zeros((nrof_examples,), np.int32),
+                'loss': np.zeros((nrof_steps,), np.float32),
+                'reg_loss': np.zeros((nrof_steps,), np.float32),
+                'xent_loss': np.zeros((nrof_steps,), np.float32),
+                'xent_orig_loss': np.zeros((nrof_steps,), np.float32),
+                'prob_threshold': np.zeros((args.max_nrof_epochs+1,), np.float32),
+                'lfw_accuracy': np.zeros((args.max_nrof_epochs+1,), np.float32),
+                'lfw_valrate': np.zeros((args.max_nrof_epochs+1,), np.float32),
+                'learning_rate': np.zeros((args.max_nrof_epochs+1,), np.float32),
               }
             epoch = 0
             prob_threshold = np.inf

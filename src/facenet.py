@@ -39,6 +39,7 @@ from tensorflow.python.training import training
 import random
 import re
 from tensorflow.python.platform import gfile
+import math
 
 def triplet_loss(anchor, positive, negative, alpha):
     """Calculate the triplet loss according to the FaceNet paper
@@ -100,6 +101,43 @@ def selective_softmax_loss(logits, labels, nrof_classes, class_thresholds_for_ba
         max_prob = tf.gather_nd(prob, tf.stack((batch_range, max_class), axis=1))
     cross_entropy_selected = tf.where(max_prob>class_thresholds_for_batch, cross_entropy, tf.zeros_like(max_prob, tf.float32))
     return cross_entropy_selected, cross_entropy, max_class, max_prob
+
+def angular_softmax_loss(W, x, yi, m):
+    nrof_classes = tf.shape(W)[1]
+    batch_size = tf.shape(x)[0]
+    theta = angular_difference_matrix(x, W)
+    nx = tf.norm(x, axis=1)
+    batch_index = tf.range(batch_size, dtype=tf.int32)
+    theta_yi = tf.gather_nd(theta, tf.stack((batch_index, yi), axis=1))
+    mct = mod_cosine(theta_yi, m)
+    qi = tf.exp(nx * mct)
+    denx = tf.exp(tf.expand_dims(nx, axis=1) * tf.cos(theta))
+    j = tf.expand_dims(tf.range(nrof_classes, dtype=tf.int32), axis=0)
+    yi_exp = tf.expand_dims(yi,1)
+    qx1 = tf.not_equal(yi_exp, j)
+    denw = tf.where(qx1, denx, tf.zeros_like(denx, dtype=tf.float32))
+    den = tf.reduce_sum(denw, 1)
+    loss = -tf.log(tf.divide(qi, qi+den))
+    return loss
+
+def mod_cosine(theta, m):
+    k = tf.floor(theta*m/math.pi)
+    y = tf.cast(tf.pow(-1, tf.cast(k, tf.int32)), tf.float32) * tf.cos(m*theta) - 2*k
+    return y
+
+def angular_difference_matrix(x, W):
+    nrof_classes = tf.shape(W)[1]
+    batch_size = tf.shape(x)[0]
+    dot = tf.tensordot(x, W, axes=1)
+    # TODO: Could broadcasting be used here instead of multiplication with ones? tf.expand_dims?
+    na = tf.expand_dims(tf.norm(x, 2, axis=1), 1) * tf.ones((1,nrof_classes))
+    nb = tf.ones((batch_size,1)) * tf.expand_dims(tf.norm(W, 2, axis=0), 0)
+    xp = tf.divide(dot, tf.multiply(na, nb))
+    # Handle cases where rounding errors causes the argument to acos to be outside the range where acos is defined (i.e. >1.0)
+    res = tf.where(xp<=1.0-1e-8, tf.acos(xp), tf.zeros_like(xp, tf.float32))
+    return res
+
+
 
 def get_image_paths_and_labels(dataset):
     image_paths_flat = []
