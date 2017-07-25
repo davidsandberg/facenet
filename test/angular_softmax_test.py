@@ -25,6 +25,7 @@ import tensorflow as tf
 import numpy as np
 import math
 import facenet
+import matplotlib.pyplot as plt
 
 class AngularSoftmaxLossTest(unittest.TestCase):
 
@@ -32,55 +33,87 @@ class AngularSoftmaxLossTest(unittest.TestCase):
         batch_size = 2
         nrof_classes = 4
         nrof_features = 3
+        m = 4
+        lmbd = 0.0
         
         with tf.Graph().as_default():
         
             weights = tf.placeholder(tf.float32, shape=(nrof_features, nrof_classes), name='weights')
             features = tf.placeholder(tf.float32, shape=(batch_size, nrof_features), name='features')
             labels = tf.placeholder(tf.int32, shape=(batch_size,), name='labels')
-            loss = facenet.angular_softmax_loss(weights, features, labels, 4)
+            loss = facenet.angular_softmax_loss_decomp(weights, features, labels, m, lmbd)
             
             sess = tf.Session()
             with sess.as_default():
                 np.random.seed(seed=666)
                 
-                x = np.array([[1, 1, 0], [2, 2, 1]])#.transpose()
+                x = np.array([[1, 1, 0], [2, 2, 1]])
                 yi = np.full((2,), [2, 1])
                 W = np.array([[ 1, 1, 0 ],[ 0.75, 0.25, 0 ],[ 0.5, 0.5, 0 ],[ 0.25, 0.75, 0]]).transpose()
                 
                 # Calculate reference loss (using python, numpy and for-loops)
-                loss_ref = angular_softmax_loss_ref(W, x, yi, 4)
+                loss_ref = angular_softmax_loss_ref(W, x, yi, m)
 
                 # Check vectorized numpy implementation
-                loss_numpy = angular_softmax_loss_np(W, x, yi, 4)
-                np.testing.assert_array_almost_equal(loss_numpy, loss_ref, decimal=5, err_msg='Numpy vectorized loss does not match reference')
+                #loss_numpy = angular_softmax_loss_np(W, x, yi, m)
+                #np.testing.assert_array_almost_equal(loss_numpy, loss_ref, decimal=5, err_msg='Numpy vectorized loss does not match reference')
                 
                 # Check tensorflow implementation
                 loss_ = sess.run(loss, feed_dict={weights:W, features:x, labels:yi})
+                print(loss_ref)
+                print(loss_)
                 
                 np.testing.assert_array_almost_equal(loss_, loss_ref, decimal=5, err_msg='Tensorflow loss does not match reference')
-                
+
+    def testPlotPsiTheta(self):
+        m = 3
+        theta = np.arange(0.0, math.pi, 0.01)
+        cos_theta = np.cos(theta)
+        psi_theta = psi(cos_theta, m)
+        plt.plot(theta, psi_theta)
+        plt.show()
+
 def angular_softmax_loss_ref(W, x, yi, m):
     nrof_classes = W.shape[1]
     batch_size = x.shape[0]
     
-    theta = np.zeros((batch_size, nrof_classes))
+    # x'*W/|x|
+    cos_theta = np.zeros((batch_size, nrof_classes))
+    x_norm = np.zeros((batch_size,))
+    y = np.tensordot(x, W, axes=1)
     for i in range(batch_size):
-        for j in range(nrof_classes):
-            theta[i,j] = angular_difference_np(x[i,:], W[:,j]);
+        x_norm[i] = np.linalg.norm(x[i,:])
+        cos_theta[i,:] = y[i,:] / x_norm[i]
 
-    Lang = np.zeros((batch_size,));
     for i in range(batch_size):
-        nx = np.linalg.norm(x[i,:])
-        qi = np.exp(nx*mod_cosine_np(theta[i,yi[i]], m))
-        num = qi
-        den = 0.0
-        for j in range(nrof_classes):
-            if j != yi[i]:
-                #den += np.exp(np.linalg.norm(x[i,yi[i]])*np.cos(theta[i,j]));
-                den += np.exp(nx*np.cos(theta[i,j]));
-        Lang[i] = -np.log(num / (qi+den));
-    return Lang
+        y[i,yi[i]] = x_norm[i] * psi(cos_theta[i,yi[i]], m)
+        
+    return y
+  
+def psi(cos_theta, m):
+    if m == 1:
+        y = cos_theta
+    elif m == 2:
+        # 2 * sign_0 * cos_theta_quadratic - 1
+        sign_0 = np.sign(cos_theta)
+        y = 2 * np.multiply(sign_0, np.power(cos_theta, 2)) - 1
+    elif m == 3:
+        # sign_1 * (4 * cos_theta_cubic - 3 * cos_theta) + sign_2
+        sign_0 = np.sign(cos_theta)  # sign(cos_theta)
+        sign_1 = np.sign(np.abs(cos_theta) - 0.5)  # sign_1 = sign(abs(cos_theta) - 0.5)
+        sign_2 = np.multiply(sign_0, (1 + sign_1)) - 2  # sign_2 = sign_0 * (1 + sign_1) - 2
+        y = np.multiply(sign_1, (4*np.power(cos_theta, 3) - 3*cos_theta)) + sign_2
+    elif m == 4:
+        # sign_3 * (8 * cos_theta_quartic - 8 * cos_theta_quadratic + 1) + sign_4
+        sign_0 = np.sign(cos_theta)  # sign(cos_theta)
+        sign_3 = np.multiply(sign_0, np.sign(2 * np.power(cos_theta, 2) - 1))  # sign_3 = sign_0 * sign(2 * cos_theta_quadratic_ - 1)
+        sign_4 = 2 * sign_0 + sign_3 - 3  # sign_4 = 2 * sign_0 + sign_3 - 3
+        y = np.multiply(sign_3, (8*np.power(cos_theta, 4) - 8*np.power(cos_theta, 2) + 1)) + sign_4
+    else:
+        pass
+      
+    return y
+    
   
 def angular_difference_np(a, b):
 #         % result should be in the range 0..pi

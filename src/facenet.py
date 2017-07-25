@@ -102,40 +102,97 @@ def selective_softmax_loss(logits, labels, nrof_classes, class_thresholds_for_ba
     cross_entropy_selected = tf.where(max_prob>class_thresholds_for_batch, cross_entropy, tf.zeros_like(max_prob, tf.float32))
     return cross_entropy_selected, cross_entropy, max_class, max_prob
 
-def angular_softmax_loss(W, x, yi, m):
-    nrof_classes = tf.shape(W)[1]
-    batch_size = tf.shape(x)[0]
-    theta = angular_difference_matrix(x, W)
-    nx = tf.norm(x, axis=1)
-    batch_index = tf.range(batch_size, dtype=tf.int32)
-    theta_yi = tf.gather_nd(theta, tf.stack((batch_index, yi), axis=1))
-    mct = mod_cosine(theta_yi, m)
-    qi = tf.exp(nx * mct)
-    denx = tf.exp(tf.expand_dims(nx, axis=1) * tf.cos(theta))
-    j = tf.expand_dims(tf.range(nrof_classes, dtype=tf.int32), axis=0)
-    yi_exp = tf.expand_dims(yi,1)
-    qx1 = tf.not_equal(yi_exp, j)
-    denw = tf.where(qx1, denx, tf.zeros_like(denx, dtype=tf.float32))
-    den = tf.reduce_sum(denw, 1)
-    loss = -tf.log(tf.divide(qi, qi+den))
-    return loss
+# def angular_softmax_loss(W, x, yi, m):
+#     nrof_classes = tf.shape(W)[1]
+#     batch_size = tf.shape(x)[0]
+#     theta = angular_difference_matrix(x, W)
+#     nx = tf.norm(x, axis=1)
+#     batch_index = tf.range(batch_size, dtype=tf.int32)
+#     theta_yi = tf.gather_nd(theta, tf.stack((batch_index, yi), axis=1))
+#     mct = mod_cosine(theta_yi, m)
+#     qi = tf.exp(nx * mct)
+#     denx = tf.exp(tf.expand_dims(nx, axis=1) * tf.cos(theta))
+#     j = tf.expand_dims(tf.range(nrof_classes, dtype=tf.int32), axis=0)
+#     yi_exp = tf.expand_dims(yi,1)
+#     qx1 = tf.not_equal(yi_exp, j)
+#     denw = tf.where(qx1, denx, tf.zeros_like(denx, dtype=tf.float32))
+#     den = tf.reduce_sum(denw, 1)
+#     loss = -tf.log(tf.divide(qi, qi+den))
+#     return loss
 
-def mod_cosine(theta, m):
-    k = tf.floor(theta*m/math.pi)
-    y = tf.cast(tf.pow(-1, tf.cast(k, tf.int32)), tf.float32) * tf.cos(m*theta) - 2*k
-    return y
+# def mod_cosine(theta, m, use_decomposition):
+#     k = tf.floor(theta*m/math.pi)
+#     y = tf.cast(tf.pow(-1, tf.cast(k, tf.int32)), tf.float32) * tf.cos(m*theta) - 2*k
+#     return y
 
-def angular_difference_matrix(x, W):
+def angular_softmax_loss_decomp(W, x, yi, m, lmbd):
+
     nrof_classes = tf.shape(W)[1]
     batch_size = tf.shape(x)[0]
     dot = tf.tensordot(x, W, axes=1)
-    # TODO: Could broadcasting be used here instead of multiplication with ones? tf.expand_dims?
-    na = tf.expand_dims(tf.norm(x, 2, axis=1), 1) * tf.ones((1,nrof_classes))
-    nb = tf.ones((batch_size,1)) * tf.expand_dims(tf.norm(W, 2, axis=0), 0)
-    xp = tf.divide(dot, tf.multiply(na, nb))
-    # Handle cases where rounding errors causes the argument to acos to be outside the range where acos is defined (i.e. >1.0)
-    res = tf.where(xp<=1.0-1e-8, tf.acos(xp), tf.zeros_like(xp, tf.float32))
-    return res
+    
+    x_norm = tf.norm(x, axis=1)
+    x_norm_full = tf.expand_dims(x_norm, 1) * tf.ones((1, nrof_classes)) 
+    cos_theta = (1/x_norm_full) * dot
+    yi = tf.cast(yi, tf.int32)
+    batch_index = tf.range(batch_size, dtype=tf.int32)
+    idx = tf.stack((batch_index, yi), axis=1)
+    index_matrix = tf.one_hot(yi, nrof_classes, 1, 0, axis=1, dtype=tf.int32)
+    cos_theta_yi = tf.gather_nd(cos_theta, idx)
+    x_psi_theta = tf.multiply(x_norm, psi(cos_theta_yi, m))
+    x_cos_theta = tf.multiply(x_norm, cos_theta_yi)
+    #x_psi_cos_theta_mix = (lmbd*x_cos_theta+(1-lmbd)*x_psi_theta)
+    x_psi_cos_theta_mix = (lmbd*x_cos_theta+x_psi_theta) / (1+lmbd)
+    x_psi_theta_full = tf.scatter_nd(idx, x_psi_cos_theta_mix, (batch_size, nrof_classes))
+    y = tf.where(index_matrix>0, x_psi_theta_full, dot)
+    return y
+
+def psi(cos_theta, m):
+    if m == 1:
+        y = cos_theta
+    elif m == 2:
+        # 2 * sign_0 * cos_theta_quadratic - 1
+        sign_0 = tf.sign(cos_theta)
+        y = 2 * tf.multiply(sign_0, tf.pow(cos_theta,2)) - 1
+    elif m == 3:
+        # sign_1 * (4 * cos_theta_cubic - 3 * cos_theta) + sign_2
+        sign_0 = tf.sign(cos_theta)
+        sign_1 = tf.sign(tf.abs(cos_theta) - 0.5)
+        sign_2 = tf.multiply(sign_0, (1 + sign_1)) - 2
+        y = tf.multiply(sign_1, (4 * tf.pow(cos_theta, 3) - 3 * cos_theta)) + sign_2
+    elif m == 4:
+        sign_0 = tf.sign(cos_theta)
+        sign_3 = tf.multiply(sign_0, tf.sign(2 * tf.pow(cos_theta, 2) - 1))
+        sign_4 = 2 * sign_0 + sign_3 - 3
+        y = tf.multiply(sign_3, (8 * tf.pow(cos_theta, 4) - 8 * tf.pow(cos_theta, 2) + 1)) + sign_4
+    else:
+        pass
+      
+    return y
+
+# def cos_theta_matrix(x, W):
+#     nrof_classes = tf.shape(W)[1]
+#     batch_size = tf.shape(x)[0]
+#     dot = tf.tensordot(x, W, axes=1)
+#     # TODO: Could broadcasting be used here instead of multiplication with ones? tf.expand_dims?
+#     na = tf.expand_dims(tf.norm(x, 2, axis=1), 1) * tf.ones((1,nrof_classes))
+#     nb = tf.ones((batch_size,1)) * tf.expand_dims(tf.norm(W, 2, axis=0), 0)
+#     xp = tf.divide(dot, tf.multiply(na, nb))
+#     # Handle cases where rounding errors causes the argument to acos to be outside the range where acos is defined (i.e. >1.0)
+#     res = tf.where(xp<=1.0-1e-8, tf.acos(xp), tf.zeros_like(xp, tf.float32))
+#     return res
+
+# def angular_difference_matrix(x, W):
+#     nrof_classes = tf.shape(W)[1]
+#     batch_size = tf.shape(x)[0]
+#     dot = tf.tensordot(x, W, axes=1)
+#     # TODO: Could broadcasting be used here instead of multiplication with ones? tf.expand_dims?
+#     na = tf.expand_dims(tf.norm(x, 2, axis=1), 1) * tf.ones((1,nrof_classes))
+#     nb = tf.ones((batch_size,1)) * tf.expand_dims(tf.norm(W, 2, axis=0), 0)
+#     xp = tf.divide(dot, tf.multiply(na, nb))
+#     # Handle cases where rounding errors causes the argument to acos to be outside the range where acos is defined (i.e. >1.0)
+#     res = tf.where(xp<=1.0-1e-8, tf.acos(xp), tf.zeros_like(xp, tf.float32))
+#     return res
 
 
 
@@ -230,7 +287,7 @@ def _add_loss_summaries(total_loss):
 
 def train(total_loss, global_step, optimizer, learning_rate, moving_average_decay, update_gradient_vars, log_histograms=True):
     # Generate moving averages of all losses and associated summaries.
-    loss_averages_op = _add_loss_summaries(total_loss)
+    loss_averages_op = tf.no_op() #_add_loss_summaries(total_loss)
 
     # Compute gradients.
     with tf.control_dependencies([loss_averages_op]):
