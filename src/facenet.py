@@ -39,6 +39,7 @@ from tensorflow.python.training import training
 import random
 import re
 from tensorflow.python.platform import gfile
+import math
 
 def triplet_loss(anchor, positive, negative, alpha):
     """Calculate the triplet loss according to the FaceNet paper
@@ -514,8 +515,24 @@ def get_model_filenames(model_dir):
                 max_step = step
                 ckpt_file = step_str.groups()[0]
     return meta_file, ckpt_file
+  
+def distance(embeddings1, embeddings2, distance_metric=0):
+    if distance_metric==0:
+        # Euclidian distance
+        diff = np.subtract(embeddings1, embeddings2)
+        dist = np.sum(np.square(diff),1)
+    elif distance_metric==1:
+        # Distance based on cosine similarity
+        dot = np.sum(np.multiply(embeddings1, embeddings2), axis=1)
+        norm = np.linalg.norm(embeddings1, axis=1) * np.linalg.norm(embeddings2, axis=1)
+        similarity = dot / norm
+        dist = np.arccos(similarity) / math.pi
+    else:
+        raise 'Undefined distance metric %d' % distance_metric 
+        
+    return dist
 
-def calculate_roc(thresholds, embeddings1, embeddings2, actual_issame, nrof_folds=10):
+def calculate_roc(thresholds, embeddings1, embeddings2, actual_issame, nrof_folds=10, distance_metric=0):
     assert(embeddings1.shape[0] == embeddings2.shape[0])
     assert(embeddings1.shape[1] == embeddings2.shape[1])
     nrof_pairs = min(len(actual_issame), embeddings1.shape[0])
@@ -526,8 +543,7 @@ def calculate_roc(thresholds, embeddings1, embeddings2, actual_issame, nrof_fold
     fprs = np.zeros((nrof_folds,nrof_thresholds))
     accuracy = np.zeros((nrof_folds))
     
-    diff = np.subtract(embeddings1, embeddings2)
-    dist = np.sum(np.square(diff),1)
+    dist = distance(embeddings1, embeddings2, distance_metric)
     indices = np.arange(nrof_pairs)
     
     for fold_idx, (train_set, test_set) in enumerate(k_fold.split(indices)):
@@ -559,7 +575,7 @@ def calculate_accuracy(threshold, dist, actual_issame):
 
 
   
-def calculate_val(thresholds, embeddings1, embeddings2, actual_issame, far_target, nrof_folds=10):
+def calculate_val(thresholds, embeddings1, embeddings2, actual_issame, far_target, nrof_folds=10, distance_metric=0):
     assert(embeddings1.shape[0] == embeddings2.shape[0])
     assert(embeddings1.shape[1] == embeddings2.shape[1])
     nrof_pairs = min(len(actual_issame), embeddings1.shape[0])
@@ -569,8 +585,7 @@ def calculate_val(thresholds, embeddings1, embeddings2, actual_issame, far_targe
     val = np.zeros(nrof_folds)
     far = np.zeros(nrof_folds)
     
-    diff = np.subtract(embeddings1, embeddings2)
-    dist = np.sum(np.square(diff),1)
+    dist = distance(embeddings1, embeddings2, distance_metric)
     indices = np.arange(nrof_pairs)
     
     for fold_idx, (train_set, test_set) in enumerate(k_fold.split(indices)):

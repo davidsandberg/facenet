@@ -168,12 +168,8 @@ def main(args):
 #                 weights_regularizer=slim.l2_regularizer(args.weight_decay),
 #                 scope='Logits', reuse=False)
 
-        #final_lambda = 0.94
-        lambda_decay_start_step = 0
-    
-        nrof_steps = tf.cast(int(args.max_nrof_epochs * len(image_list)) // args.batch_size, tf.float32)
-        margin_lambda = tf.minimum(1.0, 1.0 - (tf.cast(global_step, tf.float32)-lambda_decay_start_step)*
-            (1.0-args.final_lambda)/(nrof_steps-lambda_decay_start_step))
+        nrof_steps = tf.cast(args.max_nrof_epochs * args.epoch_size, tf.float32)
+        margin_lambda = tf.minimum(1.0, 1.0 - tf.cast(global_step, tf.float32)*(1.0-args.final_lambda)/nrof_steps)
 
         nrof_classes = len(train_set)
         weights = tf.get_variable('softmax_weights', shape=(args.embedding_size,nrof_classes), dtype=tf.float32,
@@ -282,7 +278,7 @@ def main(args):
                 # Evaluate on LFW
                 if args.lfw_dir:
                     evaluate(sess, enqueue_op, image_paths_placeholder, labels_placeholder, phase_train_placeholder, batch_size_placeholder, 
-                        embeddings, label_batch, lfw_paths, actual_issame, args.lfw_batch_size, args.lfw_nrof_folds, log_dir, step, summary_writer, stat, epoch)
+                        embeddings, label_batch, lfw_paths, actual_issame, args.lfw_batch_size, args.lfw_nrof_folds, log_dir, step, summary_writer, stat, epoch, args.lfw_distance_metric)
     sess.close()
     return model_dir
 
@@ -385,7 +381,7 @@ def train(args, sess, epoch, image_list, label_list, index_dequeue_op, enqueue_o
     return step
 
 def evaluate(sess, enqueue_op, image_paths_placeholder, labels_placeholder, phase_train_placeholder, batch_size_placeholder, 
-        embeddings, labels, image_paths, actual_issame, batch_size, nrof_folds, log_dir, step, summary_writer, stat, epoch):
+        embeddings, labels, image_paths, actual_issame, batch_size, nrof_folds, log_dir, step, summary_writer, stat, epoch, distance_metric):
     start_time = time.time()
     # Run forward pass to calculate embeddings
     print('Runnning forward pass on LFW images')
@@ -408,7 +404,7 @@ def evaluate(sess, enqueue_op, image_paths_placeholder, labels_placeholder, phas
         emb_array[lab] = emb
         
     assert np.array_equal(lab_array, np.arange(nrof_images))==True, 'Wrong labels used for evaluation, possibly caused by training examples left in the input pipeline'
-    _, _, accuracy, val, val_std, far = lfw.evaluate(emb_array, actual_issame, nrof_folds=nrof_folds)
+    _, _, accuracy, val, val_std, far = lfw.evaluate(emb_array, actual_issame, nrof_folds=nrof_folds, distance_metric=distance_metric)
     
     print('Accuracy: %1.3f+-%1.3f' % (np.mean(accuracy), np.std(accuracy)))
     print('Validation rate: %2.5f+-%2.5f @ FAR=%2.5f' % (val, val_std, far))
@@ -534,6 +530,8 @@ def parse_arguments(argv):
         help='Number of images to process in a batch in the LFW test set.', default=100)
     parser.add_argument('--lfw_nrof_folds', type=int,
         help='Number of folds to use for cross validation. Mainly used for testing.', default=10)
+    parser.add_argument('--lfw_distance_metric', type=int,
+        help='Type of distance metric to use. 0: Euclidian, 1:Cosine similarity distance.', default=1)
     return parser.parse_args(argv)
   
 
