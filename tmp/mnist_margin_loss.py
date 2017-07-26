@@ -46,6 +46,7 @@ BATCH_SIZE = 64
 NUM_EPOCHS = 10
 EVAL_BATCH_SIZE = 64
 EVAL_FREQUENCY = 100  # Number of steps between evaluations.
+NROF_DIMS = 128
 
 
 tf.app.flags.DEFINE_boolean("self_test", False, "True if running a self test.")
@@ -178,12 +179,12 @@ def main(argv=None):  # pylint: disable=unused-argument
                             dtype=data_type()))
     fc1_biases = tf.Variable(tf.constant(0.1, shape=[512], dtype=data_type()))
     fc1p_weights = tf.Variable(  # fully connected, depth 512.
-        tf.truncated_normal([512, 2],
+        tf.truncated_normal([512, NROF_DIMS],
                             stddev=0.1,
                             seed=SEED,
                             dtype=data_type()))
-    fc1p_biases = tf.Variable(tf.constant(0.1, shape=[2], dtype=data_type()))
-    fc2_weights = tf.Variable(tf.truncated_normal([2, NUM_LABELS],
+    fc1p_biases = tf.Variable(tf.constant(0.1, shape=[NROF_DIMS], dtype=data_type()))
+    fc2_weights = tf.Variable(tf.truncated_normal([NROF_DIMS, NUM_LABELS],
                                                   stddev=0.1,
                                                   seed=SEED,
                                                   dtype=data_type()))
@@ -279,18 +280,26 @@ def main(argv=None):  # pylint: disable=unused-argument
     # controls the learning rate decay.
     batch = tf.Variable(0, dtype=data_type())
 
-    # Training computation: logits + cross-entropy loss.
-    margin_lambda = 1.0 #tf.maximum(1.0 - batch/8500, 0.1) 
     m = 4
+    # NROF_DIMS = 128, final_lambda = 1.00, => Test error = 0.7
+    # NROF_DIMS = 128, final_lambda = 0.98, lambda_decay_start_step = 5000 => Test error = 0.7
+    # NROF_DIMS = 128, final_lambda = 0.96, lambda_decay_start_step = 5000 => Test error = 0.8
+    # NROF_DIMS = 128, final_lambda = 0.94, lambda_decay_start_step = 5000 => Test error = 0.7
+    # NROF_DIMS = 128, final_lambda = 0.8, lambda_decay_start_step = 5000 => Collapsed at 6600
+    # NROF_DIMS = 128, final_lambda = 0.94, lambda_decay_start_step = 0 => Test error = 0.6, 0.7, 0.7
+    # NROF_DIMS = 128, final_lambda = 0.92, lambda_decay_start_step = 0 => Test error = 0.8
+    # NROF_DIMS = 128, final_lambda = 0.90, lambda_decay_start_step = 0 => Test error = 0.8
+    final_lambda = 0.94
+    lambda_decay_start_step = 0
+
+    nrof_steps = int(num_epochs * train_size) // BATCH_SIZE
+    margin_lambda = tf.minimum(1.0, 1.0 - (batch-lambda_decay_start_step)*
+        (1.0-final_lambda)/(nrof_steps-lambda_decay_start_step))
     logits, _ = model(train_data_node, True, m, margin_lambda)
     
-    #logits = batch_norm(logits, True)
+    # Training computation: logits + cross-entropy loss.
     xent_loss = tf.reduce_mean(tf.nn.sparse_softmax_cross_entropy_with_logits(
         logits=logits, labels=train_labels_node))
-    #beta = 1e-3
-    #center_loss, update_centers = center_loss_op(hidden, train_labels_node)
-    #center_loss, _ = facenet.center_loss(hidden, train_labels_node, 0.95, NUM_LABELS)
-    #loss = xent_loss + beta * center_loss
     loss = xent_loss
   
     # L2 regularization for the fully connected parameters.
@@ -298,6 +307,9 @@ def main(argv=None):  # pylint: disable=unused-argument
                     tf.nn.l2_loss(fc2_weights) + tf.nn.l2_loss(fc2_biases))
     # Add the regularization term to the loss.
     loss += 5e-4 * regularizers
+    
+    #normalize_op = tf.assign(fc2_weights, tf.nn.l2_normalize(fc2_weights, 1))
+
   
     # Decay once per epoch, using an exponential schedule starting at 0.01.
     learning_rate = tf.train.exponential_decay(
@@ -378,6 +390,7 @@ def main(argv=None):  # pylint: disable=unused-argument
                          train_labels_node: batch_labels}
             # Run the graph and fetch some of the nodes.
             #_, l, lr, predictions = sess.run([optimizer, loss, learning_rate, train_prediction], feed_dict=feed_dict)
+            #_, l, lr, predictions, _ = sess.run([optimizer, loss, learning_rate, train_prediction, normalize_op], feed_dict=feed_dict)
             _, l, lr, predictions = sess.run([optimizer, loss, learning_rate, train_prediction], feed_dict=feed_dict)
             if step % EVAL_FREQUENCY == 0:
                 elapsed_time = time.time() - start_time
@@ -397,17 +410,18 @@ def main(argv=None):  # pylint: disable=unused-argument
             print('test_error', test_error)
             assert test_error == 0.0, 'expected 0.0 test_error, got %.2f' % (
                 test_error,)
-            
-        train_embeddings = calculate_embeddings(train_data, sess)
         
-        color_list = ['b', 'g', 'r', 'c', 'm', 'y', 'k', 'b', 'g', 'r', 'c' ]
-        h = plt.figure(1)
-        for n in range(0,10):
-            idx = np.where(train_labels[0:10000]==n)
-            plt.plot(train_embeddings[idx,0], train_embeddings[idx,1], color_list[n]+'.')
-        plt.show()
-        h.savefig('/home/david/mnist_margin_loss_m1.png')
-        plt.close()
+        if NROF_DIMS==2:
+            train_embeddings = calculate_embeddings(train_data, sess)
+            
+            color_list = ['b', 'g', 'r', 'c', 'm', 'y', 'k', 'b', 'g', 'r', 'c' ]
+            h = plt.figure(1)
+            for n in range(0,10):
+                idx = np.where(train_labels[0:10000]==n)
+                plt.plot(train_embeddings[idx,0], train_embeddings[idx,1], color_list[n]+'.')
+            plt.show()
+            h.savefig('/home/david/mnist_margin_loss_m1.png')
+            plt.close()
 
 
 if __name__ == '__main__':

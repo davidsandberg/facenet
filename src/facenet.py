@@ -39,7 +39,6 @@ from tensorflow.python.training import training
 import random
 import re
 from tensorflow.python.platform import gfile
-import math
 
 def triplet_loss(anchor, positive, negative, alpha):
     """Calculate the triplet loss according to the FaceNet paper
@@ -131,7 +130,7 @@ def angular_softmax_loss_decomp(W, x, yi, m, lmbd):
     batch_size = tf.shape(x)[0]
     dot = tf.tensordot(x, W, axes=1)
     
-    x_norm = tf.norm(x, axis=1)
+    x_norm = tf.norm(x, axis=1) * tf.norm(W)
     x_norm_full = tf.expand_dims(x_norm, 1) * tf.ones((1, nrof_classes)) 
     cos_theta = (1/x_norm_full) * dot
     yi = tf.cast(yi, tf.int32)
@@ -141,8 +140,8 @@ def angular_softmax_loss_decomp(W, x, yi, m, lmbd):
     cos_theta_yi = tf.gather_nd(cos_theta, idx)
     x_psi_theta = tf.multiply(x_norm, psi(cos_theta_yi, m))
     x_cos_theta = tf.multiply(x_norm, cos_theta_yi)
-    #x_psi_cos_theta_mix = (lmbd*x_cos_theta+(1-lmbd)*x_psi_theta)
-    x_psi_cos_theta_mix = (lmbd*x_cos_theta+x_psi_theta) / (1+lmbd)
+    x_psi_cos_theta_mix = (lmbd*x_cos_theta+(1-lmbd)*x_psi_theta)
+    #x_psi_cos_theta_mix = (lmbd*x_cos_theta+x_psi_theta) / (1.0+lmbd)
     x_psi_theta_full = tf.scatter_nd(idx, x_psi_cos_theta_mix, (batch_size, nrof_classes))
     y = tf.where(index_matrix>0, x_psi_theta_full, dot)
     return y

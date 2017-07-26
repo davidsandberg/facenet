@@ -167,13 +167,21 @@ def main(args):
 #                 weights_initializer=tf.truncated_normal_initializer(stddev=0.1), 
 #                 weights_regularizer=slim.l2_regularizer(args.weight_decay),
 #                 scope='Logits', reuse=False)
+
+        #final_lambda = 0.94
+        lambda_decay_start_step = 0
+    
+        nrof_steps = tf.cast(int(args.max_nrof_epochs * len(image_list)) // args.batch_size, tf.float32)
+        margin_lambda = tf.minimum(1.0, 1.0 - (tf.cast(global_step, tf.float32)-lambda_decay_start_step)*
+            (1.0-args.final_lambda)/(nrof_steps-lambda_decay_start_step))
+
         nrof_classes = len(train_set)
         weights = tf.get_variable('softmax_weights', shape=(args.embedding_size,nrof_classes), dtype=tf.float32,
             initializer=tf.truncated_normal_initializer(stddev=0.1),
             regularizer=slim.l2_regularizer(args.weight_decay), trainable=True)
-        logits = facenet.angular_softmax_loss_decomp(weights, prelogits, label_batch, 1)
+        logits = facenet.angular_softmax_loss_decomp(weights, prelogits, label_batch, args.angular_softmax_type, margin_lambda)
         
-        normalize_op = tf.assign(weights, tf.nn.l2_normalize(weights, 1))
+        #normalize_op = tf.assign(weights, tf.nn.l2_normalize(weights, 1))
 
         embeddings = tf.nn.l2_normalize(prelogits, 1, 1e-10, name='embeddings')
 
@@ -257,7 +265,7 @@ def main(args):
                 step2 = train(args, sess, epoch, image_list, label_list, index_dequeue_op, enqueue_op, image_paths_placeholder, labels_placeholder,
                     learning_rate_placeholder, phase_train_placeholder, batch_size_placeholder, global_step, 
                     total_loss, train_op, summary_op, summary_writer, regularization_losses, args.learning_rate_schedule_file,
-                    cross_entropy, label_batch, stat, prob_threshold_placeholder, prob_threshold, loss_mean, cross_entropy_orig_mean, learning_rate, normalize_op, weights)
+                    cross_entropy, label_batch, stat, prob_threshold_placeholder, prob_threshold, loss_mean, cross_entropy_orig_mean, learning_rate)
 
                 print('Saving statistics')
                 with h5py.File(stat_file_name, 'w') as f:
@@ -325,7 +333,7 @@ def filter_dataset(dataset, data_filename, percentile, min_nrof_images_per_class
 def train(args, sess, epoch, image_list, label_list, index_dequeue_op, enqueue_op, image_paths_placeholder, labels_placeholder, 
       learning_rate_placeholder, phase_train_placeholder, batch_size_placeholder, global_step, 
       loss, train_op, summary_op, summary_writer, regularization_losses, learning_rate_schedule_file,
-      cross_entropy, label_batch, stat, prob_threshold_placeholder, prob_threshold, cross_entropy_mean, cross_entropy_orig_mean, learning_rate, normalize_op, weights):
+      cross_entropy, label_batch, stat, prob_threshold_placeholder, prob_threshold, cross_entropy_mean, cross_entropy_orig_mean, learning_rate):
     batch_number = 0
     
     if args.learning_rate>0.0:
@@ -352,7 +360,7 @@ def train(args, sess, epoch, image_list, label_list, index_dequeue_op, enqueue_o
             summary_writer.add_summary(summary_str, global_step=step)
         else:
             err, _, step, reg_loss, label_batch_, cross_entropy_mean_, cross_entropy_orig_mean_, lr_, xent_ = sess.run([loss, train_op, global_step, regularization_losses, label_batch, cross_entropy_mean, cross_entropy_orig_mean, learning_rate, cross_entropy], feed_dict=feed_dict)
-        sess.run(normalize_op)
+        #sess.run(normalize_op)
         #w_ = sess.run(weights)
         #print(np.linalg.norm(w_, axis=1))
         start_sample = (step-1) * args.batch_size
@@ -510,6 +518,10 @@ def parse_arguments(argv):
         help='Keep only the classes with this number of examples or more', default=0)
     parser.add_argument('--prob_percentile_threshold', type=float,
         help='Do not use the loss from the prob_percentile_threshold worst probabilities', default=0.0)
+    parser.add_argument('--final_lambda', type=float,
+        help='The weight for normal softmax as opposed to a-softmax', default=1.0)
+    parser.add_argument('--angular_softmax_type', type=int,
+        help='The type of angular softmax to use', default=4)
  
     # Parameters for validation on LFW
     parser.add_argument('--lfw_pairs', type=str,

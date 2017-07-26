@@ -41,7 +41,7 @@ class AngularSoftmaxLossTest(unittest.TestCase):
             weights = tf.placeholder(tf.float32, shape=(nrof_features, nrof_classes), name='weights')
             features = tf.placeholder(tf.float32, shape=(batch_size, nrof_features), name='features')
             labels = tf.placeholder(tf.int32, shape=(batch_size,), name='labels')
-            loss = facenet.angular_softmax_loss_decomp(weights, features, labels, m, lmbd)
+            loss, x_cos_theta, x_psi_theta, x_psi_cos_theta_mix = facenet.angular_softmax_loss_decomp(weights, features, labels, m, lmbd)
             
             sess = tf.Session()
             with sess.as_default():
@@ -59,9 +59,13 @@ class AngularSoftmaxLossTest(unittest.TestCase):
                 #np.testing.assert_array_almost_equal(loss_numpy, loss_ref, decimal=5, err_msg='Numpy vectorized loss does not match reference')
                 
                 # Check tensorflow implementation
-                loss_ = sess.run(loss, feed_dict={weights:W, features:x, labels:yi})
+                loss_, x_cos_theta_, x_psi_theta_, x_psi_cos_theta_mix_ = sess.run([loss, x_cos_theta, x_psi_theta, x_psi_cos_theta_mix], feed_dict={weights:W, features:x, labels:yi})
                 print(loss_ref)
                 print(loss_)
+                
+                print(x_cos_theta_)
+                print(x_psi_theta_)
+                print(x_psi_cos_theta_mix_)
                 
                 np.testing.assert_array_almost_equal(loss_, loss_ref, decimal=5, err_msg='Tensorflow loss does not match reference')
 
