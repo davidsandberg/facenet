@@ -46,7 +46,8 @@ BATCH_SIZE = 64
 NUM_EPOCHS = 10
 EVAL_BATCH_SIZE = 64
 EVAL_FREQUENCY = 100  # Number of steps between evaluations.
-NROF_DIMS = 128
+#NROF_DIMS = 128
+NROF_DIMS = 2
 
 
 tf.app.flags.DEFINE_boolean("self_test", False, "True if running a self test.")
@@ -289,7 +290,7 @@ def main(argv=None):  # pylint: disable=unused-argument
     # NROF_DIMS = 128, final_lambda = 0.94, lambda_decay_start_step = 0 => Test error = 0.6, 0.7, 0.7
     # NROF_DIMS = 128, final_lambda = 0.92, lambda_decay_start_step = 0 => Test error = 0.8
     # NROF_DIMS = 128, final_lambda = 0.90, lambda_decay_start_step = 0 => Test error = 0.8
-    final_lambda = 0.94
+    final_lambda = 0.
     lambda_decay_start_step = 0
 
     nrof_steps = int(num_epochs * train_size) // BATCH_SIZE
@@ -308,7 +309,7 @@ def main(argv=None):  # pylint: disable=unused-argument
     # Add the regularization term to the loss.
     loss += 5e-4 * regularizers
     
-    #normalize_op = tf.assign(fc2_weights, tf.nn.l2_normalize(fc2_weights, 1))
+    normalize_op = tf.assign(fc2_weights, tf.nn.l2_normalize(fc2_weights, 0))
 
   
     # Decay once per epoch, using an exponential schedule starting at 0.01.
@@ -389,6 +390,7 @@ def main(argv=None):  # pylint: disable=unused-argument
             feed_dict = {train_data_node: batch_data,
                          train_labels_node: batch_labels}
             # Run the graph and fetch some of the nodes.
+            sess.run(normalize_op)
             #_, l, lr, predictions = sess.run([optimizer, loss, learning_rate, train_prediction], feed_dict=feed_dict)
             #_, l, lr, predictions, _ = sess.run([optimizer, loss, learning_rate, train_prediction, normalize_op], feed_dict=feed_dict)
             _, l, lr, predictions = sess.run([optimizer, loss, learning_rate, train_prediction], feed_dict=feed_dict)

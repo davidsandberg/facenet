@@ -170,14 +170,18 @@ def main(args):
 
         nrof_steps = tf.cast(args.max_nrof_epochs * args.epoch_size, tf.float32)
         margin_lambda = tf.minimum(1.0, 1.0 - tf.cast(global_step, tf.float32)*(1.0-args.final_lambda)/nrof_steps)
+        #margin_lambda = tf.cast(1.0, tf.float32)
 
         nrof_classes = len(train_set)
         weights = tf.get_variable('softmax_weights', shape=(args.embedding_size,nrof_classes), dtype=tf.float32,
             initializer=tf.truncated_normal_initializer(stddev=0.1),
             regularizer=slim.l2_regularizer(args.weight_decay), trainable=True)
+#         weights = tf.get_variable('softmax_weights', shape=(args.embedding_size,nrof_classes), dtype=tf.float32,
+#             initializer=tf.truncated_normal_initializer(stddev=0.1),
+#             regularizer=None, trainable=True)
         logits = facenet.angular_softmax_loss_decomp(weights, prelogits, label_batch, args.angular_softmax_type, margin_lambda)
         
-        #normalize_op = tf.assign(weights, tf.nn.l2_normalize(weights, 1))
+        normalize_op = tf.assign(weights, tf.nn.l2_normalize(weights, 0))
 
         embeddings = tf.nn.l2_normalize(prelogits, 1, 1e-10, name='embeddings')
 
@@ -261,7 +265,7 @@ def main(args):
                 step2 = train(args, sess, epoch, image_list, label_list, index_dequeue_op, enqueue_op, image_paths_placeholder, labels_placeholder,
                     learning_rate_placeholder, phase_train_placeholder, batch_size_placeholder, global_step, 
                     total_loss, train_op, summary_op, summary_writer, regularization_losses, args.learning_rate_schedule_file,
-                    cross_entropy, label_batch, stat, prob_threshold_placeholder, prob_threshold, loss_mean, cross_entropy_orig_mean, learning_rate)
+                    cross_entropy, label_batch, stat, prob_threshold_placeholder, prob_threshold, loss_mean, cross_entropy_orig_mean, learning_rate, margin_lambda, normalize_op, weights)
 
                 print('Saving statistics')
                 with h5py.File(stat_file_name, 'w') as f:
@@ -329,7 +333,7 @@ def filter_dataset(dataset, data_filename, percentile, min_nrof_images_per_class
 def train(args, sess, epoch, image_list, label_list, index_dequeue_op, enqueue_op, image_paths_placeholder, labels_placeholder, 
       learning_rate_placeholder, phase_train_placeholder, batch_size_placeholder, global_step, 
       loss, train_op, summary_op, summary_writer, regularization_losses, learning_rate_schedule_file,
-      cross_entropy, label_batch, stat, prob_threshold_placeholder, prob_threshold, cross_entropy_mean, cross_entropy_orig_mean, learning_rate):
+      cross_entropy, label_batch, stat, prob_threshold_placeholder, prob_threshold, cross_entropy_mean, cross_entropy_orig_mean, learning_rate, margin_lambda, normalize_op, weights):
     batch_number = 0
     
     if args.learning_rate>0.0:
@@ -350,13 +354,15 @@ def train(args, sess, epoch, image_list, label_list, index_dequeue_op, enqueue_o
     train_time = 0
     while batch_number < args.epoch_size:
         start_time = time.time()
+        #wx0 = sess.run(weights)
+        sess.run(normalize_op)
+        #wx1 = sess.run(weights)
         feed_dict = {learning_rate_placeholder: lr, phase_train_placeholder:True, batch_size_placeholder:args.batch_size, prob_threshold_placeholder:prob_threshold}
         if (batch_number % 100 == 0):
-            err, _, step, reg_loss, summary_str, label_batch_, cross_entropy_mean_, cross_entropy_orig_mean_, lr_, xent_ = sess.run([loss, train_op, global_step, regularization_losses, summary_op, label_batch, cross_entropy_mean, cross_entropy_orig_mean, learning_rate, cross_entropy], feed_dict=feed_dict)
+            err, _, step, reg_loss, summary_str, label_batch_, cross_entropy_mean_, cross_entropy_orig_mean_, lr_, xent_, margin_lambda_ = sess.run([loss, train_op, global_step, regularization_losses, summary_op, label_batch, cross_entropy_mean, cross_entropy_orig_mean, learning_rate, cross_entropy, margin_lambda], feed_dict=feed_dict)
             summary_writer.add_summary(summary_str, global_step=step)
         else:
-            err, _, step, reg_loss, label_batch_, cross_entropy_mean_, cross_entropy_orig_mean_, lr_, xent_ = sess.run([loss, train_op, global_step, regularization_losses, label_batch, cross_entropy_mean, cross_entropy_orig_mean, learning_rate, cross_entropy], feed_dict=feed_dict)
-        #sess.run(normalize_op)
+            err, _, step, reg_loss, label_batch_, cross_entropy_mean_, cross_entropy_orig_mean_, lr_, xent_, margin_lambda_ = sess.run([loss, train_op, global_step, regularization_losses, label_batch, cross_entropy_mean, cross_entropy_orig_mean, learning_rate, cross_entropy, margin_lambda], feed_dict=feed_dict)
         #w_ = sess.run(weights)
         #print(np.linalg.norm(w_, axis=1))
         start_sample = (step-1) * args.batch_size
@@ -369,8 +375,8 @@ def train(args, sess, epoch, image_list, label_list, index_dequeue_op, enqueue_o
         stat['learning_rate'][epoch] = lr_
 
         duration = time.time() - start_time
-        print('Epoch: [%d][%d/%d]\tTime %.3f\tLoss %2.3f\tXent %2.3f\tXentOrig %2.3f\tRegLoss %2.3f\tProbThreshold %2.5f' %
-              (epoch, batch_number+1, args.epoch_size, duration, err, cross_entropy_mean_, cross_entropy_orig_mean_, np.sum(reg_loss), prob_threshold))
+        print('Epoch: [%d][%d/%d]\tTime %.3f\tLoss %2.3f\tXent %2.3f\tXentOrig %2.3f\tRegLoss %2.3f\tProbThreshold %2.5f\tLambda %2.6f' %
+              (epoch, batch_number+1, args.epoch_size, duration, err, cross_entropy_mean_, cross_entropy_orig_mean_, np.sum(reg_loss), prob_threshold, margin_lambda_))
         batch_number += 1
         train_time += duration
     # Add validation loss and accuracy to summary

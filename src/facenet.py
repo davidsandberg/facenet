@@ -127,11 +127,13 @@ def selective_softmax_loss(logits, labels, nrof_classes, class_thresholds_for_ba
 
 def angular_softmax_loss_decomp(W, x, yi, m, lmbd):
 
+    lmbd = tf.cast(lmbd, tf.float32)
     nrof_classes = tf.shape(W)[1]
     batch_size = tf.shape(x)[0]
     dot = tf.tensordot(x, W, axes=1)
     
-    x_norm = tf.norm(x, axis=1) * tf.norm(W)
+    #x_norm = tf.norm(x, axis=1) * tf.norm(W)
+    x_norm = tf.norm(x, axis=1)
     x_norm_full = tf.expand_dims(x_norm, 1) * tf.ones((1, nrof_classes)) 
     cos_theta = (1/x_norm_full) * dot
     yi = tf.cast(yi, tf.int32)
