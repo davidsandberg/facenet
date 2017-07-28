@@ -68,6 +68,7 @@ def main(args):
     np.random.seed(seed=args.seed)
     random.seed(args.seed)
     train_set = facenet.get_dataset(args.data_dir)
+    
     if args.filter_filename:
         train_set = filter_dataset(train_set, os.path.expanduser(args.filter_filename), 
             args.filter_percentile, args.filter_min_nrof_images_per_class)
@@ -168,9 +169,10 @@ def main(args):
 #                 weights_regularizer=slim.l2_regularizer(args.weight_decay),
 #                 scope='Logits', reuse=False)
 
-        nrof_steps = tf.cast(args.max_nrof_epochs * args.epoch_size, tf.float32)
-        margin_lambda = tf.minimum(1.0, 1.0 - tf.cast(global_step, tf.float32)*(1.0-args.final_lambda)/nrof_steps)
-        #margin_lambda = tf.cast(1.0, tf.float32)
+        #nrof_steps = tf.cast(args.max_nrof_epochs * args.epoch_size, tf.float32)
+        #margin_lambda = tf.minimum(1.0, 1.0 - tf.cast(global_step, tf.float32)*(1.0-args.final_lambda)/nrof_steps)
+        #margin_lambda = tf.cast(0.85, tf.float32)
+        margin_lambda = tf.maximum(args.final_lambda, 1.0-tf.cast(global_step, tf.float32)*(1-args.final_lambda)/args.final_steps)
 
         nrof_classes = len(train_set)
         weights = tf.get_variable('softmax_weights', shape=(args.embedding_size,nrof_classes), dtype=tf.float32,
@@ -522,6 +524,8 @@ def parse_arguments(argv):
         help='Do not use the loss from the prob_percentile_threshold worst probabilities', default=0.0)
     parser.add_argument('--final_lambda', type=float,
         help='The weight for normal softmax as opposed to a-softmax', default=1.0)
+    parser.add_argument('--final_steps', type=int,
+        help='The number of steps when the lambda reaches final_lambda', default=1)
     parser.add_argument('--angular_softmax_type', type=int,
         help='The type of angular softmax to use', default=4)
  
