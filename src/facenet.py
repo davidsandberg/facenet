@@ -85,7 +85,8 @@ def center_loss(features, label, alfa, nrof_classes):
     centers_batch = tf.gather(centers, label)
     diff = (1 - alfa) * (centers_batch - features)
     centers = tf.scatter_sub(centers, label, diff)
-    loss = tf.reduce_mean(tf.square(features - centers_batch))
+    with tf.control_dependencies([centers]):
+        loss = tf.reduce_mean(tf.square(features - centers_batch))
     return loss, centers
 
 def selective_softmax_loss(logits, labels, nrof_classes, class_thresholds_for_batch, use_label_probabilities):

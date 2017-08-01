@@ -189,13 +189,17 @@ def main(args):
         logits = facenet.angular_softmax_loss_decomp(weights, prelogits, label_batch, args.angular_softmax_type, margin_lambda)
         
         normalize_op = tf.assign(weights, tf.nn.l2_normalize(weights, 0))
+        
+        norm_loss = tf.reduce_mean(tf.pow(tf.norm(prelogits, axis=1)-args.embedding_norm_target, 2.0)) * args.norm_loss_factor
+        norm = tf.norm(prelogits, axis=1)
+        tf.add_to_collection(tf.GraphKeys.REGULARIZATION_LOSSES, norm_loss)
+
 
         embeddings = tf.nn.l2_normalize(prelogits, 1, 1e-10, name='embeddings')
 
         # Add center loss
-#         if args.center_loss_factor>0.0:
-#             prelogits_center_loss, _ = facenet.center_loss(prelogits, label_batch, args.center_loss_alfa, nrof_classes)
-#             tf.add_to_collection(tf.GraphKeys.REGULARIZATION_LOSSES, prelogits_center_loss * args.center_loss_factor)
+        prelogits_center_loss, class_centers = facenet.center_loss(prelogits, label_batch, args.center_loss_alfa, nrof_classes)
+        tf.add_to_collection(tf.GraphKeys.REGULARIZATION_LOSSES, prelogits_center_loss * args.center_loss_factor)
 
         learning_rate = tf.train.exponential_decay(learning_rate_placeholder, global_step,
             args.learning_rate_decay_epochs*args.epoch_size, args.learning_rate_decay_factor, staircase=True)
@@ -255,7 +259,10 @@ def main(args):
                 'prelogits': np.zeros((nrof_examples,args.embedding_size), np.float32),
                 'xent': np.zeros((nrof_examples,), np.float32),
                 'class': np.zeros((nrof_examples,), np.int32),
+                'norm': np.zeros((nrof_examples,), np.float32),
                 'loss': np.zeros((nrof_steps,), np.float32),
+                'norm_loss': np.zeros((nrof_steps,), np.float32),
+                'center_loss': np.zeros((nrof_steps,), np.float32),
                 'reg_loss': np.zeros((nrof_steps,), np.float32),
                 'xent_loss': np.zeros((nrof_steps,), np.float32),
                 'xent_orig_loss': np.zeros((nrof_steps,), np.float32),
@@ -263,6 +270,7 @@ def main(args):
                 'lfw_accuracy': np.zeros((args.max_nrof_epochs+1,), np.float32),
                 'lfw_valrate': np.zeros((args.max_nrof_epochs+1,), np.float32),
                 'learning_rate': np.zeros((args.max_nrof_epochs+1,), np.float32),
+                'class_centers': np.zeros((args.max_nrof_epochs+1,nrof_classes,args.embedding_size), np.float32),
               }
             epoch = 0
             prob_threshold = np.inf
@@ -273,7 +281,8 @@ def main(args):
                 step2 = train(args, sess, epoch, image_list, label_list, index_dequeue_op, enqueue_op, image_paths_placeholder, labels_placeholder,
                     learning_rate_placeholder, phase_train_placeholder, batch_size_placeholder, global_step, 
                     total_loss, train_op, summary_op, summary_writer, regularization_losses, args.learning_rate_schedule_file,
-                    cross_entropy, label_batch, stat, prob_threshold_placeholder, prob_threshold, loss_mean, cross_entropy_orig_mean, learning_rate, margin_lambda, normalize_op, weights, prelogits)
+                    cross_entropy, label_batch, stat, prob_threshold_placeholder, prob_threshold, loss_mean, cross_entropy_orig_mean, learning_rate,
+                    margin_lambda, normalize_op, weights, prelogits, norm_loss, norm, prelogits_center_loss, class_centers)
 
                 print('Saving statistics')
                 with h5py.File(stat_file_name, 'w') as f:
@@ -341,7 +350,8 @@ def filter_dataset(dataset, data_filename, percentile, min_nrof_images_per_class
 def train(args, sess, epoch, image_list, label_list, index_dequeue_op, enqueue_op, image_paths_placeholder, labels_placeholder, 
       learning_rate_placeholder, phase_train_placeholder, batch_size_placeholder, global_step, 
       loss, train_op, summary_op, summary_writer, regularization_losses, learning_rate_schedule_file,
-      cross_entropy, label_batch, stat, prob_threshold_placeholder, prob_threshold, cross_entropy_mean, cross_entropy_orig_mean, learning_rate, margin_lambda, normalize_op, weights, prelogits):
+      cross_entropy, label_batch, stat, prob_threshold_placeholder, prob_threshold, cross_entropy_mean, cross_entropy_orig_mean, 
+      learning_rate, margin_lambda, normalize_op, weights, prelogits, norm_loss, norm, prelogits_center_loss, class_centers):
     batch_number = 0
     
     if args.learning_rate>0.0:
@@ -362,26 +372,32 @@ def train(args, sess, epoch, image_list, label_list, index_dequeue_op, enqueue_o
     train_time = 0
     while batch_number < args.epoch_size:
         start_time = time.time()
-        sess.run(normalize_op)
+        #sess.run(normalize_op)
         feed_dict = {learning_rate_placeholder: lr, phase_train_placeholder:True, batch_size_placeholder:args.batch_size, prob_threshold_placeholder:prob_threshold}
-        if (batch_number % 100 == 0):
-            err, _, step, reg_loss, summary_str, label_batch_, prelogits_, cross_entropy_mean_, cross_entropy_orig_mean_, lr_, xent_, margin_lambda_ = sess.run([loss, train_op, global_step, regularization_losses, summary_op, label_batch, prelogits, cross_entropy_mean, cross_entropy_orig_mean, learning_rate, cross_entropy, margin_lambda], feed_dict=feed_dict)
-            summary_writer.add_summary(summary_str, global_step=step)
+        if (batch_number == args.epoch_size-1):
+            err, _, step, reg_loss, label_batch_, prelogits_, cross_entropy_mean_, cross_entropy_orig_mean_, lr_, xent_, margin_lambda_, norm_loss_, norm_, center_loss_, class_centers_ = sess.run([loss, train_op, global_step, regularization_losses, label_batch, prelogits, cross_entropy_mean, cross_entropy_orig_mean, learning_rate, cross_entropy, margin_lambda, norm_loss, norm, prelogits_center_loss, class_centers], feed_dict=feed_dict)
+            stat['class_centers'][epoch,:,:] = class_centers_
         else:
-            err, _, step, reg_loss, label_batch_, prelogits_, cross_entropy_mean_, cross_entropy_orig_mean_, lr_, xent_, margin_lambda_ = sess.run([loss, train_op, global_step, regularization_losses, label_batch, prelogits, cross_entropy_mean, cross_entropy_orig_mean, learning_rate, cross_entropy, margin_lambda], feed_dict=feed_dict)
+            err, _, step, reg_loss, label_batch_, prelogits_, cross_entropy_mean_, cross_entropy_orig_mean_, lr_, xent_, margin_lambda_, norm_loss_, norm_, center_loss_ = sess.run([loss, train_op, global_step, regularization_losses, label_batch, prelogits, cross_entropy_mean, cross_entropy_orig_mean, learning_rate, cross_entropy, margin_lambda, norm_loss, norm, prelogits_center_loss], feed_dict=feed_dict)
+        if (batch_number % 100 == 0):
+            summary_str = sess.run(summary_op, feed_dict={learning_rate_placeholder: lr})
+            summary_writer.add_summary(summary_str, global_step=step)
         start_sample = (step-1) * args.batch_size
         stat['labels'][start_sample:start_sample+args.batch_size] = label_batch_
         stat['prelogits'][start_sample:start_sample+args.batch_size,:] = prelogits_
         stat['xent'][start_sample:start_sample+args.batch_size] = xent_
+        stat['norm'][start_sample:start_sample+args.batch_size] = norm_
         stat['loss'][step-1] = err
+        stat['norm_loss'][step-1] = norm_loss_
+        stat['center_loss'][step-1] = center_loss_
         stat['reg_loss'][step-1] = np.sum(reg_loss)
         stat['xent_loss'][step-1] = cross_entropy_mean_
         stat['xent_orig_loss'][step-1] = cross_entropy_orig_mean_
         stat['learning_rate'][epoch] = lr_
 
         duration = time.time() - start_time
-        print('Epoch: [%d][%d/%d]\tTime %.3f\tLoss %2.3f\tXent %2.3f\tXentOrig %2.3f\tRegLoss %2.3f\tProbThreshold %2.5f\tLambda %2.6f' %
-              (epoch, batch_number+1, args.epoch_size, duration, err, cross_entropy_mean_, cross_entropy_orig_mean_, np.sum(reg_loss), prob_threshold, margin_lambda_))
+        print('Epoch: [%d][%d/%d]\tTime %.3f\tLoss %2.3f\tXent %2.3f\tXentOrig %2.3f\tRegLoss %2.3f\tProbThreshold %2.5f\tLambda %2.6f\tNormLoss %2.3f\tNorm %2.3f' %
+              (epoch, batch_number+1, args.epoch_size, duration, err, cross_entropy_mean_, cross_entropy_orig_mean_, np.sum(reg_loss), prob_threshold, margin_lambda_, norm_loss_, np.mean(norm_)))
         batch_number += 1
         train_time += duration
     # Add validation loss and accuracy to summary
@@ -531,7 +547,11 @@ def parse_arguments(argv):
         help='The number of steps when the lambda reaches final_lambda', default=1)
     parser.add_argument('--angular_softmax_type', type=int,
         help='The type of angular softmax to use', default=4)
- 
+    parser.add_argument('--embedding_norm_target', type=float,
+        help='The target norm for embeddings when calculating norm loss', default=1.0)
+    parser.add_argument('--norm_loss_factor', type=float,
+        help='The weight for the embedding norm loss', default=0.0)
+
     # Parameters for validation on LFW
     parser.add_argument('--lfw_pairs', type=str,
         help='The file containing the pairs to use for validation.', default='data/pairs.txt')
