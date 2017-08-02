@@ -33,6 +33,7 @@ import argparse
 import os
 import sys
 import facenet
+from six.moves import xrange
 
 def main(args):
     with tf.Graph().as_default():

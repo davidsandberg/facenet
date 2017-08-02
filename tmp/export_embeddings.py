@@ -61,6 +61,8 @@ import facenet
 import align.detect_face
 import glob
 
+from six.moves import xrange
+
 def main(args):
     train_set = facenet.get_dataset(args.data_dir)
     image_list, label_list = facenet.get_image_paths_and_labels(train_set)

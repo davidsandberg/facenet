@@ -33,6 +33,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 from tensorflow.python.ops import control_flow_ops
 import facenet
+from six.moves import xrange
 
 SOURCE_URL = 'http://yann.lecun.com/exdb/mnist/'
 WORK_DIRECTORY = 'data'

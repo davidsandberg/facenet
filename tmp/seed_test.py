@@ -7,6 +7,8 @@ import facenet
 from tensorflow.python.ops import control_flow_ops
 from tensorflow.python.ops import array_ops
 
+from six.moves import xrange
+
 tf.app.flags.DEFINE_integer('batch_size', 90,
                             """Number of images to process in a batch.""")
 tf.app.flags.DEFINE_integer('image_size', 96,
