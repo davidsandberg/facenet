@@ -187,8 +187,8 @@ def main(argv=None):  # pylint: disable=unused-argument
                                                   stddev=0.1,
                                                   seed=SEED,
                                                   dtype=data_type()))
-    fc2_biases = tf.Variable(tf.constant(
-        0.1, shape=[NUM_LABELS], dtype=data_type()))
+#     fc2_biases = tf.Variable(tf.constant(
+#         0.1, shape=[NUM_LABELS], dtype=data_type()))
     
     def batch_norm(x, phase_train):  #pylint: disable=unused-variable
         """
@@ -269,21 +269,30 @@ def main(argv=None):  # pylint: disable=unused-argument
 
         hidden = tf.matmul(hidden, fc1p_weights) + fc1p_biases
 
-        return tf.nn.relu(tf.matmul(hidden, fc2_weights) + fc2_biases), hidden
+        #return tf.nn.relu(tf.matmul(hidden, fc2_weights) + fc2_biases), hidden
+        return tf.nn.relu(tf.matmul(hidden, fc2_weights)), hidden
 
     # Training computation: logits + cross-entropy loss.
     logits, hidden = model(train_data_node, True)
     #logits = batch_norm(logits, True)
     xent_loss = tf.reduce_mean(tf.nn.sparse_softmax_cross_entropy_with_logits(
-        logits, train_labels_node))
+        logits=logits, labels=train_labels_node))
     beta = 1e-3
+    normalized_center_loss = True
+    if normalized_center_loss:
+        embeddings = tf.nn.l2_normalize(hidden, 1, 1e-10, name='embeddings')
+    else:
+        embeddings = hidden
+#     embeddings = hidden
     #center_loss, update_centers = center_loss_op(hidden, train_labels_node)
-    center_loss, _ = facenet.center_loss(hidden, train_labels_node, 0.95, NUM_LABELS)
+    center_loss, centers = facenet.center_loss(embeddings, train_labels_node, 0.95, NUM_LABELS)
     loss = xent_loss + beta * center_loss
   
     # L2 regularization for the fully connected parameters.
+#     regularizers = (tf.nn.l2_loss(fc1_weights) + tf.nn.l2_loss(fc1_biases) +
+#                     tf.nn.l2_loss(fc2_weights) + tf.nn.l2_loss(fc2_biases))
     regularizers = (tf.nn.l2_loss(fc1_weights) + tf.nn.l2_loss(fc1_biases) +
-                    tf.nn.l2_loss(fc2_weights) + tf.nn.l2_loss(fc2_biases))
+                    tf.nn.l2_loss(fc2_weights))
     # Add the regularization term to the loss.
     loss += 5e-4 * regularizers
   
@@ -390,6 +399,7 @@ def main(argv=None):  # pylint: disable=unused-argument
                 test_error,)
             
         train_embeddings = calculate_embeddings(train_data, sess)
+        #centers_ = sess.run(centers)
         
         color_list = ['b', 'g', 'r', 'c', 'm', 'y', 'k', 'b', 'g', 'r', 'c' ]
         plt.figure(1)
