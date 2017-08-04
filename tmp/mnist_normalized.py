@@ -32,7 +32,6 @@ import tensorflow as tf
 import numpy as np
 import matplotlib.pyplot as plt
 from tensorflow.python.ops import control_flow_ops
-import facenet
 
 SOURCE_URL = 'http://yann.lecun.com/exdb/mnist/'
 WORK_DIRECTORY = 'data'
@@ -269,24 +268,23 @@ def main(argv=None):  # pylint: disable=unused-argument
 
         hidden = tf.matmul(hidden, fc1p_weights) + fc1p_biases
 
-        #return tf.nn.relu(tf.matmul(hidden, fc2_weights) + fc2_biases), hidden
         return tf.nn.relu(tf.matmul(hidden, fc2_weights)), hidden
 
     # Training computation: logits + cross-entropy loss.
     logits, hidden = model(train_data_node, True)
-    #logits = batch_norm(logits, True)
+    
+    def normalized_inner_product(W, x):
+        s = tf.get_variable('norm_factor', (1,), dtype=tf.float32,
+            initializer=tf.constant_initializer(10.0), trainable=True)
+        x_norm = tf.nn.l2_normalize(x, 1, 1e-10)
+        W_norm = tf.nn.l2_normalize(W, 0, 1e-10)
+        dot = tf.matmul(x_norm, W_norm) * s
+        return dot
+
+    norm_logits = normalized_inner_product(fc2_weights, hidden)
     xent_loss = tf.reduce_mean(tf.nn.sparse_softmax_cross_entropy_with_logits(
-        logits=logits, labels=train_labels_node))
-    beta = 1e-3
-    normalized_center_loss = True
-    if normalized_center_loss:
-        embeddings = tf.nn.l2_normalize(hidden, 1, 1e-10, name='embeddings')
-    else:
-        embeddings = hidden
-#     embeddings = hidden
-    #center_loss, update_centers = center_loss_op(hidden, train_labels_node)
-    center_loss, _ = facenet.center_loss(embeddings, train_labels_node, 0.95, NUM_LABELS)
-    loss = xent_loss + beta * center_loss
+        logits=norm_logits, labels=train_labels_node))
+    loss = xent_loss
   
     # L2 regularization for the fully connected parameters.
 #     regularizers = (tf.nn.l2_loss(fc1_weights) + tf.nn.l2_loss(fc1_biases) +
@@ -378,14 +376,14 @@ def main(argv=None):  # pylint: disable=unused-argument
                          train_labels_node: batch_labels}
             # Run the graph and fetch some of the nodes.
             #_, l, lr, predictions = sess.run([optimizer, loss, learning_rate, train_prediction], feed_dict=feed_dict)
-            _, cl, l, lr, predictions = sess.run([optimizer, center_loss, loss, learning_rate, train_prediction], feed_dict=feed_dict)
+            _, l, lr, predictions = sess.run([optimizer, loss, learning_rate, train_prediction], feed_dict=feed_dict)
             if step % EVAL_FREQUENCY == 0:
                 elapsed_time = time.time() - start_time
                 start_time = time.time()
                 print('Step %d (epoch %.2f), %.1f ms' %
                       (step, float(step) * BATCH_SIZE / train_size,
                        1000 * elapsed_time / EVAL_FREQUENCY))
-                print('Minibatch loss: %.3f  %.3f, learning rate: %.6f' % (l, cl*beta, lr))
+                print('Minibatch loss: %.3f  learning rate: %.6f' % (l, lr))
                 print('Minibatch error: %.1f%%' % error_rate(predictions, batch_labels))
                 print('Validation error: %.1f%%' % error_rate(
                     eval_in_batches(validation_data, sess), validation_labels))

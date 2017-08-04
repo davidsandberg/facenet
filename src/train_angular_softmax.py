@@ -196,9 +196,14 @@ def main(args):
 
 
         embeddings = tf.nn.l2_normalize(prelogits, 1, 1e-10, name='embeddings')
-
+        
+        if args.use_normalized_center_loss:
+            center_loss_activations = embeddings
+        else:
+            center_loss_activations = prelogits
+        
         # Add center loss
-        prelogits_center_loss, class_centers = facenet.center_loss(prelogits, label_batch, args.center_loss_alfa, nrof_classes)
+        prelogits_center_loss, class_centers = facenet.center_loss(center_loss_activations, label_batch, args.center_loss_alfa, nrof_classes)
         tf.add_to_collection(tf.GraphKeys.REGULARIZATION_LOSSES, prelogits_center_loss * args.center_loss_factor)
 
         learning_rate = tf.train.exponential_decay(learning_rate_placeholder, global_step,
@@ -208,15 +213,7 @@ def main(args):
         # Calculate the average cross entropy loss across the batch
         cross_entropy = tf.nn.sparse_softmax_cross_entropy_with_logits(
             labels=label_batch, logits=logits, name='cross_entropy_per_example')
-#         if args.prob_percentile_threshold>0.0:
-#           
-#             #batch_range = tf.range(tf.shape(labels)[0], dtype=tf.int32)
-#             #max_prob = tf.gather_nd(prob, tf.stack((batch_range, max_class), axis=1))
-#             cross_entropy_selected = tf.where(cross_entropy<prob_threshold_placeholder, cross_entropy, tf.zeros_like(cross_entropy, tf.float32))
-#             nrof_kept_entries = tf.cast(tf.count_nonzero(cross_entropy_selected), tf.float32)
-#             cross_entropy_mean = tf.reduce_sum(cross_entropy_selected) / nrof_kept_entries
-#             cross_entropy_orig_mean = tf.reduce_mean(cross_entropy, name='cross_entropy')
-#         else:
+
         loss_mean = tf.reduce_mean(cross_entropy, name='cross_entropy')
         cross_entropy_orig_mean = loss_mean
         tf.add_to_collection('losses', loss_mean)
@@ -514,6 +511,8 @@ def parse_arguments(argv):
         help='Center loss factor.', default=0.0)
     parser.add_argument('--center_loss_alfa', type=float,
         help='Center update rate for center loss.', default=0.95)
+    parser.add_argument('--use_normalized_center_loss', 
+        help='Calculate center loss on embeddings projected on the unit hypersphere.', action='store_true')
     parser.add_argument('--optimizer', type=str, choices=['ADAGRAD', 'ADADELTA', 'ADAM', 'RMSPROP', 'MOM'],
         help='The optimization algorithm to use', default='ADAGRAD')
     parser.add_argument('--learning_rate', type=float,
