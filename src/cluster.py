@@ -33,7 +33,6 @@ import os
 import sys
 import argparse
 import facenet
-import cv2
 import align.detect_face
 from sklearn.cluster import DBSCAN
 
@@ -162,9 +161,9 @@ def create_network_face_detection(gpu_memory_fraction):
 def load_images_from_folder(folder):
     images = []
     for filename in os.listdir(folder):
-        img = cv2.imread(os.path.join(folder, filename))
+        img = misc.imread(os.path.join(folder, filename))
         if img is not None:
-            images.append(cv2.cvtColor(img, cv2.COLOR_BGR2RGB))
+            images.append(img)
     return images
 
 
