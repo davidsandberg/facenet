@@ -46,7 +46,7 @@ def main(args):
             facenet.load_model(args.model)
 
             image_list = load_images_from_folder(args.data_dir)
-            images = align_data(image_list, 160, 44, pnet, rnet, onet)
+            images = align_data(image_list, args.image_size, args.margin, pnet, rnet, onet)
 
             images_placeholder = sess.graph.get_tensor_by_name("input:0")
             embeddings = sess.graph.get_tensor_by_name("embeddings:0")
@@ -95,8 +95,7 @@ def main(args):
                     print('Saving largest cluster (Cluster: {})'.format(largest_cluster))
                     cnt = 1
                     for i in np.nonzero(labels == largest_cluster)[0]:
-                        img = misc.imresize(images[i], (args.image_size, args.image_size), interp='bilinear')
-                        misc.imsave(os.path.join(args.out_dir, str(cnt) + '.png'), img)
+                        misc.imsave(os.path.join(args.out_dir, str(cnt) + '.png'), images[i])
                         cnt += 1
                 else:
                     print('Saving all clusters')
@@ -107,13 +106,11 @@ def main(args):
                         if not os.path.exists(path):
                             os.makedirs(path)
                             for j in np.nonzero(labels == i)[0]:
-                                img = misc.imresize(images[j], (args.image_size, args.image_size), interp='bilinear')
-                                misc.imsave(os.path.join(path, str(cnt) + '.png'), img)
+                                misc.imsave(os.path.join(path, str(cnt) + '.png'), images[j])
                                 cnt += 1
                         else:
                             for j in np.nonzero(labels == i)[0]:
-                                img = misc.imresize(images[j], (args.image_size, args.image_size), interp='bilinear')
-                                misc.imsave(os.path.join(path, str(cnt) + '.png'), img)
+                                misc.imsave(os.path.join(path, str(cnt) + '.png'), images[j])
                                 cnt += 1
 
 
@@ -178,6 +175,8 @@ def parse_arguments(argv):
                         help='The output directory where the image clusters will be saved.')
     parser.add_argument('--image_size', type=int,
                         help='Image size (height, width) in pixels.', default=160)
+    parser.add_argument('--margin', type=int,
+                        help='Margin for the crop around the bounding box (height, width) in pixels.', default=44)
     parser.add_argument('--min_cluster_size', type=int,
                         help='The minimum amount of pictures required for a cluster.', default=1)
     parser.add_argument('--cluster_threshold', type=float,
