@@ -7,7 +7,7 @@ from __future__ import print_function
 #----------------------------------------------------
 # MIT License
 #
-# Copyright (c) 2017 Rakshak Talwar
+# Copyright (c) 2017 Rishi Rai
 #
 # Permission is hereby granted, free of charge, to any person obtaining a copy
 # of this software and associated documentation files (the "Software"), to deal
