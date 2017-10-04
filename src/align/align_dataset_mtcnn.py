@@ -25,7 +25,7 @@ from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
 
-from scipy import misc
+from PIL import Image
 import sys
 import os
 import argparse
@@ -44,7 +44,7 @@ def main(args):
     # Store some git revision info in a text file in the log directory
     src_path,_ = os.path.split(os.path.realpath(__file__))
     facenet.store_revision_info(src_path, output_dir, ' '.join(sys.argv))
-    dataset = facenet.get_dataset(args.input_dir)
+    dataset = facenet.get_dataset(args.input_dir, args.has_classes)
     
     print('Creating networks and loading parameters')
     
@@ -80,19 +80,19 @@ def main(args):
                 print(image_path)
                 if not os.path.exists(output_filename):
                     try:
-                        img = misc.imread(image_path)
+                        img = Image.open(image_path)
                     except (IOError, ValueError, IndexError) as e:
                         errorMessage = '{}: {}'.format(image_path, e)
                         print(errorMessage)
                     else:
-                        if img.ndim<2:
-                            print('Unable to align "%s"' % image_path)
-                            text_file.write('%s\n' % (output_filename))
-                            continue
-                        if img.ndim == 2:
-                            img = facenet.to_rgb(img)
-                        img = img[:,:,0:3]
-    
+                        #if img.ndim<2:
+                        #    print('Unable to align "%s"' % image_path)
+                        #    text_file.write('%s\n' % (output_filename))
+                        #    continue
+                        #if img.ndim == 2:
+                        #    img = facenet.to_rgb(img)
+                        img = np.array(img)
+
                         bounding_boxes, _ = align.detect_face.detect_face(img, minsize, pnet, rnet, onet, threshold, factor)
                         nrof_faces = bounding_boxes.shape[0]
                         if nrof_faces>0:
@@ -112,9 +112,9 @@ def main(args):
                             bb[2] = np.minimum(det[2]+args.margin/2, img_size[1])
                             bb[3] = np.minimum(det[3]+args.margin/2, img_size[0])
                             cropped = img[bb[1]:bb[3],bb[0]:bb[2],:]
-                            scaled = misc.imresize(cropped, (args.image_size, args.image_size), interp='bilinear')
+                            scaled = Image.fromarray(cropped, 'rgb').resize((args.image_size, args.image_size), interp='bilinear')
                             nrof_successfully_aligned += 1
-                            misc.imsave(output_filename, scaled)
+                            scaled.save(output_filename)
                             text_file.write('%s %d %d %d %d\n' % (output_filename, bb[0], bb[1], bb[2], bb[3]))
                         else:
                             print('Unable to align "%s"' % image_path)
@@ -137,6 +137,11 @@ def parse_arguments(argv):
         help='Shuffles the order of images to enable alignment using multiple processes.', action='store_true')
     parser.add_argument('--gpu_memory_fraction', type=float,
         help='Upper bound on the amount of GPU memory that will be used by the process.', default=1.0)
+    parser.add_argument('--has_classes', dest='has_classes', action='store_true',
+        help='Input folder is split into class subfolders, and these should be replicated', default=True)
+    parser.add_argument('--no_classes', dest='has_classes', action='store_false',
+        help='Input folder is split into class subfolders, and these should be replicated', default=True)
+
     return parser.parse_args(argv)
 
 if __name__ == '__main__':

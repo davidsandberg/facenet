@@ -5,26 +5,24 @@ from sys import exit
 
 import json
 
-import numpy as np
-from PIL import Image
+import tensorflow as tf
+import facenet
 
 
-def gen_image_paths(inpath):
+def get_image_paths(inpath):
+    paths = []
+
     for file in os.listdir(inpath):
         if os.path.isfile(os.path.join(inpath, file)):
             if file.lower().endswith(('.png', '.jpg', '.jpeg')) is False:
                 continue
 
-            yield os.path.join(inpath, file)
+            paths.append((inpath, file))
 
-    return
-
-
-def map_image_to_vector(mdl, image):
-    return None
+    return (paths)
 
 
-def faces_to_vectors(inpath, modelpath, outpath):
+def faces_to_vectors(inpath, modelpath, outpath, imgsize, batchsize=100):
     '''
     Given a folder and a model, loads images and performs forward pass to get a vector for each face
     results go to a JSON, with filenames mapped to their facevectors
@@ -35,13 +33,27 @@ def faces_to_vectors(inpath, modelpath, outpath):
     '''
     results = dict()
 
-    # TODO load model
-    mdl = None
+    with tf.Graph().as_default():
+        with tf.Session() as sess:
 
-    for image_path in gen_image_paths(inpath):
-        # TODO load image
-        img = Image.open(open(inpath))
-        results[ntpath.basename(image_path)] = map_image_to_vector(mdl, img)
+            facenet.load_model(inpath)
+            mdl = None
+
+            image_paths = get_image_paths(inpath)
+
+            # Get input and output tensors
+            images_placeholder = tf.get_default_graph().get_tensor_by_name("input:0")
+            embeddings = tf.get_default_graph().get_tensor_by_name("embeddings:0")
+            phase_train_placeholder = tf.get_default_graph().get_tensor_by_name("phase_train:0")
+
+            # Let's do them in batches, don't want to run out of memory
+            for i in range(0, len(image_paths), step=batchsize):
+                images = facenet.load_data(image_paths=image_paths[i:i+batchsize], do_random_crop=False, do_random_flip=False, image_size=imgsize, do_prewhiten=True)
+                feed_dict = {images_placeholder: images, phase_train_placeholder: False}
+
+                emb_array = sess.run(embeddings, feed_dict=feed_dict)
+                for j in range(0, len(emb_array)):
+                    results[ntpath.basename(image_paths[i+j])] = emb_array[j]
 
     # All done, save for later!
     json.dump(results, open(outpath, "w"))
@@ -54,9 +66,10 @@ def main():
     parser.add_argument("inpath", help="Folder with images - png/jpg/jpeg - of faces", type=str, required=True)
     parser.add_argument("outpath", help="Full path to where you want the results JSON", type=str, required=True)
     parser.add_argument("mdlpath", help="Where to find the Tensorflow model to use for the embedding", type=str, required=True)
-
+    parser.add_argument("imgsize", help="Size of images to use", type=160, default=160, required=False)
     args = parser.parse_args()
-    num_images_processed = faces_to_vectors(args.inpath, args.mdlpath, args.outpath)
+
+    num_images_processed = faces_to_vectors(args.inpath, args.mdlpath, args.outpath, args.imgsize)
     if num_images_processed > 0:
         print("Converted " + str(num_images_processed) + " to face vectors.")
     else:

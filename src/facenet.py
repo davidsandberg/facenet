@@ -326,15 +326,20 @@ def get_dataset(paths, has_class_directories=True):
     dataset = []
     for path in paths.split(':'):
         path_exp = os.path.expanduser(path)
-        classes = os.listdir(path_exp)
-        classes.sort()
-        nrof_classes = len(classes)
-        for i in range(nrof_classes):
-            class_name = classes[i]
-            facedir = os.path.join(path_exp, class_name)
-            image_paths = get_image_paths(facedir)
-            dataset.append(ImageClass(class_name, image_paths))
-  
+
+        if has_class_directories is True:
+            classes = os.listdir(path_exp)
+            classes.sort()
+            nrof_classes = len(classes)
+            for i in range(nrof_classes):
+                class_name = classes[i]
+                facedir = os.path.join(path_exp, class_name)
+                image_paths = get_image_paths(facedir)
+                dataset.append(ImageClass(class_name, image_paths))
+        else:
+            image_paths = get_image_paths(path_exp)
+            dataset.append(ImageClass("", image_paths))
+
     return dataset
 
 def get_image_paths(facedir):
