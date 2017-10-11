@@ -369,6 +369,9 @@ def detect_face(img, minsize, pnet, rnet, onet, threshold, factor):
         out0 = np.transpose(out[0])
         out1 = np.transpose(out[1])
         score = out1[1,:]
+
+        print(score)
+
         ipass = np.where(score>threshold[1])
         total_boxes = np.hstack([total_boxes[ipass[0],0:4].copy(), np.expand_dims(score[ipass].copy(),1)])
         mv = out0[:,ipass[0]]
