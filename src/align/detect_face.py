@@ -369,9 +369,6 @@ def detect_face(img, minsize, pnet, rnet, onet, threshold, factor):
         out0 = np.transpose(out[0])
         out1 = np.transpose(out[1])
         score = out1[1,:]
-
-        print(score)
-
         ipass = np.where(score>threshold[1])
         total_boxes = np.hstack([total_boxes[ipass[0],0:4].copy(), np.expand_dims(score[ipass].copy(),1)])
         mv = out0[:,ipass[0]]
@@ -762,8 +759,10 @@ def rerec(bboxA):
     bboxA[:,2:4] = bboxA[:,0:2] + np.transpose(np.tile(l,(2,1)))
     return bboxA
 
+
 def imresample(img, sz):
-    img = Image.fromarray(img, 'RGB').resize((sz[1], sz[0]), Image.ANTIALIAS)
+    # PIL's image class is not expecting floating point numbers as a n input, and will mangle your picture. Use ints!
+    img = Image.fromarray(img.astype(np.uint8), 'RGB').resize((sz[1], sz[0]), Image.BICUBIC)
     return np.array(img)
 
     # This method is kept for debugging purpose
