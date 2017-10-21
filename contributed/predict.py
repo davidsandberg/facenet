@@ -40,6 +40,7 @@ import pickle
 from sklearn.svm import SVC
 from scipy import misc
 import align.detect_face
+from six.moves import xrange
 
 def main(args):
   

@@ -41,6 +41,8 @@ import lfw
 
 from tensorflow.python.ops import data_flow_ops
 
+from six.moves import xrange
+
 def main(args):
   
     network = importlib.import_module(args.model_def)
