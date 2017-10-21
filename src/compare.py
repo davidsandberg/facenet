@@ -91,7 +91,7 @@ def load_and_align_data(image_paths, image_size, margin, gpu_memory_fraction):
     nrof_samples = len(image_paths)
     img_list = [None] * nrof_samples
     for i in range(nrof_samples):
-        img = misc.imread(os.path.expanduser(image_paths[i]))
+        img = misc.imread(os.path.expanduser(image_paths[i]), mode='RGB')
         img_size = np.asarray(img.shape)[0:2]
         bounding_boxes, _ = align.detect_face.detect_face(img, minsize, pnet, rnet, onet, threshold, factor)
         det = np.squeeze(bounding_boxes[0,0:4])
