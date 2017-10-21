@@ -76,7 +76,7 @@ import facenet
 import numpy as np
 from sklearn.datasets import load_files
 import tensorflow as tf
-
+from six.moves import xrange
 
 def main(args):
 

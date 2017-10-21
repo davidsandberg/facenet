@@ -37,6 +37,7 @@ import numpy as np
 import math
 import time
 import h5py
+from six import iteritems
 
 def main(args):
   
@@ -149,7 +150,7 @@ def main(args):
             mdict = {'latent_vars':latent_vars, 'attributes':attributes, 
                      'fields':fields, 'attribute_vectors':attribute_vectors }
             with h5py.File(filename, 'w') as f:
-                for key, value in mdict.iteritems():
+                for key, value in iteritems(mdict):
                     f.create_dataset(key, data=value)
                     
                     
