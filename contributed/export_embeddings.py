@@ -3,7 +3,7 @@ Exports the embeddings and labels of a directory of images as numpy arrays.
 
 Typicall usage expect the image directory to be of the openface/facenet form and
 the images to be aligned. Simply point to your model and your image directory:
-    python facenet/tmp/export_embeddings.py ~/models/facenet/20170216-091149/ ~/datasets/lfw/mylfw
+    python facenet/contributed/export_embeddings.py ~/models/facenet/20170216-091149/ ~/datasets/lfw/mylfw
 
 Output:
 embeddings.npy -- Embeddings as np array, Use --embeddings_name to change name
