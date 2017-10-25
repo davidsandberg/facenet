@@ -28,7 +28,7 @@ from __future__ import division
 from __future__ import print_function
 
 from datetime import datetime
-import os.path
+import os
 import time
 import sys
 import tensorflow as tf
@@ -41,11 +41,9 @@ import lfw
 
 from tensorflow.python.ops import data_flow_ops
 
-from six.moves import xrange
-
 def main(args):
   
-    network = importlib.import_module(args.model_def)
+    network = importlib.import_module(args.model_def, 'inference')
 
     subdir = datetime.strftime(datetime.now(), '%Y%m%d-%H%M%S')
     log_dir = os.path.join(os.path.expanduser(args.logs_base_dir), subdir)
@@ -55,9 +53,6 @@ def main(args):
     if not os.path.isdir(model_dir):  # Create the model directory if it doesn't exist
         os.makedirs(model_dir)
 
-    # Write arguments to a text file
-    facenet.write_arguments_to_file(args, os.path.join(log_dir, 'arguments.txt'))
-        
     # Store some git revision info in a text file in the log directory
     src_path,_ = os.path.split(os.path.realpath(__file__))
     facenet.store_revision_info(src_path, log_dir, ' '.join(sys.argv))
@@ -80,7 +75,7 @@ def main(args):
     
     with tf.Graph().as_default():
         tf.set_random_seed(args.seed)
-        global_step = tf.Variable(0, trainable=False)
+        global_step = tf.Variable(args.starting_global_step, trainable=False)
 
         # Placeholder for the learning rate
         learning_rate_placeholder = tf.placeholder(tf.float32, name='learning_rate')
@@ -105,7 +100,7 @@ def main(args):
             images = []
             for filename in tf.unstack(filenames):
                 file_contents = tf.read_file(filename)
-                image = tf.image.decode_image(file_contents, channels=3)
+                image = tf.image.decode_png(file_contents)
                 
                 if args.random_crop:
                     image = tf.random_crop(image, [args.image_size, args.image_size, 3])
@@ -124,9 +119,6 @@ def main(args):
             shapes=[(args.image_size, args.image_size, 3), ()], enqueue_many=True,
             capacity=4 * nrof_preprocess_threads * args.batch_size,
             allow_smaller_final_batch=True)
-        image_batch = tf.identity(image_batch, 'image_batch')
-        image_batch = tf.identity(image_batch, 'input')
-        labels_batch = tf.identity(labels_batch, 'label_batch')
 
         # Build the inference graph
         prelogits, _ = network.inference(image_batch, args.keep_probability, 
@@ -194,6 +186,7 @@ def main(args):
                             batch_size_placeholder, learning_rate_placeholder, phase_train_placeholder, enqueue_op, actual_issame, args.batch_size, 
                             args.lfw_nrof_folds, log_dir, step, summary_writer, args.embedding_size)
 
+    sess.close()
     return model_dir
 
 
@@ -219,7 +212,7 @@ def train(args, sess, dataset, epoch, image_paths_placeholder, labels_placeholde
         sess.run(enqueue_op, {image_paths_placeholder: image_paths_array, labels_placeholder: labels_array})
         emb_array = np.zeros((nrof_examples, embedding_size))
         nrof_batches = int(np.ceil(nrof_examples / args.batch_size))
-        for i in range(nrof_batches):
+        for i in xrange(nrof_batches):
             batch_size = min(nrof_examples-i*args.batch_size, args.batch_size)
             emb, lab = sess.run([embeddings, labels_batch], feed_dict={batch_size_placeholder: batch_size, 
                 learning_rate_placeholder: lr, phase_train_placeholder: True})
@@ -424,6 +417,8 @@ def parse_arguments(argv):
         help='Upper bound on the amount of GPU memory that will be used by the process.', default=1.0)
     parser.add_argument('--pretrained_model', type=str,
         help='Load a pretrained model before training starts.')
+    parser.add_argument('--starting_global_step', type=int,
+        help='Start training from a particular global step (useful when using restoring model)', default=0)
     parser.add_argument('--data_dir', type=str,
         help='Path to the data directory containing aligned face patches. Multiple directories are separated with colon.',
         default='~/datasets/casia/casia_maxpy_mtcnnalign_182_160')
