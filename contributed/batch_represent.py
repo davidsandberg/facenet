@@ -91,8 +91,7 @@ def main(args):
 
 			# load the model
 			print("Loading trained model...\n")
-			meta_file, ckpt_file = facenet.get_model_filenames(os.path.expanduser(args.trained_model_dir))
-			facenet.load_model(args.trained_model_dir, meta_file, ckpt_file)
+			facenet.load_model(args.trained_model_dir)
 
 			# grab all image paths and labels
 			print("Finding image paths and targets...\n")
