@@ -36,6 +36,7 @@ import time
 import h5py
 import math
 from tensorflow.python.platform import gfile
+from six import iteritems
 
 def main(args):
     dataset = facenet.get_dataset(args.dataset_dir)
@@ -105,7 +106,7 @@ def main(args):
             print('Writing filtering data to %s' % args.data_file_name)
             mdict = {'class_names':class_names, 'image_list':image_list, 'label_list':label_list, 'distance_to_center':distance_to_center }
             with h5py.File(args.data_file_name, 'w') as f:
-                for key, value in mdict.iteritems():
+                for key, value in iteritems(mdict):
                     f.create_dataset(key, data=value)
                         
 def parse_arguments(argv):

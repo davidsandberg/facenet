@@ -3,7 +3,7 @@ Exports the embeddings and labels of a directory of images as numpy arrays.
 
 Typicall usage expect the image directory to be of the openface/facenet form and
 the images to be aligned. Simply point to your model and your image directory:
-    python facenet/tmp/export_embeddings.py ~/models/facenet/20170216-091149/ ~/datasets/lfw/mylfw
+    python facenet/contributed/export_embeddings.py ~/models/facenet/20170216-091149/ ~/datasets/lfw/mylfw
 
 Output:
 embeddings.npy -- Embeddings as np array, Use --embeddings_name to change name
@@ -61,6 +61,8 @@ import facenet
 import align.detect_face
 import glob
 
+from six.moves import xrange
+
 def main(args):
     train_set = facenet.get_dataset(args.data_dir)
     image_list, label_list = facenet.get_image_paths_and_labels(train_set)
@@ -82,7 +84,10 @@ def main(args):
             nrof_images = len(image_list)
             print('Number of images: ', nrof_images)
             batch_size = args.image_batch
-            nrof_batches = (nrof_images // batch_size) + 1
+            if nrof_images % batch_size == 0:
+                nrof_batches = nrof_images // batch_size
+            else:
+                nrof_batches = (nrof_images // batch_size) + 1
             print('Number of batches: ', nrof_batches)
             embedding_size = embeddings.get_shape()[1]
             emb_array = np.zeros((nrof_images, embedding_size))

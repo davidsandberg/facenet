@@ -71,7 +71,7 @@ def main(args):
                                 raise ValueError('Image is mainly black or white')
                             else:
                                 # Crop image according to dataset descriptor
-                                img_cropped = img[box[1]:box[3],box[0]:box[2],:]
+                                img_cropped = img[int(box[1]):int(box[3]),int(box[0]):int(box[2]),:]
                                 # Scale to 256x256
                                 img_resized = misc.imresize(img_cropped, (args.image_size,args.image_size))
                                 # Save image as .png

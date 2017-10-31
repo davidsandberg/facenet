@@ -2,6 +2,7 @@ language: python
 sudo: required
 python:
   - "2.7"
+  - "3.5"
 # command to install dependencies
 install:
 # numpy not using wheel to avoid problem described in 

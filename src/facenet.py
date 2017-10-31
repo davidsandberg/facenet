@@ -39,6 +39,7 @@ from tensorflow.python.training import training
 import random
 import re
 from tensorflow.python.platform import gfile
+from six import iteritems
 
 def triplet_loss(anchor, positive, negative, alpha):
     """Calculate the triplet loss according to the FaceNet paper
@@ -539,5 +540,5 @@ def put_images_on_grid(images, shape=(16,8)):
 
 def write_arguments_to_file(args, filename):
     with open(filename, 'w') as f:
-        for key, value in vars(args).iteritems():
+        for key, value in iteritems(vars(args)):
             f.write('%s: %s\n' % (key, str(value)))
