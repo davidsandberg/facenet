@@ -123,7 +123,8 @@ def main(args):
                                 cropped = img[bb[1]:bb[3],bb[0]:bb[2],:]
                                 scaled = misc.imresize(cropped, (args.image_size, args.image_size), interp='bilinear')
                                 nrof_successfully_aligned += 1
-                                output_filename_n = "{}_{}.{}".format(output_filename.split('.')[0], i, output_filename.split('.')[-1])
+                                filename_base, file_extension = os.path.splitext(output_filename)
+                                output_filename_n = "{}_{}{}".format(filename_base, i, file_extension)
                                 misc.imsave(output_filename_n, scaled)
                                 text_file.write('%s %d %d %d %d\n' % (output_filename_n, bb[0], bb[1], bb[2], bb[3]))
                         else:
