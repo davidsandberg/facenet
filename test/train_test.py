@@ -199,7 +199,7 @@ class TrainTest(unittest.TestCase):
     def test_freeze_graph(self):
         print('test_freeze_graph')
         argv = ['python',
-                'freeze_graph.py',
+                'src/freeze_graph.py',
                 self.pretrained_model,
                 self.frozen_graph_filename ]
         subprocess.call(argv)
