@@ -26,7 +26,7 @@ import numpy as np
 import cv2
 import os
 import shutil
-import download_and_extract_model
+import download_and_extract  # @UnresolvedImport
 import subprocess
 
 def memory_usage_psutil():
@@ -36,6 +36,17 @@ def memory_usage_psutil():
     mem = process.memory_info()[0] / float(2 ** 20)
     return mem
 
+def align_dataset_if_needed(self):
+    if not os.path.exists('data/lfw_aligned'):
+        argv = ['python',
+                'src/align/align_dataset_mtcnn.py',
+                'data/lfw',
+                'data/lfw_aligned',
+                '--image_size', '160',
+                '--margin', '32' ]
+        subprocess.call(argv)
+        
+        
 class TrainTest(unittest.TestCase):
   
     @classmethod
@@ -46,13 +57,13 @@ class TrainTest(unittest.TestCase):
         self.lfw_pairs_file = create_mock_lfw_pairs(self.tmp_dir)
         print(self.lfw_pairs_file)
         self.pretrained_model_name = '20170512-110547'
-        download_and_extract_model.download_and_extract_model(self.pretrained_model_name, 'data/')
+        download_and_extract.download_and_extract_file(self.pretrained_model_name, 'data/')
+        download_and_extract.download_and_extract_file('lfw-subset', 'data/')
         self.model_file = os.path.join('data', self.pretrained_model_name, 'model-%s.ckpt-250000' % self.pretrained_model_name)
         self.pretrained_model = os.path.join('data', self.pretrained_model_name)
         self.frozen_graph_filename = os.path.join('data', self.pretrained_model_name+'.pb')
         print('Memory utilization (SetUpClass): %.3f MB' % memory_usage_psutil())
 
-        
     @classmethod
     def tearDownClass(self):
         # Recursively remove the temporary directory
@@ -61,9 +72,6 @@ class TrainTest(unittest.TestCase):
     def tearDown(self):
         print('Memory utilization (TearDown): %.3f MB' % memory_usage_psutil())
 
-    # test_align_dataset_mtcnn
-    # http://vis-www.cs.umass.edu/lfw/lfw-a.zip
-    
     def test_training_classifier_inception_resnet_v1(self):
         print('test_training_classifier_inception_resnet_v1')
         argv = ['python',
@@ -165,11 +173,12 @@ class TrainTest(unittest.TestCase):
          
     def test_validate_on_lfw(self):
         print('test_validate_on_lfw')
+        align_dataset_if_needed(self)
         argv = ['python',
                 'src/validate_on_lfw.py', 
-                self.dataset_dir,
+                'data/lfw_aligned',
                 self.pretrained_model,
-                '--lfw_pairs', self.lfw_pairs_file,
+                '--lfw_pairs', 'data/lfw/pairs_small.txt',
                 '--lfw_nrof_folds', '2',
                 '--lfw_batch_size', '6']
         subprocess.call(argv)

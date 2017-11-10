@@ -124,7 +124,10 @@ def main(args):
                                 scaled = misc.imresize(cropped, (args.image_size, args.image_size), interp='bilinear')
                                 nrof_successfully_aligned += 1
                                 filename_base, file_extension = os.path.splitext(output_filename)
-                                output_filename_n = "{}_{}{}".format(filename_base, i, file_extension)
+                                if args.detect_multiple_faces:
+                                    output_filename_n = "{}_{}{}".format(filename_base, i, file_extension)
+                                else:
+                                    output_filename_n = "{}{}".format(filename_base, file_extension)
                                 misc.imsave(output_filename_n, scaled)
                                 text_file.write('%s %d %d %d %d\n' % (output_filename_n, bb[0], bb[1], bb[2], bb[3]))
                         else:
