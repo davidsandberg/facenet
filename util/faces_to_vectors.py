@@ -6,7 +6,7 @@ from sys import exit
 import json
 
 import tensorflow as tf
-import facenet
+from facenet.src.facenet import load_model, load_data
 
 
 def get_image_paths(inpath):
@@ -36,7 +36,7 @@ def faces_to_vectors(inpath, modelpath, outpath, imgsize, batchsize=100):
     with tf.Graph().as_default():
         with tf.Session() as sess:
 
-            facenet.load_model(modelpath)
+            load_model(modelpath)
             mdl = None
 
             image_paths = get_image_paths(inpath)
@@ -48,7 +48,7 @@ def faces_to_vectors(inpath, modelpath, outpath, imgsize, batchsize=100):
 
             # Let's do them in batches, don't want to run out of memory
             for i in range(0, len(image_paths), batchsize):
-                images = facenet.load_data(image_paths=image_paths[i:i+batchsize], do_random_crop=False, do_random_flip=False, image_size=imgsize, do_prewhiten=True)
+                images = load_data(image_paths=image_paths[i:i+batchsize], do_random_crop=False, do_random_flip=False, image_size=imgsize, do_prewhiten=True)
                 feed_dict = {images_placeholder: images, phase_train_placeholder: False}
 
                 emb_array = sess.run(embeddings, feed_dict=feed_dict)
