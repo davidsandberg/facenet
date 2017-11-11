@@ -496,21 +496,29 @@ def calculate_val_far(threshold, dist, actual_issame):
     return val, far
 
 def store_revision_info(src_path, output_dir, arg_string):
+    try:
+        # Get git hash
+        cmd = ['git', 'rev-parse', 'HEAD']
+        gitproc = Popen(cmd, stdout = PIPE, cwd=src_path)
+        (stdout, _) = gitproc.communicate()
+        git_hash = stdout.strip()
+    except OSError as e:
+        git_hash = ' '.join(cmd) + ': ' +  e.strerror
   
-    # Get git hash
-    gitproc = Popen(['git', 'rev-parse', 'HEAD'], stdout = PIPE, cwd=src_path)
-    (stdout, _) = gitproc.communicate()
-    git_hash = stdout.strip()
-  
-    # Get local changes
-    gitproc = Popen(['git', 'diff', 'HEAD'], stdout = PIPE, cwd=src_path)
-    (stdout, _) = gitproc.communicate()
-    git_diff = stdout.strip()
+    try:
+        # Get local changes
+        cmd = ['git', 'diff', 'HEAD']
+        gitproc = Popen(cmd, stdout = PIPE, cwd=src_path)
+        (stdout, _) = gitproc.communicate()
+        git_diff = stdout.strip()
+    except OSError as e:
+        git_diff = ' '.join(cmd) + ': ' +  e.strerror
     
     # Store a text file in the log directory
     rev_info_filename = os.path.join(output_dir, 'revision_info.txt')
     with open(rev_info_filename, "w") as text_file:
         text_file.write('arguments: %s\n--------------------\n' % arg_string)
+        text_file.write('tensorflow version: %s\n--------------------\n' % tf.__version__)  # @UndefinedVariable
         text_file.write('git hash: %s\n--------------------\n' % git_hash)
         text_file.write('%s' % git_diff)
 
