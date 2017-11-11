@@ -1,12 +1,13 @@
-# Face Recognition using Tensorflow
+# Face Recognition using Tensorflow [![Build Status][travis-image]][travis]
 
-![Travis](http://travis-ci.org/davidsandberg/facenet.svg?branch=master)
+[travis-image]: http://travis-ci.org/davidsandberg/facenet.svg?branch=master
+[travis]: http://travis-ci.org/davidsandberg/facenet
 
 This is a TensorFlow implementation of the face recognizer described in the paper
 ["FaceNet: A Unified Embedding for Face Recognition and Clustering"](http://arxiv.org/abs/1503.03832). The project also uses ideas from the paper ["A Discriminative Feature Learning Approach for Deep Face Recognition"](http://ydwen.github.io/papers/WenECCV16.pdf) as well as the paper ["Deep Face Recognition"](http://www.robots.ox.ac.uk/~vgg/publications/2015/Parkhi15/parkhi15.pdf) from the [Visual Geometry Group](http://www.robots.ox.ac.uk/~vgg/) at Oxford.
 
-## Tensorflow release
-Currently this repo is compatible with Tensorflow r1.0.
+## Compatibility
+The code is tested using Tensorflow r1.2 under Ubuntu 14.04 with Python 2.7 and Python 3.5. The test cases can be found [here](https://github.com/davidsandberg/facenet/tree/master/test) and the results can be found [here](http://travis-ci.org/davidsandberg/facenet).
 
 ## News
 | Date     | Update |
@@ -44,7 +45,7 @@ Currently, the best results are achieved by training the model as a classifier w
 
 ## Pre-trained model
 ### Inception-ResNet-v1 model
-Currently, the best performing model is an Inception-Resnet-v1 model trained on CASIA-Webface aligned with [MTCNN](https://github.com/davidsandberg/facenet/tree/master/src/align).
+A couple of pretrained models are provided. They are trained using softmax loss with the Inception-Resnet-v1 model. The datasets has been aligned using [MTCNN](https://github.com/davidsandberg/facenet/tree/master/src/align).
 
 ## Performance
 The accuracy on LFW for the model [20170512-110547](https://drive.google.com/file/d/0B5MzpY9kBtDVZ2RpVDYwWmxoSUk) is 0.992+-0.003. A description of how to run the test can be found on the page [Validate on LFW](https://github.com/davidsandberg/facenet/wiki/Validate-on-lfw).
