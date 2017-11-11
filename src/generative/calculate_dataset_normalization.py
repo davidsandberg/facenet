@@ -115,7 +115,7 @@ def parse_arguments(argv):
     parser.add_argument('--pretrained_model', type=str,
         help='Load a pretrained model before training starts.')
     parser.add_argument('--data_dir', type=str,
-        help='Path to the data directory containing aligned face patches. Multiple directories are separated with colon.',
+        help='Path to the data directory containing aligned face patches.',
         default='~/datasets/casia/casia_maxpy_mtcnnalign_182_160')
     parser.add_argument('--model_def', type=str,
         help='Model definition. Points to a module containing the definition of the inference graph.', default='models.inception_resnet_v1')

@@ -241,7 +241,7 @@ def parse_arguments(argv):
     parser.add_argument('vae_def', type=str,
         help='Model definition for the variational autoencoder. Points to a module containing the definition.')
     parser.add_argument('data_dir', type=str,
-        help='Path to the data directory containing aligned face patches. Multiple directories are separated with colon.')
+        help='Path to the data directory containing aligned face patches.')
     parser.add_argument('model_def', type=str,
         help='Model definition. Points to a module containing the definition of the inference graph.')
     parser.add_argument('pretrained_model', type=str,
