@@ -12,12 +12,9 @@ from facenet.src.facenet import load_model, load_data
 def get_image_paths(inpath):
     paths = []
 
-    for file in os.listdir(inpath):
-        if os.path.isfile(os.path.join(inpath, file)):
-            if file.lower().endswith(('.png', '.jpg', '.jpeg')) is False:
-                continue
-
-            paths.append(os.path.join(inpath, file))
+    for (root, dirs, files) in os.walk(inpath):
+        for f in (f for f in files if f.lower().endswith(('.png', '.jpg', '.jpeg'))):
+            paths.append(os.path.join(root, f))
 
     return (paths)
 
