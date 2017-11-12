@@ -1,5 +1,4 @@
 import os
-import ntpath
 import argparse
 from sys import exit
 
@@ -50,7 +49,8 @@ def faces_to_vectors(inpath, modelpath, outpath, imgsize, batchsize=100):
 
                 emb_array = sess.run(embeddings, feed_dict=feed_dict)
                 for j in range(0, len(emb_array)):
-                    results[ntpath.basename(image_paths[i+j])] = emb_array[j].tolist()
+                    relpath = os.path.relpath(image_paths[i+j], inpath)
+                    results[relpath] = emb_array[j].tolist()
 
     # All done, save for later!
     json.dump(results, open(outpath, "w"))
