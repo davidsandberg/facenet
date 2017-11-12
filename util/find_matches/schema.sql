@@ -1,0 +1,9 @@
+CREATE DATABASE cfs_test;
+USE cfs_test;
+CREATE TABLE images (
+  id BIGINT NOT NULL AUTO_INCREMENT ,
+  filename VARCHAR(128) NOT NULL,
+  feature_vector VARBINARY(4096) NOT NULL,
+
+  PRIMARY KEY (id)
+);
