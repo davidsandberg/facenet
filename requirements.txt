@@ -7,4 +7,4 @@ matplotlib
 Pillow
 requests
 psutil
-PIL
+pillow

@@ -1,23 +1,19 @@
 import os
-import ntpath
 import argparse
 from sys import exit
 
 import json
 
 import tensorflow as tf
-import facenet
+from facenet.src.facenet import load_model, load_data
 
 
 def get_image_paths(inpath):
     paths = []
 
-    for file in os.listdir(inpath):
-        if os.path.isfile(os.path.join(inpath, file)):
-            if file.lower().endswith(('.png', '.jpg', '.jpeg')) is False:
-                continue
-
-            paths.append(os.path.join(inpath, file))
+    for (root, dirs, files) in os.walk(inpath):
+        for f in (f for f in files if f.lower().endswith(('.png', '.jpg', '.jpeg'))):
+            paths.append(os.path.join(root, f))
 
     return (paths)
 
@@ -36,7 +32,7 @@ def faces_to_vectors(inpath, modelpath, outpath, imgsize, batchsize=100):
     with tf.Graph().as_default():
         with tf.Session() as sess:
 
-            facenet.load_model(modelpath)
+            load_model(modelpath)
             mdl = None
 
             image_paths = get_image_paths(inpath)
@@ -48,12 +44,13 @@ def faces_to_vectors(inpath, modelpath, outpath, imgsize, batchsize=100):
 
             # Let's do them in batches, don't want to run out of memory
             for i in range(0, len(image_paths), batchsize):
-                images = facenet.load_data(image_paths=image_paths[i:i+batchsize], do_random_crop=False, do_random_flip=False, image_size=imgsize, do_prewhiten=True)
+                images = load_data(image_paths=image_paths[i:i+batchsize], do_random_crop=False, do_random_flip=False, image_size=imgsize, do_prewhiten=True)
                 feed_dict = {images_placeholder: images, phase_train_placeholder: False}
 
                 emb_array = sess.run(embeddings, feed_dict=feed_dict)
                 for j in range(0, len(emb_array)):
-                    results[ntpath.basename(image_paths[i+j])] = emb_array[j].tolist()
+                    relpath = os.path.relpath(image_paths[i+j], inpath)
+                    results[relpath] = emb_array[j].tolist()
 
     # All done, save for later!
     json.dump(results, open(outpath, "w"))

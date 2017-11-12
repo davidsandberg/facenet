@@ -9,3 +9,10 @@ This Python 3.x utility ([face_vectors.py](face_vectors.py)) takes a folder of i
 - `--mdlpath` Where to find the Tensorflow model to use for the embedding
 - `--imgsize` Purely optional, defaults to 160 pixels.
 
+### Running via Docker:
+From root of this repo:
+```
+$ docker build -t facenet .
+$ docker run --rm -it -v $(PWD)/../data:/data:ro -v $(PWD)/../model:/model:ro -v $(PWD)/../output:/output facenet
+# python -m facenet.util.faces_to_vectors --inpath /data --outpath /output/out.json --mdlpath /model
+```
