@@ -2,7 +2,10 @@ from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
 
+import argparse
 import os
+import sys
+
 import numpy as np
 import facenet
 
@@ -77,29 +80,52 @@ def align_image(input_image, output_image, pnet, rnet, onet, image_size=182, mar
                     return True, scaled
             else:
                 if debug:
-                    print('Unable to align "%s"' % image_path)
+                    print('Unable to align "%s"' % input_image)
 
                 return False, 1
 
-#input_path = '/home/iolie/thorn/sharon/bp_aug_2017_dataset'
-input_path = '/home/iolie/thorn/sharon/oscars'
-output_path = '/home/iolie/thorn/sharon/CHECKS'
+def main(args):
 
-input_path = '/home/iolie/thorn/sharon/oscars'
-output_path = '/home/iolie/thorn/sharon'
-
-for filename in os.listdir(input_path):
-    input_image = filename
-    output_image = filename
+    # TODO Check why this was previously being initialised inside the image loop
     pnet, rnet, onet = initialize_mtcnn(0.8)
-
-    input_image = os.path.join(input_path, input_image)
-    output_image = os.path.join(output_path,  output_image)
-
-    align_image(input_image, output_image, pnet, rnet, onet, image_size=160, margin=44, random_order=True,
-                  gpu_memory_fraction=1.0, debug=False)
+    for filename in os.listdir(args.input_dir):
+        input_image = filename
+        output_image = filename
 
 
+        input_image = os.path.join(args.input_dir, input_image)
+        output_image = os.path.join(args.output_dir,  output_image)
+
+        align_image(input_image, output_image, pnet, rnet, onet, image_size=args.image_size, margin=args.margin, random_order=args.random_order,
+                      gpu_memory_fraction=args.gpu_memory_fraction, debug=False)
+
+
+def parse_arguments(argv):
+    parser = argparse.ArgumentParser()
+
+    parser.add_argument('input_dir', type=str, help='Directory with unaligned images.')
+    parser.add_argument('output_dir', type=str, help='Directory with aligned face thumbnails.')
+    parser.add_argument('--image_size', type=int,
+                        help='Image size (height, width) in pixels.', default=182)
+    parser.add_argument('--margin', type=int,
+                        help='Margin for the crop around the bounding box (height, width) in pixels.', default=44)
+    parser.add_argument('--random_order',
+                        help='Shuffles the order of images to enable alignment using multiple processes.',
+                        action='store_true')
+    parser.add_argument('--gpu_memory_fraction', type=float,
+                        help='Upper bound on the amount of GPU memory that will be used by the process.',
+                        default=1.0)
+    parser.add_argument('--has_classes', dest='has_classes', action='store_true',
+                        help='Input folder is split into class subfolders, and these should be replicated',
+                        default=True)
+    parser.add_argument('--no_classes', dest='has_classes', action='store_false',
+                        help='Input folder is split into class subfolders, and these should be replicated',
+                        default=True)
+
+    return parser.parse_args(argv)
+
+if __name__ == "__main__":
+    main(parse_arguments(sys.argv[1:]))
 #
 #print(ads)
 #print("bleh")
