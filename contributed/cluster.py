@@ -35,6 +35,7 @@ import argparse
 import facenet
 import align.detect_face
 from sklearn.cluster import DBSCAN
+from six.moves import xrange
 
 
 def main(args):
