@@ -187,6 +187,7 @@ def main(args):
             learning_rate, args.moving_average_decay, tf.global_variables(), args.log_histograms)
         
         # Create savers (which gets used depends on whether we are doing transfer learning)
+        # TODO make layer name prefix configurable
         transfer_layers = [v for v in tf.trainable_variables() if v.name.startswith('InceptionResnetV1')]
         saver_transfer = tf.train.Saver(transfer_layers, max_to_keep=3)
         saver_all_layers = tf.train.Saver(tf.trainable_variables(), max_to_keep=3)
