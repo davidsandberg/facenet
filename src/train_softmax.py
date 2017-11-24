@@ -186,8 +186,10 @@ def main(args):
         train_op = facenet.train(total_loss, global_step, args.optimizer, 
             learning_rate, args.moving_average_decay, tf.global_variables(), args.log_histograms)
         
-        # Create a saver
-        saver = tf.train.Saver(tf.trainable_variables(), max_to_keep=3)
+        # Create savers (which gets used depends on whether we are doing transfer learning)
+        transfer_layers = [v for v in tf.trainable_variables() if v.name.startswith('InceptionResnetV1')]
+        saver_transfer = tf.train.Saver(transfer_layers, max_to_keep=3)
+        saver_all_layers = tf.train.Saver(tf.trainable_variables(), max_to_keep=3)
 
         # Build the summary operation based on the TF collection of Summaries.
         summary_op = tf.summary.merge_all()
@@ -205,7 +207,12 @@ def main(args):
 
             if pretrained_model:
                 print('Restoring pretrained model: %s' % pretrained_model)
-                saver.restore(sess, pretrained_model)
+
+                if args.transferlearning:
+                    print('Using transfer learning, so old weights from final layer will not be loaded')
+                    saver_transfer.restore(sess, pretrained_model)
+                else:
+                    saver_all_layers.restore(sess, pretrained_model)
 
             # Training and validation loop
             print('Running training')
@@ -427,7 +434,9 @@ def parse_arguments(argv):
         help='Keep only the percentile images closed to its class center', default=100.0)
     parser.add_argument('--filter_min_nrof_images_per_class', type=int,
         help='Keep only the classes with this number of examples or more', default=0)
- 
+    parser.add_argument('--transferlearning',
+        help='When loading weights pre-trained model, ignore weights from classification layer (which will not match your new model)', action='store_true')
+
     # Parameters for validation on LFW
     parser.add_argument('--lfw_pairs', type=str,
         help='The file containing the pairs to use for validation.', default='data/pairs.txt')

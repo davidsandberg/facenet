@@ -544,5 +544,5 @@ def put_images_on_grid(images, shape=(16,8)):
 
 def write_arguments_to_file(args, filename):
     with open(filename, 'w') as f:
-        for key, value in vars(args).iteritems():
+        for key, value in vars(args).items():
             f.write('%s: %s\n' % (key, str(value)))
