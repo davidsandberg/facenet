@@ -63,7 +63,7 @@ def main(args):
         image_list = facenet.get_image_paths(os.path.expanduser(args.data_dir))
         print('Pairing images with attributes...')
         # Get attributes for images
-        nrof_attributes = fields if args.identity else len(fields)
+        nrof_attributes = len(fields)
         if args.identity:
             # Since the attr_dct is already sorted by image name then we can just use that as our attribs_list
             attribs_list = attribs_dict
@@ -124,8 +124,7 @@ def main(args):
         gpu_memory_fraction = 0.8
         gpu_options = tf.GPUOptions(per_process_gpu_memory_fraction=gpu_memory_fraction)
         # gpu_options = tf.GPUOptions(allow_growth = True)
-        sess = tf.Session(
-            config=tf.ConfigProto(device_count={'GPU': 0}, gpu_options=gpu_options, log_device_placement=False))
+        sess = tf.Session(config=tf.ConfigProto(gpu_options=gpu_options, log_device_placement=False))
         sess.run(X.initializer, feed_dict={place: attribs_list[:, :nrof_attributes]})
         sess.run(tf.global_variables_initializer())
         sess.run(tf.local_variables_initializer())
@@ -188,8 +187,8 @@ def read_annotations(filename):
 
 def read_identity(filename):
     num_images = 202599  # 25000 #202599
-    fields = 10177
-    attribs = np.zeros((num_images, fields)) - 1
+    fields = range(1, 10177 + 1)
+    attribs = np.zeros((num_images, len(fields))) - 1
     with open(filename, 'r') as f:
         for i, line in enumerate(f.readlines()):
             if i >= num_images:
