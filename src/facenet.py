@@ -337,6 +337,52 @@ def get_dataset(path, has_class_directories=True):
   
     return dataset
 
+
+def get_identity_dataset(path, label_fname, has_class_directories=True):
+    path_exp = os.path.expanduser(path)
+    dct = {}
+    ## Load the identity label
+    with open(label_fname, 'r') as f:
+        for i, line in enumerate(f.readlines()):
+            line = line.split()
+            img_name = line[0]
+            lbl_idx = int(line[1])
+            if lbl_idx not in dct:
+                dct[lbl_idx] = []
+            dct[lbl_idx].append(os.path.join(path_exp, img_name))
+
+    ## Only select image with 3 < images.
+    dataset = [ImageClass(class_name, image_paths) for class_name, image_paths in dct.items() if len(image_paths) > 2]
+
+    return dataset
+
+
+def get_attribute_dataset(path, label_fname, has_class_directories=True):
+    path_exp = os.path.expanduser(path)
+    dct = {}
+    fields = []
+    ## Load the identity label
+    with open(label_fname, 'r') as f:
+        for i, line in enumerate(f.readlines()):
+            if i == 0:
+                continue
+            if i == 1:
+                # fields
+                fields = line.split()
+                continue
+            line = line.split()
+            img_name = line[0]
+            lbl_idx = [idx for idx, x in enumerate(list(map(int, line[1:]))) if x > 0][0]
+            lbl = fields[lbl_idx]
+            if lbl not in dct:
+                dct[lbl] = []
+            dct[lbl].append(os.path.join(path_exp, img_name))
+
+    ## Only select image with 3 < images.
+    dataset = [ImageClass(class_name, image_paths) for class_name, image_paths in dct.items() if len(image_paths) > 2]
+
+    return dataset
+
 def get_image_paths(facedir):
     image_paths = []
     if os.path.isdir(facedir):
