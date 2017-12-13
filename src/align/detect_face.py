@@ -296,11 +296,13 @@ def create_mtcnn(sess, model_path):
     return pnet_fun, rnet_fun, onet_fun
 
 def detect_face(img, minsize, pnet, rnet, onet, threshold, factor):
-    # im: input image
-    # minsize: minimum of faces' size
-    # pnet, rnet, onet: caffemodel
-    # threshold: threshold=[th1 th2 th3], th1-3 are three steps's threshold
-    # fastresize: resize img from last scale (using in high-resolution images) if fastresize==true
+    """Detects faces in an image, and returns bounding boxes and points for them.
+    img: input image
+    minsize: minimum faces' size
+    pnet, rnet, onet: caffemodel
+    threshold: threshold=[th1, th2, th3], th1-3 are three steps's threshold
+    factor: the factor used to create a scaling pyramid of face sizes to detect in the image.
+    """
     factor_count=0
     total_boxes=np.empty((0,9))
     points=np.empty(0)
@@ -309,7 +311,7 @@ def detect_face(img, minsize, pnet, rnet, onet, threshold, factor):
     minl=np.amin([h, w])
     m=12.0/minsize
     minl=minl*m
-    # creat scale pyramid
+    # create scale pyramid
     scales=[]
     while minl>=12:
         scales += [m*np.power(factor, factor_count)]
@@ -418,11 +420,13 @@ def detect_face(img, minsize, pnet, rnet, onet, threshold, factor):
 
 
 def bulk_detect_face(images, detection_window_size_ratio, pnet, rnet, onet, threshold, factor):
-    # im: input image
-    # minsize: minimum of faces' size
-    # pnet, rnet, onet: caffemodel
-    # threshold: threshold=[th1 th2 th3], th1-3 are three steps's threshold [0-1]
-
+    """Detects faces in a list of images
+    images: list containing input images
+    detection_window_size_ratio: ratio of minimum face size to smallest image dimension
+    pnet, rnet, onet: caffemodel
+    threshold: threshold=[th1 th2 th3], th1-3 are three steps's threshold [0-1]
+    factor: the factor used to create a scaling pyramid of face sizes to detect in the image.
+    """
     all_scales = [None] * len(images)
     images_with_boxes = [None] * len(images)
 
@@ -641,7 +645,7 @@ def bulk_detect_face(images, detection_window_size_ratio, pnet, rnet, onet, thre
 
 # function [boundingbox] = bbreg(boundingbox,reg)
 def bbreg(boundingbox,reg):
-    # calibrate bounding boxes
+    """Calibrate bounding boxes"""
     if reg.shape[1]==1:
         reg = np.reshape(reg, (reg.shape[2], reg.shape[3]))
 
@@ -655,7 +659,7 @@ def bbreg(boundingbox,reg):
     return boundingbox
  
 def generateBoundingBox(imap, reg, scale, t):
-    # use heatmap to generate bounding boxes
+    """Use heatmap to generate bounding boxes"""
     stride=2
     cellsize=12
 
@@ -715,7 +719,7 @@ def nms(boxes, threshold, method):
 
 # function [dy edy dx edx y ey x ex tmpw tmph] = pad(total_boxes,w,h)
 def pad(total_boxes, w, h):
-    # compute the padding coordinates (pad the bounding boxes to square)
+    """Compute the padding coordinates (pad the bounding boxes to square)"""
     tmpw = (total_boxes[:,2]-total_boxes[:,0]+1).astype(np.int32)
     tmph = (total_boxes[:,3]-total_boxes[:,1]+1).astype(np.int32)
     numbox = total_boxes.shape[0]
@@ -750,7 +754,7 @@ def pad(total_boxes, w, h):
 
 # function [bboxA] = rerec(bboxA)
 def rerec(bboxA):
-    # convert bboxA to square
+    """Convert bboxA to square."""
     h = bboxA[:,3]-bboxA[:,1]
     w = bboxA[:,2]-bboxA[:,0]
     l = np.maximum(w, h)
