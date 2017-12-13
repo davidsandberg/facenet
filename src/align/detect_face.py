@@ -319,8 +319,7 @@ def detect_face(img, minsize, pnet, rnet, onet, threshold, factor):
         factor_count += 1
 
     # first stage
-    for j in range(len(scales)):
-        scale=scales[j]
+    for scale in scales:
         hs=int(np.ceil(h*scale))
         ws=int(np.ceil(w*scale))
         im_data = imresample(img, (hs, ws))
