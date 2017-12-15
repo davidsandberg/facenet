@@ -476,7 +476,7 @@ def parse_arguments(argv):
     parser.add_argument('--lfw_file_ext', type=str,
         help='The file extension for the LFW dataset.', default='png', choices=['jpg', 'png'])
     parser.add_argument('--lfw_dir', type=str,
-        help='Path to the data directory containing aligned face patches.', default='~/datasets/lfw/lfw_realigned/')
+        help='Path to the data directory containing aligned face patches.', default='')
     parser.add_argument('--lfw_nrof_folds', type=int,
         help='Number of folds to use for cross validation. Mainly used for testing.', default=10)
     return parser.parse_args(argv)
