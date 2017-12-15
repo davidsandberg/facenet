@@ -245,6 +245,7 @@ def train(args, sess, dataset, epoch, image_paths_placeholder, labels_placeholde
         i = 0
         emb_array = np.zeros((nrof_examples, embedding_size))
         loss_array = np.zeros((nrof_triplets,))
+        summary = tf.Summary()
         while i < nrof_batches:
             start_time = time.time()
             batch_size = min(nrof_examples-i*args.batch_size, args.batch_size)
@@ -258,9 +259,9 @@ def train(args, sess, dataset, epoch, image_paths_placeholder, labels_placeholde
             batch_number += 1
             i += 1
             train_time += duration
+            summary.value.add(tag='loss', simple_value=err)
             
         # Add validation loss and accuracy to summary
-        summary = tf.Summary()
         #pylint: disable=maybe-no-member
         summary.value.add(tag='time/selection', simple_value=selection_time)
         summary_writer.add_summary(summary, step)
