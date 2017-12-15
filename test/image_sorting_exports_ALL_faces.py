@@ -5,14 +5,15 @@ from __future__ import print_function
 import argparse
 import os
 import sys
+import json
 
 import numpy as np
-import facenet
-
-import align.detect_face as detect_face
-import tensorflow as tf
-# from PIL import Image
 from scipy import misc as scp_misc
+import tensorflow as tf
+
+import facenet
+import align.detect_face as detect_face
+# from PIL import Image
 
 
 def initialize_mtcnn(gpu_memory_fraction):
@@ -25,7 +26,7 @@ def initialize_mtcnn(gpu_memory_fraction):
 
 
 def align_image(input_image, output_image, pnet, rnet, onet, image_size=182, margin=44, random_order=True,
-                gpu_memory_fraction=1.0, debug=False):
+                gpu_memory_fraction=1.0, debug=False, just_count=False):
     minsize = 20  # minimum size of face
     threshold = [0.7, 0.7, 0.9]  # three steps's threshold
     factor = 0.709  # scale factor
@@ -47,6 +48,10 @@ def align_image(input_image, output_image, pnet, rnet, onet, image_size=182, mar
 
             bounding_boxes, _ = detect_face.detect_face(img, minsize, pnet, rnet, onet, threshold, factor)
             nrof_faces = bounding_boxes.shape[0]
+
+            if just_count == True:
+                return True, nrof_faces
+
             if nrof_faces > 0:
                 det = bounding_boxes[:, 0:4]
                 img_size = np.asarray(img.shape)[0:2]
@@ -87,18 +92,26 @@ def align_image(input_image, output_image, pnet, rnet, onet, image_size=182, mar
 def main(args):
 
     # TODO Check why this was previously being initialised inside the image loop
+    file_to_facecount = dict()
     pnet, rnet, onet = initialize_mtcnn(0.8)
     for filename in os.listdir(args.input_dir):
         input_image = filename
         output_image = filename
 
+        if os.path.isfile(os.path.join(args.input_dir, input_image)) == False:
+            continue
 
         input_image = os.path.join(args.input_dir, input_image)
         output_image = os.path.join(args.output_dir,  output_image)
 
-        align_image(input_image, output_image, pnet, rnet, onet, image_size=args.image_size, margin=args.margin, random_order=args.random_order,
-                      gpu_memory_fraction=args.gpu_memory_fraction, debug=False)
+        _, result = align_image(input_image, output_image, pnet, rnet, onet, image_size=args.image_size, margin=args.margin, random_order=args.random_order,
+                      gpu_memory_fraction=args.gpu_memory_fraction, debug=False, just_count=args.just_count)
 
+        if args.just_count == True:
+            file_to_facecount[filename] = result
+
+    if args.just_count:
+        json.dump(file_to_facecount, open(os.path.join(args.output_dir, args.count_file), "w"))
 
 def parse_arguments(argv):
     parser = argparse.ArgumentParser()
@@ -121,6 +134,12 @@ def parse_arguments(argv):
     parser.add_argument('--no_classes', dest='has_classes', action='store_false',
                         help='Input folder is split into class subfolders, and these should be replicated',
                         default=True)
+    parser.add_argument('--just_count', dest='just_count', action='store_true',
+                        help='Just save out a JSON mapping filenames to counts of faces found',
+                        default=False)
+    parser.add_argument('--count_file', type=str,
+                        help='Where to save counts of faces',
+                        default="face_counts.json")
 
     return parser.parse_args(argv)
 
@@ -128,7 +147,7 @@ if __name__ == "__main__":
     main(parse_arguments(sys.argv[1:]))
 #
 #print(ads)
-#print("bleh")
+#print("bleh"\
 #print(os.listdir(path))
 
 #
