@@ -1,3 +1,5 @@
+Mingling revise 
+
 # Face Recognition using Tensorflow [![Build Status][travis-image]][travis]
 
 [travis-image]: http://travis-ci.org/davidsandberg/facenet.svg?branch=master
@@ -8,6 +10,11 @@ This is a TensorFlow implementation of the face recognizer described in the pape
 
 ## Compatibility
 The code is tested using Tensorflow r1.2 under Ubuntu 14.04 with Python 2.7 and Python 3.5. The test cases can be found [here](https://github.com/davidsandberg/facenet/tree/master/test) and the results can be found [here](http://travis-ci.org/davidsandberg/facenet).
+
+
+
+
+
 
 ## News
 | Date     | Update |
