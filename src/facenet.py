@@ -326,7 +326,8 @@ class ImageClass():
 def get_dataset(path, has_class_directories=True):
     dataset = []
     path_exp = os.path.expanduser(path)
-    classes = os.listdir(path_exp)
+    classes = [path for path in os.listdir(path_exp) \
+                    if os.path.isdir(os.path.join(path_exp, path))]
     classes.sort()
     nrof_classes = len(classes)
     for i in range(nrof_classes):
@@ -396,6 +397,11 @@ def get_model_filenames(model_dir):
     elif len(meta_files)>1:
         raise ValueError('There should not be more than one meta file in the model directory (%s)' % model_dir)
     meta_file = meta_files[0]
+    ckpt = tf.train.get_checkpoint_state(model_dir)
+    if ckpt and ckpt.model_checkpoint_path:
+        ckpt_file = os.path.basename(ckpt.model_checkpoint_path)
+        return meta_file, ckpt_file
+
     meta_files = [s for s in files if '.ckpt' in s]
     max_step = -1
     for f in files:
