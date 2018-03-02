@@ -117,7 +117,8 @@ def main(args):
 
             np.save(args.embeddings_name, emb_array)
             np.save(args.labels_name, label_list)
-            np.save(args.labels_strings_name, label_strings)
+            label_strings = np.array(label_strings)
+            np.save(args.labels_strings_name, label_strings[label_list])
 
 
 def load_and_align_data(image_paths, image_size, margin, gpu_memory_fraction):
