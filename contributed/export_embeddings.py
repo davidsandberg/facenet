@@ -66,7 +66,14 @@ from six.moves import xrange
 def main(args):
     train_set = facenet.get_dataset(args.data_dir)
     image_list, label_list = facenet.get_image_paths_and_labels(train_set)
-    label_strings = [name for name in os.listdir(os.path.expanduser(args.data_dir)) if os.path.isdir(os.path.join(os.path.expanduser(args.data_dir), name))]
+    # fetch the classes (labels as strings) exactly as it's done in get_dataset
+    path_exp = os.path.expanduser(args.data_dir)
+    classes = [path for path in os.listdir(path_exp) \
+               if os.path.isdir(os.path.join(path_exp, path))]
+    classes.sort()
+    # get the label strings
+    label_strings = [name for name in classes if \
+       os.path.isdir(os.path.join(path_exp, name))]
 
     with tf.Graph().as_default():
 
@@ -117,7 +124,8 @@ def main(args):
 
             np.save(args.embeddings_name, emb_array)
             np.save(args.labels_name, label_list)
-            np.save(args.labels_strings_name, label_strings)
+            label_strings = np.array(label_strings)
+            np.save(args.labels_strings_name, label_strings[label_list])
 
 
 def load_and_align_data(image_paths, image_size, margin, gpu_memory_fraction):
