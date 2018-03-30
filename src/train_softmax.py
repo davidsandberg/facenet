@@ -46,6 +46,7 @@ from tensorflow.python.ops import array_ops
 def main(args):
   
     network = importlib.import_module(args.model_def)
+    image_size = (args.image_size, args.image_size)
 
     subdir = datetime.strftime(datetime.now(), '%Y%m%d-%H%M%S')
     log_dir = os.path.join(os.path.expanduser(args.logs_base_dir), subdir)
@@ -101,46 +102,25 @@ def main(args):
         index_dequeue_op = index_queue.dequeue_many(args.batch_size*args.epoch_size, 'index_dequeue')
         
         learning_rate_placeholder = tf.placeholder(tf.float32, name='learning_rate')
-
         batch_size_placeholder = tf.placeholder(tf.int32, name='batch_size')
-        
         phase_train_placeholder = tf.placeholder(tf.bool, name='phase_train')
-        
         image_paths_placeholder = tf.placeholder(tf.string, shape=(None,1), name='image_paths')
-
-        labels_placeholder = tf.placeholder(tf.int64, shape=(None,1), name='labels')
+        labels_placeholder = tf.placeholder(tf.int32, shape=(None,1), name='labels')
+        control_placeholder = tf.placeholder(tf.int32, shape=(None,1), name='control')
         
-        input_queue = data_flow_ops.FIFOQueue(capacity=100000,
-                                    dtypes=[tf.string, tf.int64],
-                                    shapes=[(1,), (1,)],
-                                    shared_name=None, name=None)
-        enqueue_op = input_queue.enqueue_many([image_paths_placeholder, labels_placeholder], name='enqueue_op')
-        
-        nrof_preprocess_threads = 4
         images_and_labels = []
-        for _ in range(nrof_preprocess_threads):
-            filenames, label = input_queue.dequeue()
-            images = []
-            for filename in tf.unstack(filenames):
-                file_contents = tf.read_file(filename)
-                image = tf.image.decode_image(file_contents, channels=3)
-                if args.random_rotate:
-                    image = tf.py_func(facenet.random_rotate_image, [image], tf.uint8)
-                if args.random_crop:
-                    image = tf.random_crop(image, [args.image_size, args.image_size, 3])
-                else:
-                    image = tf.image.resize_image_with_crop_or_pad(image, args.image_size, args.image_size)
-                if args.random_flip:
-                    image = tf.image.random_flip_left_right(image)
-    
-                #pylint: disable=no-member
-                image.set_shape((args.image_size, args.image_size, 3))
-                images.append(tf.image.per_image_standardization(image))
-            images_and_labels.append([images, label])
-    
+        nrof_preprocess_threads = 4
+        
+        input_queue = data_flow_ops.FIFOQueue(capacity=2000000,
+                                    dtypes=[tf.string, tf.int32, tf.int32],
+                                    shapes=[(1,), (1,), (1,)],
+                                    shared_name=None, name=None)
+        enqueue_op = input_queue.enqueue_many([image_paths_placeholder, labels_placeholder, control_placeholder], name='enqueue_op')
+        images_and_labels = facenet.create_input_pipeline(images_and_labels, input_queue, image_size, nrof_preprocess_threads)
+
         image_batch, label_batch = tf.train.batch_join(
             images_and_labels, batch_size=batch_size_placeholder, 
-            shapes=[(args.image_size, args.image_size, 3), ()], enqueue_many=True,
+            shapes=[image_size + (3,), ()], enqueue_many=True,
             capacity=4 * nrof_preprocess_threads * args.batch_size,
             allow_smaller_final_batch=True)
         image_batch = tf.identity(image_batch, 'image_batch')
@@ -215,16 +195,18 @@ def main(args):
                 epoch = step // args.epoch_size
                 # Train for one epoch
                 train(args, sess, epoch, image_list, label_list, index_dequeue_op, enqueue_op, image_paths_placeholder, labels_placeholder,
-                    learning_rate_placeholder, phase_train_placeholder, batch_size_placeholder, global_step, 
-                    total_loss, train_op, summary_op, summary_writer, regularization_losses, args.learning_rate_schedule_file)
+                    learning_rate_placeholder, phase_train_placeholder, batch_size_placeholder, control_placeholder, global_step, 
+                    total_loss, train_op, summary_op, summary_writer, regularization_losses, args.learning_rate_schedule_file,
+                    args.random_rotate, args.random_crop, args.random_flip)
 
                 # Save variables and the metagraph if it doesn't exist already
                 save_variables_and_metagraph(sess, saver, summary_writer, model_dir, subdir, step)
 
                 # Evaluate on LFW
                 if args.lfw_dir:
-                    evaluate(sess, enqueue_op, image_paths_placeholder, labels_placeholder, phase_train_placeholder, batch_size_placeholder, 
-                        embeddings, label_batch, lfw_paths, actual_issame, args.lfw_batch_size, args.lfw_nrof_folds, log_dir, step, summary_writer)
+                    evaluate(sess, enqueue_op, image_paths_placeholder, labels_placeholder, phase_train_placeholder, batch_size_placeholder, control_placeholder, 
+                        embeddings, label_batch, lfw_paths, actual_issame, args.lfw_batch_size, args.lfw_nrof_folds, log_dir, step, summary_writer,
+                        args.lfw_distance_metric, args.lfw_subtract_mean, args.lfw_use_flipped_images)
     return model_dir
   
 def find_threshold(var, percentile):
@@ -259,8 +241,8 @@ def filter_dataset(dataset, data_filename, percentile, min_nrof_images_per_class
     return filtered_dataset
   
 def train(args, sess, epoch, image_list, label_list, index_dequeue_op, enqueue_op, image_paths_placeholder, labels_placeholder, 
-      learning_rate_placeholder, phase_train_placeholder, batch_size_placeholder, global_step, 
-      loss, train_op, summary_op, summary_writer, regularization_losses, learning_rate_schedule_file):
+      learning_rate_placeholder, phase_train_placeholder, batch_size_placeholder, control_placeholder, global_step, 
+      loss, train_op, summary_op, summary_writer, regularization_losses, learning_rate_schedule_file, random_rotate, random_crop, random_flip):
     batch_number = 0
     
     if args.learning_rate>0.0:
@@ -275,7 +257,9 @@ def train(args, sess, epoch, image_list, label_list, index_dequeue_op, enqueue_o
     # Enqueue one epoch of image paths and labels
     labels_array = np.expand_dims(np.array(label_epoch),1)
     image_paths_array = np.expand_dims(np.array(image_epoch),1)
-    sess.run(enqueue_op, {image_paths_placeholder: image_paths_array, labels_placeholder: labels_array})
+    control_value = facenet.RANDOM_ROTATE * random_rotate + facenet.RANDOM_CROP * random_crop + facenet.RANDOM_FLIP * random_flip
+    control_array = np.ones_like(labels_array) * control_value
+    sess.run(enqueue_op, {image_paths_placeholder: image_paths_array, labels_placeholder: labels_array, control_placeholder: control_array})
 
     # Training loop
     train_time = 0
@@ -299,33 +283,51 @@ def train(args, sess, epoch, image_list, label_list, index_dequeue_op, enqueue_o
     summary_writer.add_summary(summary, step)
     return step
 
-def evaluate(sess, enqueue_op, image_paths_placeholder, labels_placeholder, phase_train_placeholder, batch_size_placeholder, 
-        embeddings, labels, image_paths, actual_issame, batch_size, nrof_folds, log_dir, step, summary_writer):
+def evaluate(sess, enqueue_op, image_paths_placeholder, labels_placeholder, phase_train_placeholder, batch_size_placeholder, control_placeholder, 
+        embeddings, labels, image_paths, actual_issame, batch_size, nrof_folds, log_dir, step, summary_writer, distance_metric, subtract_mean, use_flipped_images):
     start_time = time.time()
     # Run forward pass to calculate embeddings
     print('Runnning forward pass on LFW images')
     
     # Enqueue one epoch of image paths and labels
-    labels_array = np.expand_dims(np.arange(0,len(image_paths)),1)
-    image_paths_array = np.expand_dims(np.array(image_paths),1)
-    sess.run(enqueue_op, {image_paths_placeholder: image_paths_array, labels_placeholder: labels_array})
+    nrof_embeddings = len(actual_issame)*2  # nrof_pairs * nrof_images_per_pair
+    nrof_flips = 2 if use_flipped_images else 1
+    nrof_images = nrof_embeddings * nrof_flips
+    labels_array = np.expand_dims(np.arange(0,nrof_images),1)
+    image_paths_array = np.expand_dims(np.repeat(np.array(image_paths),nrof_flips),1)
+    if use_flipped_images:
+        # Flip every second image
+        control_array = (labels_array % 2)*16
+    else:
+        control_array = np.zeros_like(labels_array)
+    sess.run(enqueue_op, {image_paths_placeholder: image_paths_array, labels_placeholder: labels_array, control_placeholder: control_array})
     
-    embedding_size = embeddings.get_shape()[1]
-    nrof_images = len(actual_issame)*2
+    embedding_size = int(embeddings.get_shape()[1])
     assert nrof_images % batch_size == 0, 'The number of LFW images must be an integer multiple of the LFW batch size'
     nrof_batches = nrof_images // batch_size
     emb_array = np.zeros((nrof_images, embedding_size))
     lab_array = np.zeros((nrof_images,))
-    for _ in range(nrof_batches):
+    for i in range(nrof_batches):
         feed_dict = {phase_train_placeholder:False, batch_size_placeholder:batch_size}
         emb, lab = sess.run([embeddings, labels], feed_dict=feed_dict)
         lab_array[lab] = lab
-        emb_array[lab] = emb
-        
+        emb_array[lab, :] = emb
+        if i % 10 == 9:
+            print('.', end='')
+            sys.stdout.flush()
+    print('')
+    embeddings = np.zeros((nrof_embeddings, embedding_size*nrof_flips))
+    if use_flipped_images:
+        # Concatenate embeddings for flipped and non flipped iversion of the images
+        embeddings[:,:embedding_size] = emb_array[0::2,:]
+        embeddings[:,embedding_size:] = emb_array[1::2,:]
+    else:
+        embeddings = emb_array
+
     assert np.array_equal(lab_array, np.arange(nrof_images))==True, 'Wrong labels used for evaluation, possibly caused by training examples left in the input pipeline'
-    _, _, accuracy, val, val_std, far = lfw.evaluate(emb_array, actual_issame, nrof_folds=nrof_folds)
+    _, _, accuracy, val, val_std, far = lfw.evaluate(embeddings, actual_issame, nrof_folds=nrof_folds, distance_metric=distance_metric, subtract_mean=subtract_mean)
     
-    print('Accuracy: %1.3f+-%1.3f' % (np.mean(accuracy), np.std(accuracy)))
+    print('Accuracy: %2.5f+-%2.5f' % (np.mean(accuracy), np.std(accuracy)))
     print('Validation rate: %2.5f+-%2.5f @ FAR=%2.5f' % (val, val_std, far))
     lfw_time = time.time() - start_time
     # Add validation loss and accuracy to summary
@@ -439,6 +441,12 @@ def parse_arguments(argv):
         help='Number of images to process in a batch in the LFW test set.', default=100)
     parser.add_argument('--lfw_nrof_folds', type=int,
         help='Number of folds to use for cross validation. Mainly used for testing.', default=10)
+    parser.add_argument('--lfw_distance_metric', type=int,
+        help='Type of distance metric to use. 0: Euclidian, 1:Cosine similarity distance.', default=0)
+    parser.add_argument('--lfw_use_flipped_images', 
+        help='Concatenates embeddings for the image and its horizontally flipped counterpart.', action='store_true')
+    parser.add_argument('--lfw_subtract_mean', 
+        help='Subtract feature mean before calculating distance.', action='store_true')
     return parser.parse_args(argv)
   
 
