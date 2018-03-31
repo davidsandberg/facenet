@@ -140,8 +140,6 @@ def parse_arguments(argv):
         help='Keep probability of dropout for the fully connected layer(s).', default=1.0)
     parser.add_argument('--weight_decay', type=float,
         help='L2 weight regularization.', default=0.0)
-    parser.add_argument('--decov_loss_factor', type=float,
-        help='DeCov loss factor.', default=0.0)
     parser.add_argument('--center_loss_factor', type=float,
         help='Center loss factor.', default=0.0)
     parser.add_argument('--center_loss_alfa', type=float,
