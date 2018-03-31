@@ -151,7 +151,7 @@ def main(args):
             phase_train=phase_train_placeholder, bottleneck_layer_size=args.embedding_size, 
             weight_decay=args.weight_decay)
         logits = slim.fully_connected(prelogits, len(train_set), activation_fn=None, 
-                weights_initializer=tf.truncated_normal_initializer(stddev=0.1), 
+                weights_initializer=slim.initializers.xavier_initializer(), 
                 weights_regularizer=slim.l2_regularizer(args.weight_decay),
                 scope='Logits', reuse=False)
 
