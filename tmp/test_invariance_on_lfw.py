@@ -41,7 +41,7 @@ import math
 def main(args):
     
     pairs = lfw.read_pairs(os.path.expanduser(args.lfw_pairs))
-    paths, actual_issame = lfw.get_paths(os.path.expanduser(args.lfw_dir), pairs, args.lfw_file_ext)
+    paths, actual_issame = lfw.get_paths(os.path.expanduser(args.lfw_dir), pairs)
     result_dir = '../data/'
     plt.ioff()  # Disable interactive plotting mode
     
@@ -198,8 +198,6 @@ def parse_arguments(argv):
         help='Number of scales to evaluate.', default=21)
     parser.add_argument('--lfw_pairs', type=str,
         help='The file containing the pairs to use for validation.', default='../data/pairs.txt')
-    parser.add_argument('--lfw_file_ext', type=str,
-        help='The file extension for the LFW dataset.', default='png', choices=['jpg', 'png'])
     parser.add_argument('--lfw_dir', type=str,
         help='Path to the data directory containing aligned face patches.', default='~/datasets/lfw/lfw_realigned/')
     parser.add_argument('--orig_image_size', type=int,

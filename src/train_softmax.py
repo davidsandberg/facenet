@@ -38,6 +38,7 @@ import argparse
 import facenet
 import lfw
 import h5py
+import math
 import tensorflow.contrib.slim as slim
 from tensorflow.python.ops import data_flow_ops
 from tensorflow.python.framework import ops
@@ -46,6 +47,7 @@ from tensorflow.python.ops import array_ops
 def main(args):
   
     network = importlib.import_module(args.model_def)
+    image_size = (args.image_size, args.image_size)
 
     subdir = datetime.strftime(datetime.now(), '%Y%m%d-%H%M%S')
     log_dir = os.path.join(os.path.expanduser(args.logs_base_dir), subdir)
@@ -54,6 +56,8 @@ def main(args):
     model_dir = os.path.join(os.path.expanduser(args.models_base_dir), subdir)
     if not os.path.isdir(model_dir):  # Create the model directory if it doesn't exist
         os.makedirs(model_dir)
+
+    stat_file_name = os.path.join(log_dir, 'stat.h5')
 
     # Write arguments to a text file
     facenet.write_arguments_to_file(args, os.path.join(log_dir, 'arguments.txt'))
@@ -64,10 +68,16 @@ def main(args):
 
     np.random.seed(seed=args.seed)
     random.seed(args.seed)
-    train_set = facenet.get_dataset(args.data_dir)
+    dataset = facenet.get_dataset(args.data_dir)
     if args.filter_filename:
-        train_set = filter_dataset(train_set, os.path.expanduser(args.filter_filename), 
+        dataset = filter_dataset(dataset, os.path.expanduser(args.filter_filename), 
             args.filter_percentile, args.filter_min_nrof_images_per_class)
+        
+    if args.validation_set_split_ratio>0.0:
+        train_set, val_set = facenet.split_dataset(dataset, args.validation_set_split_ratio, args.min_nrof_val_images_per_class, 'SPLIT_IMAGES')
+    else:
+        train_set, val_set = dataset, []
+        
     nrof_classes = len(train_set)
     
     print('Model directory: %s' % model_dir)
@@ -82,7 +92,7 @@ def main(args):
         # Read the file containing the pairs used for testing
         pairs = lfw.read_pairs(os.path.expanduser(args.lfw_pairs))
         # Get the paths for the corresponding images
-        lfw_paths, actual_issame = lfw.get_paths(os.path.expanduser(args.lfw_dir), pairs, args.lfw_file_ext)
+        lfw_paths, actual_issame = lfw.get_paths(os.path.expanduser(args.lfw_dir), pairs)
     
     with tf.Graph().as_default():
         tf.set_random_seed(args.seed)
@@ -90,8 +100,10 @@ def main(args):
         
         # Get a list of image paths and their labels
         image_list, label_list = facenet.get_image_paths_and_labels(train_set)
-        assert len(image_list)>0, 'The dataset should not be empty'
+        assert len(image_list)>0, 'The training set should not be empty'
         
+        val_image_list, val_label_list = facenet.get_image_paths_and_labels(val_set)
+
         # Create a queue that produces indices into the image_list and label_list 
         labels = ops.convert_to_tensor(label_list, dtype=tf.int32)
         range_size = array_ops.shape(labels)[0]
@@ -101,54 +113,36 @@ def main(args):
         index_dequeue_op = index_queue.dequeue_many(args.batch_size*args.epoch_size, 'index_dequeue')
         
         learning_rate_placeholder = tf.placeholder(tf.float32, name='learning_rate')
-
         batch_size_placeholder = tf.placeholder(tf.int32, name='batch_size')
-        
         phase_train_placeholder = tf.placeholder(tf.bool, name='phase_train')
-        
         image_paths_placeholder = tf.placeholder(tf.string, shape=(None,1), name='image_paths')
-
-        labels_placeholder = tf.placeholder(tf.int64, shape=(None,1), name='labels')
+        labels_placeholder = tf.placeholder(tf.int32, shape=(None,1), name='labels')
+        control_placeholder = tf.placeholder(tf.int32, shape=(None,1), name='control')
         
-        input_queue = data_flow_ops.FIFOQueue(capacity=100000,
-                                    dtypes=[tf.string, tf.int64],
-                                    shapes=[(1,), (1,)],
-                                    shared_name=None, name=None)
-        enqueue_op = input_queue.enqueue_many([image_paths_placeholder, labels_placeholder], name='enqueue_op')
-        
-        nrof_preprocess_threads = 4
         images_and_labels = []
-        for _ in range(nrof_preprocess_threads):
-            filenames, label = input_queue.dequeue()
-            images = []
-            for filename in tf.unstack(filenames):
-                file_contents = tf.read_file(filename)
-                image = tf.image.decode_image(file_contents, channels=3)
-                if args.random_rotate:
-                    image = tf.py_func(facenet.random_rotate_image, [image], tf.uint8)
-                if args.random_crop:
-                    image = tf.random_crop(image, [args.image_size, args.image_size, 3])
-                else:
-                    image = tf.image.resize_image_with_crop_or_pad(image, args.image_size, args.image_size)
-                if args.random_flip:
-                    image = tf.image.random_flip_left_right(image)
-    
-                #pylint: disable=no-member
-                image.set_shape((args.image_size, args.image_size, 3))
-                images.append(tf.image.per_image_standardization(image))
-            images_and_labels.append([images, label])
-    
+        nrof_preprocess_threads = 4
+        
+        input_queue = data_flow_ops.FIFOQueue(capacity=2000000,
+                                    dtypes=[tf.string, tf.int32, tf.int32],
+                                    shapes=[(1,), (1,), (1,)],
+                                    shared_name=None, name=None)
+        enqueue_op = input_queue.enqueue_many([image_paths_placeholder, labels_placeholder, control_placeholder], name='enqueue_op')
+        images_and_labels = facenet.create_input_pipeline(images_and_labels, input_queue, image_size, nrof_preprocess_threads)
+
         image_batch, label_batch = tf.train.batch_join(
             images_and_labels, batch_size=batch_size_placeholder, 
-            shapes=[(args.image_size, args.image_size, 3), ()], enqueue_many=True,
+            shapes=[image_size + (3,), ()], enqueue_many=True,
             capacity=4 * nrof_preprocess_threads * args.batch_size,
             allow_smaller_final_batch=True)
         image_batch = tf.identity(image_batch, 'image_batch')
         image_batch = tf.identity(image_batch, 'input')
         label_batch = tf.identity(label_batch, 'label_batch')
         
-        print('Total number of classes: %d' % nrof_classes)
-        print('Total number of examples: %d' % len(image_list))
+        print('Number of classes in training set: %d' % nrof_classes)
+        print('Number of examples in training set: %d' % len(image_list))
+
+        print('Number of classes in validation set: %d' % len(val_set))
+        print('Number of examples in validation set: %d' % len(val_image_list))
         
         print('Building training graph')
         
@@ -157,16 +151,20 @@ def main(args):
             phase_train=phase_train_placeholder, bottleneck_layer_size=args.embedding_size, 
             weight_decay=args.weight_decay)
         logits = slim.fully_connected(prelogits, len(train_set), activation_fn=None, 
-                weights_initializer=tf.truncated_normal_initializer(stddev=0.1), 
+                weights_initializer=slim.initializers.xavier_initializer(), 
                 weights_regularizer=slim.l2_regularizer(args.weight_decay),
                 scope='Logits', reuse=False)
 
         embeddings = tf.nn.l2_normalize(prelogits, 1, 1e-10, name='embeddings')
 
+        # Norm for the prelogits
+        eps = 1e-4
+        prelogits_norm = tf.reduce_mean(tf.norm(tf.abs(prelogits)+eps, ord=args.prelogits_norm_p, axis=1))
+        tf.add_to_collection(tf.GraphKeys.REGULARIZATION_LOSSES, prelogits_norm * args.prelogits_norm_loss_factor)
+
         # Add center loss
-        if args.center_loss_factor>0.0:
-            prelogits_center_loss, _ = facenet.center_loss(prelogits, label_batch, args.center_loss_alfa, nrof_classes)
-            tf.add_to_collection(tf.GraphKeys.REGULARIZATION_LOSSES, prelogits_center_loss * args.center_loss_factor)
+        prelogits_center_loss, _ = facenet.center_loss(prelogits, label_batch, args.center_loss_alfa, nrof_classes)
+        tf.add_to_collection(tf.GraphKeys.REGULARIZATION_LOSSES, prelogits_center_loss * args.center_loss_factor)
 
         learning_rate = tf.train.exponential_decay(learning_rate_placeholder, global_step,
             args.learning_rate_decay_epochs*args.epoch_size, args.learning_rate_decay_factor, staircase=True)
@@ -177,6 +175,9 @@ def main(args):
             labels=label_batch, logits=logits, name='cross_entropy_per_example')
         cross_entropy_mean = tf.reduce_mean(cross_entropy, name='cross_entropy')
         tf.add_to_collection('losses', cross_entropy_mean)
+        
+        correct_prediction = tf.cast(tf.equal(tf.argmax(logits, 1), tf.cast(label_batch, tf.int64)), tf.float32)
+        accuracy = tf.reduce_mean(correct_prediction)
         
         # Calculate the total losses
         regularization_losses = tf.get_collection(tf.GraphKeys.REGULARIZATION_LOSSES)
@@ -209,22 +210,63 @@ def main(args):
 
             # Training and validation loop
             print('Running training')
-            epoch = 0
-            while epoch < args.max_nrof_epochs:
+            nrof_steps = args.max_nrof_epochs*args.epoch_size
+            nrof_val_samples = int(math.ceil(args.max_nrof_epochs / args.validate_every_n_epochs))   # Validate every validate_every_n_epochs as well as in the last epoch
+            stat = {
+                'loss': np.zeros((nrof_steps,), np.float32),
+                'center_loss': np.zeros((nrof_steps,), np.float32),
+                'reg_loss': np.zeros((nrof_steps,), np.float32),
+                'xent_loss': np.zeros((nrof_steps,), np.float32),
+                'prelogits_norm': np.zeros((nrof_steps,), np.float32),
+                'accuracy': np.zeros((nrof_steps,), np.float32),
+                'val_loss': np.zeros((nrof_val_samples,), np.float32),
+                'val_xent_loss': np.zeros((nrof_val_samples,), np.float32),
+                'val_accuracy': np.zeros((nrof_val_samples,), np.float32),
+                'lfw_accuracy': np.zeros((args.max_nrof_epochs,), np.float32),
+                'lfw_valrate': np.zeros((args.max_nrof_epochs,), np.float32),
+                'learning_rate': np.zeros((args.max_nrof_epochs,), np.float32),
+                'time_train': np.zeros((args.max_nrof_epochs,), np.float32),
+                'time_validate': np.zeros((args.max_nrof_epochs,), np.float32),
+                'time_evaluate': np.zeros((args.max_nrof_epochs,), np.float32),
+                'prelogits_hist': np.zeros((args.max_nrof_epochs, 1000), np.float32),
+              }
+            for epoch in range(1,args.max_nrof_epochs+1):
                 step = sess.run(global_step, feed_dict=None)
-                epoch = step // args.epoch_size
                 # Train for one epoch
-                train(args, sess, epoch, image_list, label_list, index_dequeue_op, enqueue_op, image_paths_placeholder, labels_placeholder,
-                    learning_rate_placeholder, phase_train_placeholder, batch_size_placeholder, global_step, 
-                    total_loss, train_op, summary_op, summary_writer, regularization_losses, args.learning_rate_schedule_file)
+                t = time.time()
+                cont = train(args, sess, epoch, image_list, label_list, index_dequeue_op, enqueue_op, image_paths_placeholder, labels_placeholder,
+                    learning_rate_placeholder, phase_train_placeholder, batch_size_placeholder, control_placeholder, global_step, 
+                    total_loss, train_op, summary_op, summary_writer, regularization_losses, args.learning_rate_schedule_file,
+                    stat, cross_entropy_mean, accuracy, learning_rate,
+                    prelogits, prelogits_center_loss, args.random_rotate, args.random_crop, args.random_flip, prelogits_norm, args.prelogits_hist_max)
+                stat['time_train'][epoch-1] = time.time() - t
+                
+                if not cont:
+                    break
+                  
+                t = time.time()
+                if len(val_image_list)>0 and ((epoch-1) % args.validate_every_n_epochs == args.validate_every_n_epochs-1 or epoch==args.max_nrof_epochs):
+                    validate(args, sess, epoch, val_image_list, val_label_list, enqueue_op, image_paths_placeholder, labels_placeholder, control_placeholder,
+                        phase_train_placeholder, batch_size_placeholder, 
+                        stat, total_loss, regularization_losses, cross_entropy_mean, accuracy, args.validate_every_n_epochs)
+                stat['time_validate'][epoch-1] = time.time() - t
 
                 # Save variables and the metagraph if it doesn't exist already
-                save_variables_and_metagraph(sess, saver, summary_writer, model_dir, subdir, step)
+                save_variables_and_metagraph(sess, saver, summary_writer, model_dir, subdir, epoch)
 
                 # Evaluate on LFW
+                t = time.time()
                 if args.lfw_dir:
-                    evaluate(sess, enqueue_op, image_paths_placeholder, labels_placeholder, phase_train_placeholder, batch_size_placeholder, 
-                        embeddings, label_batch, lfw_paths, actual_issame, args.lfw_batch_size, args.lfw_nrof_folds, log_dir, step, summary_writer)
+                    evaluate(sess, enqueue_op, image_paths_placeholder, labels_placeholder, phase_train_placeholder, batch_size_placeholder, control_placeholder, 
+                        embeddings, label_batch, lfw_paths, actual_issame, args.lfw_batch_size, args.lfw_nrof_folds, log_dir, step, summary_writer, stat, epoch, 
+                        args.lfw_distance_metric, args.lfw_subtract_mean, args.lfw_use_flipped_images)
+                stat['time_evaluate'][epoch-1] = time.time() - t
+
+                print('Saving statistics')
+                with h5py.File(stat_file_name, 'w') as f:
+                    for key, value in stat.iteritems():
+                        f.create_dataset(key, data=value)
+    
     return model_dir
   
 def find_threshold(var, percentile):
@@ -259,14 +301,19 @@ def filter_dataset(dataset, data_filename, percentile, min_nrof_images_per_class
     return filtered_dataset
   
 def train(args, sess, epoch, image_list, label_list, index_dequeue_op, enqueue_op, image_paths_placeholder, labels_placeholder, 
-      learning_rate_placeholder, phase_train_placeholder, batch_size_placeholder, global_step, 
-      loss, train_op, summary_op, summary_writer, regularization_losses, learning_rate_schedule_file):
+      learning_rate_placeholder, phase_train_placeholder, batch_size_placeholder, control_placeholder, step, 
+      loss, train_op, summary_op, summary_writer, reg_losses, learning_rate_schedule_file, 
+      stat, cross_entropy_mean, accuracy, 
+      learning_rate, prelogits, prelogits_center_loss, random_rotate, random_crop, random_flip, prelogits_norm, prelogits_hist_max):
     batch_number = 0
     
     if args.learning_rate>0.0:
         lr = args.learning_rate
     else:
         lr = facenet.get_learning_rate_from_file(learning_rate_schedule_file, epoch)
+        
+    if lr<=0:
+        return False 
 
     index_epoch = sess.run(index_dequeue_op)
     label_epoch = np.array(label_list)[index_epoch]
@@ -275,57 +322,130 @@ def train(args, sess, epoch, image_list, label_list, index_dequeue_op, enqueue_o
     # Enqueue one epoch of image paths and labels
     labels_array = np.expand_dims(np.array(label_epoch),1)
     image_paths_array = np.expand_dims(np.array(image_epoch),1)
-    sess.run(enqueue_op, {image_paths_placeholder: image_paths_array, labels_placeholder: labels_array})
+    control_value = facenet.RANDOM_ROTATE * random_rotate + facenet.RANDOM_CROP * random_crop + facenet.RANDOM_FLIP * random_flip
+    control_array = np.ones_like(labels_array) * control_value
+    sess.run(enqueue_op, {image_paths_placeholder: image_paths_array, labels_placeholder: labels_array, control_placeholder: control_array})
 
     # Training loop
     train_time = 0
     while batch_number < args.epoch_size:
         start_time = time.time()
         feed_dict = {learning_rate_placeholder: lr, phase_train_placeholder:True, batch_size_placeholder:args.batch_size}
-        if (batch_number % 100 == 0):
-            err, _, step, reg_loss, summary_str = sess.run([loss, train_op, global_step, regularization_losses, summary_op], feed_dict=feed_dict)
-            summary_writer.add_summary(summary_str, global_step=step)
+        tensor_list = [loss, train_op, step, reg_losses, prelogits, cross_entropy_mean, learning_rate, prelogits_norm, accuracy, prelogits_center_loss]
+        if batch_number % 100 == 0:
+            loss_, _, step_, reg_losses_, prelogits_, cross_entropy_mean_, lr_, prelogits_norm_, accuracy_, center_loss_, summary_str = sess.run(tensor_list + [summary_op], feed_dict=feed_dict)
+            summary_writer.add_summary(summary_str, global_step=step_)
         else:
-            err, _, step, reg_loss = sess.run([loss, train_op, global_step, regularization_losses], feed_dict=feed_dict)
+            loss_, _, step_, reg_losses_, prelogits_, cross_entropy_mean_, lr_, prelogits_norm_, accuracy_, center_loss_ = sess.run(tensor_list, feed_dict=feed_dict)
+         
         duration = time.time() - start_time
-        print('Epoch: [%d][%d/%d]\tTime %.3f\tLoss %2.3f\tRegLoss %2.3f' %
-              (epoch, batch_number+1, args.epoch_size, duration, err, np.sum(reg_loss)))
+        stat['loss'][step_-1] = loss_
+        stat['center_loss'][step_-1] = center_loss_
+        stat['reg_loss'][step_-1] = np.sum(reg_losses_)
+        stat['xent_loss'][step_-1] = cross_entropy_mean_
+        stat['prelogits_norm'][step_-1] = prelogits_norm_
+        stat['learning_rate'][epoch-1] = lr_
+        stat['accuracy'][step_-1] = accuracy_
+        stat['prelogits_hist'][epoch-1,:] += np.histogram(np.minimum(np.abs(prelogits_), prelogits_hist_max), bins=1000, range=(0.0, prelogits_hist_max))[0]
+        
+        duration = time.time() - start_time
+        print('Epoch: [%d][%d/%d]\tTime %.3f\tLoss %2.3f\tXent %2.3f\tRegLoss %2.3f\tAccuracy %2.3f\tLr %2.5f\tCl %2.3f' %
+              (epoch, batch_number+1, args.epoch_size, duration, loss_, cross_entropy_mean_, np.sum(reg_losses_), accuracy_, lr_, center_loss_))
         batch_number += 1
         train_time += duration
     # Add validation loss and accuracy to summary
     summary = tf.Summary()
     #pylint: disable=maybe-no-member
     summary.value.add(tag='time/total', simple_value=train_time)
-    summary_writer.add_summary(summary, step)
-    return step
+    summary_writer.add_summary(summary, global_step=step_)
+    return True
 
-def evaluate(sess, enqueue_op, image_paths_placeholder, labels_placeholder, phase_train_placeholder, batch_size_placeholder, 
-        embeddings, labels, image_paths, actual_issame, batch_size, nrof_folds, log_dir, step, summary_writer):
+def validate(args, sess, epoch, image_list, label_list, enqueue_op, image_paths_placeholder, labels_placeholder, control_placeholder,
+             phase_train_placeholder, batch_size_placeholder, 
+             stat, loss, regularization_losses, cross_entropy_mean, accuracy, validate_every_n_epochs):
+  
+    print('Running forward pass on validation set')
+
+    nrof_batches = len(label_list) // args.lfw_batch_size
+    nrof_images = nrof_batches * args.lfw_batch_size
+    
+    # Enqueue one epoch of image paths and labels
+    labels_array = np.expand_dims(np.array(label_list[:nrof_images]),1)
+    image_paths_array = np.expand_dims(np.array(image_list[:nrof_images]),1)
+    control_array = np.zeros_like(labels_array, np.int32)
+    sess.run(enqueue_op, {image_paths_placeholder: image_paths_array, labels_placeholder: labels_array, control_placeholder: control_array})
+
+    loss_array = np.zeros((nrof_batches,), np.float32)
+    xent_array = np.zeros((nrof_batches,), np.float32)
+    accuracy_array = np.zeros((nrof_batches,), np.float32)
+
+    # Training loop
+    start_time = time.time()
+    for i in range(nrof_batches):
+        feed_dict = {phase_train_placeholder:False, batch_size_placeholder:args.lfw_batch_size}
+        loss_, cross_entropy_mean_, accuracy_ = sess.run([loss, cross_entropy_mean, accuracy], feed_dict=feed_dict)
+        loss_array[i], xent_array[i], accuracy_array[i] = (loss_, cross_entropy_mean_, accuracy_)
+        if i % 10 == 9:
+            print('.', end='')
+            sys.stdout.flush()
+    print('')
+
+    duration = time.time() - start_time
+
+    val_index = (epoch-1)//validate_every_n_epochs
+    stat['val_loss'][val_index] = np.mean(loss_array)
+    stat['val_xent_loss'][val_index] = np.mean(xent_array)
+    stat['val_accuracy'][val_index] = np.mean(accuracy_array)
+
+    print('Validation Epoch: %d\tTime %.3f\tLoss %2.3f\tXent %2.3f\tAccuracy %2.3f' %
+          (epoch, duration, np.mean(loss_array), np.mean(xent_array), np.mean(accuracy_array)))
+
+
+def evaluate(sess, enqueue_op, image_paths_placeholder, labels_placeholder, phase_train_placeholder, batch_size_placeholder, control_placeholder, 
+        embeddings, labels, image_paths, actual_issame, batch_size, nrof_folds, log_dir, step, summary_writer, stat, epoch, distance_metric, subtract_mean, use_flipped_images):
     start_time = time.time()
     # Run forward pass to calculate embeddings
     print('Runnning forward pass on LFW images')
     
     # Enqueue one epoch of image paths and labels
-    labels_array = np.expand_dims(np.arange(0,len(image_paths)),1)
-    image_paths_array = np.expand_dims(np.array(image_paths),1)
-    sess.run(enqueue_op, {image_paths_placeholder: image_paths_array, labels_placeholder: labels_array})
+    nrof_embeddings = len(actual_issame)*2  # nrof_pairs * nrof_images_per_pair
+    nrof_flips = 2 if use_flipped_images else 1
+    nrof_images = nrof_embeddings * nrof_flips
+    labels_array = np.expand_dims(np.arange(0,nrof_images),1)
+    image_paths_array = np.expand_dims(np.repeat(np.array(image_paths),nrof_flips),1)
+    if use_flipped_images:
+        # Flip every second image
+        control_array = (labels_array % 2)*16
+    else:
+        control_array = np.zeros_like(labels_array)
+    sess.run(enqueue_op, {image_paths_placeholder: image_paths_array, labels_placeholder: labels_array, control_placeholder: control_array})
     
-    embedding_size = embeddings.get_shape()[1]
-    nrof_images = len(actual_issame)*2
+    embedding_size = int(embeddings.get_shape()[1])
     assert nrof_images % batch_size == 0, 'The number of LFW images must be an integer multiple of the LFW batch size'
     nrof_batches = nrof_images // batch_size
     emb_array = np.zeros((nrof_images, embedding_size))
     lab_array = np.zeros((nrof_images,))
-    for _ in range(nrof_batches):
+    for i in range(nrof_batches):
         feed_dict = {phase_train_placeholder:False, batch_size_placeholder:batch_size}
         emb, lab = sess.run([embeddings, labels], feed_dict=feed_dict)
         lab_array[lab] = lab
-        emb_array[lab] = emb
-        
+        emb_array[lab, :] = emb
+        if i % 10 == 9:
+            print('.', end='')
+            sys.stdout.flush()
+    print('')
+    embeddings = np.zeros((nrof_embeddings, embedding_size*nrof_flips))
+    if use_flipped_images:
+        # Concatenate embeddings for flipped and non flipped iversion of the images
+        embeddings[:,:embedding_size] = emb_array[0::2,:]
+        embeddings[:,embedding_size:] = emb_array[1::2,:]
+    else:
+        embeddings = emb_array
+
     assert np.array_equal(lab_array, np.arange(nrof_images))==True, 'Wrong labels used for evaluation, possibly caused by training examples left in the input pipeline'
-    _, _, accuracy, val, val_std, far = lfw.evaluate(emb_array, actual_issame, nrof_folds=nrof_folds)
+    _, _, accuracy, val, val_std, far = lfw.evaluate(embeddings, actual_issame, nrof_folds=nrof_folds, distance_metric=distance_metric, subtract_mean=subtract_mean)
     
-    print('Accuracy: %1.3f+-%1.3f' % (np.mean(accuracy), np.std(accuracy)))
+    print('Accuracy: %2.5f+-%2.5f' % (np.mean(accuracy), np.std(accuracy)))
     print('Validation rate: %2.5f+-%2.5f @ FAR=%2.5f' % (val, val_std, far))
     lfw_time = time.time() - start_time
     # Add validation loss and accuracy to summary
@@ -337,6 +457,8 @@ def evaluate(sess, enqueue_op, image_paths_placeholder, labels_placeholder, phas
     summary_writer.add_summary(summary, step)
     with open(os.path.join(log_dir,'lfw_result.txt'),'at') as f:
         f.write('%d\t%.5f\t%.5f\n' % (step, np.mean(accuracy), val))
+    stat['lfw_accuracy'][epoch-1] = np.mean(accuracy)
+    stat['lfw_valrate'][epoch-1] = val
 
 def save_variables_and_metagraph(sess, saver, summary_writer, model_dir, model_name, step):
     # Save the model checkpoint
@@ -402,6 +524,12 @@ def parse_arguments(argv):
         help='Center loss factor.', default=0.0)
     parser.add_argument('--center_loss_alfa', type=float,
         help='Center update rate for center loss.', default=0.95)
+    parser.add_argument('--prelogits_norm_loss_factor', type=float,
+        help='Loss based on the norm of the activations in the prelogits layer.', default=0.0)
+    parser.add_argument('--prelogits_norm_p', type=float,
+        help='Norm to use for prelogits norm loss.', default=1.0)
+    parser.add_argument('--prelogits_hist_max', type=float,
+        help='The max value for the prelogits histogram.', default=10.0)
     parser.add_argument('--optimizer', type=str, choices=['ADAGRAD', 'ADADELTA', 'ADAM', 'RMSPROP', 'MOM'],
         help='The optimization algorithm to use', default='ADAGRAD')
     parser.add_argument('--learning_rate', type=float,
@@ -427,18 +555,28 @@ def parse_arguments(argv):
         help='Keep only the percentile images closed to its class center', default=100.0)
     parser.add_argument('--filter_min_nrof_images_per_class', type=int,
         help='Keep only the classes with this number of examples or more', default=0)
+    parser.add_argument('--validate_every_n_epochs', type=int,
+        help='Number of epoch between validation', default=5)
+    parser.add_argument('--validation_set_split_ratio', type=float,
+        help='The ratio of the total dataset to use for validation', default=0.0)
+    parser.add_argument('--min_nrof_val_images_per_class', type=float,
+        help='Classes with fewer images will be removed from the validation set', default=0)
  
     # Parameters for validation on LFW
     parser.add_argument('--lfw_pairs', type=str,
         help='The file containing the pairs to use for validation.', default='data/pairs.txt')
-    parser.add_argument('--lfw_file_ext', type=str,
-        help='The file extension for the LFW dataset.', default='png', choices=['jpg', 'png'])
     parser.add_argument('--lfw_dir', type=str,
         help='Path to the data directory containing aligned face patches.', default='')
     parser.add_argument('--lfw_batch_size', type=int,
         help='Number of images to process in a batch in the LFW test set.', default=100)
     parser.add_argument('--lfw_nrof_folds', type=int,
         help='Number of folds to use for cross validation. Mainly used for testing.', default=10)
+    parser.add_argument('--lfw_distance_metric', type=int,
+        help='Type of distance metric to use. 0: Euclidian, 1:Cosine similarity distance.', default=0)
+    parser.add_argument('--lfw_use_flipped_images', 
+        help='Concatenates embeddings for the image and its horizontally flipped counterpart.', action='store_true')
+    parser.add_argument('--lfw_subtract_mean', 
+        help='Subtract feature mean before calculating distance.', action='store_true')
     return parser.parse_args(argv)
   
 
