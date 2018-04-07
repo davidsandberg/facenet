@@ -36,6 +36,7 @@ import facenet
 import lfw
 import os
 import sys
+import importlib
 from tensorflow.python.ops import data_flow_ops
 from sklearn import metrics
 from scipy.optimize import brentq
@@ -47,20 +48,24 @@ def main(args):
       
         with tf.Session() as sess:
             
+            pretrained_model = '/mnt/big/DeepLearning/models/facenet/20180402-114759/model-20180402-114759.ckpt-275'
+            #pretrained_model = args.model
             # Read the file containing the pairs used for testing
             pairs = lfw.read_pairs(os.path.expanduser(args.lfw_pairs))
 
             # Get the paths for the corresponding images
             paths, actual_issame = lfw.get_paths(os.path.expanduser(args.lfw_dir), pairs)
-            
+
             image_paths_placeholder = tf.placeholder(tf.string, shape=(None,1), name='image_paths')
             labels_placeholder = tf.placeholder(tf.int32, shape=(None,1), name='labels')
             batch_size_placeholder = tf.placeholder(tf.int32, name='batch_size')
-            control_placeholder = tf.placeholder(tf.int32, shape=(None,1), name='control')
             phase_train_placeholder = tf.placeholder(tf.bool, name='phase_train')
+            control_placeholder = tf.placeholder(tf.int32, shape=(None,1), name='control')
  
             nrof_preprocess_threads = 4
             image_size = (args.image_size, args.image_size)
+ 
+             
             eval_input_queue = data_flow_ops.FIFOQueue(capacity=2000000,
                                         dtypes=[tf.string, tf.int32, tf.int32],
                                         shapes=[(1,), (1,), (1,)],
@@ -68,20 +73,29 @@ def main(args):
             eval_enqueue_op = eval_input_queue.enqueue_many([image_paths_placeholder, labels_placeholder, control_placeholder], name='eval_enqueue_op')
             image_batch, label_batch = facenet.create_input_pipeline(eval_input_queue, image_size, nrof_preprocess_threads, batch_size_placeholder)
      
-            # Load the model
-            input_map = {'image_batch': image_batch, 'label_batch': label_batch, 'phase_train': phase_train_placeholder}
-            facenet.load_model(args.model, input_map=input_map)
+            network = importlib.import_module('models.inception_resnet_v1')
+            prelogits, _ = network.inference(image_batch, 1.0, 
+                phase_train=False, bottleneck_layer_size=-1, 
+                bottleneck_layer_activation=tf.nn.relu,
+                weight_decay=0.0)
+     
+     
+            embeddings = tf.nn.l2_normalize(prelogits, 1, 1e-10, name='embeddings')
+             
+ 
+            print('Restoring pretrained model: %s' % pretrained_model)
+            saver = tf.train.Saver(tf.trainable_variables(), max_to_keep=3)
+            saver.restore(sess, pretrained_model)
 
-            # Get output tensor
-            embeddings = tf.get_default_graph().get_tensor_by_name("embeddings:0")
-#              
+            # Import model
+            # Get placeholders
+
             coord = tf.train.Coordinator()
             tf.train.start_queue_runners(coord=coord, sess=sess)
 
             evaluate(sess, eval_enqueue_op, image_paths_placeholder, labels_placeholder, phase_train_placeholder, batch_size_placeholder, control_placeholder,
                 embeddings, label_batch, paths, actual_issame, args.lfw_batch_size, args.lfw_nrof_folds, args.distance_metric, args.subtract_mean,
                 args.use_flipped_images, args.use_fixed_image_standardization)
-
               
 def evaluate(sess, enqueue_op, image_paths_placeholder, labels_placeholder, phase_train_placeholder, batch_size_placeholder, control_placeholder,
         embeddings, labels, image_paths, actual_issame, batch_size, nrof_folds, distance_metric, subtract_mean, use_flipped_images, use_fixed_image_standardization):
