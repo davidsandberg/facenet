@@ -1,0 +1,6 @@
+# Learning rate schedule
+# Maps an epoch number to a learning rate
+0:  0.1
+65: 0.01
+77: 0.001
+1000: 0.0001
