@@ -56,10 +56,10 @@ class TrainTest(unittest.TestCase):
         create_mock_dataset(self.dataset_dir, 160)
         self.lfw_pairs_file = create_mock_lfw_pairs(self.tmp_dir)
         print(self.lfw_pairs_file)
-        self.pretrained_model_name = '20170512-110547'
+        self.pretrained_model_name = '20180402-114759'
         download_and_extract.download_and_extract_file(self.pretrained_model_name, 'data/')
         download_and_extract.download_and_extract_file('lfw-subset', 'data/')
-        self.model_file = os.path.join('data', self.pretrained_model_name, 'model-%s.ckpt-250000' % self.pretrained_model_name)
+        self.model_file = os.path.join('data', self.pretrained_model_name, 'model-%s.ckpt-275' % self.pretrained_model_name)
         self.pretrained_model = os.path.join('data', self.pretrained_model_name)
         self.frozen_graph_filename = os.path.join('data', self.pretrained_model_name+'.pb')
         print('Memory utilization (SetUpClass): %.3f MB' % memory_usage_psutil())
@@ -152,6 +152,7 @@ class TrainTest(unittest.TestCase):
                 '--data_dir', self.dataset_dir,
                 '--model_def', 'models.inception_resnet_v1',
                 '--pretrained_model', self.model_file,
+                '--embedding_size', '512',
                 '--epoch_size', '1',
                 '--max_nrof_epochs', '1',
                 '--batch_size', '6',
