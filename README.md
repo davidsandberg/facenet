@@ -12,7 +12,7 @@ The code is tested using Tensorflow r1.7 under Ubuntu 14.04 with Python 2.7 and 
 ## News
 | Date     | Update |
 |----------|--------|
-| 2018-04-10 | Added new models trained on Casia-WebFace and VGGFace2 (see below). Note that the models uses fixed image standardization (see [wiki](Training-using-the-VGGFace2-dataset)). |
+| 2018-04-10 | Added new models trained on Casia-WebFace and VGGFace2 (see below). Note that the models uses fixed image standardization (see [wiki](https://github.com/davidsandberg/facenet/wiki/Training-using-the-VGGFace2-dataset)). |
 | 2018-03-31 | Added a new, more flexible input pipeline as well as a bunch of minor updates. |
 | 2017-05-13 | Removed a bunch of older non-slim models. Moved the last bottleneck layer into the respective models. Corrected normalization of Center Loss. |
 | 2017-05-06 | Added code to [train a classifier on your own images](https://github.com/davidsandberg/facenet/wiki/Train-a-classifier-on-own-images). Renamed facenet_train.py to train_tripletloss.py and facenet_train_classifier.py to train_softmax.py. |
