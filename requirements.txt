@@ -7,3 +7,6 @@ matplotlib
 Pillow
 requests
 psutil
+pandas
+nltk
+gensim
