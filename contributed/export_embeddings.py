@@ -59,6 +59,7 @@ import os
 import argparse
 import facenet
 import align.detect_face
+import align.utils
 import glob
 
 from six.moves import xrange
@@ -149,12 +150,7 @@ def load_and_align_data(image_paths, image_size, margin, gpu_memory_fraction):
         img_size = np.asarray(img.shape)[0:2]
         bounding_boxes, _ = align.detect_face.detect_face(img, minsize, pnet, rnet, onet, threshold, factor)
         det = np.squeeze(bounding_boxes[0,0:4])
-        bb = np.zeros(4, dtype=np.int32)
-        bb[0] = np.maximum(det[0]-margin/2, 0)
-        bb[1] = np.maximum(det[1]-margin/2, 0)
-        bb[2] = np.minimum(det[2]+margin/2, img_size[1])
-        bb[3] = np.minimum(det[3]+margin/2, img_size[0])
-        cropped = img[bb[1]:bb[3],bb[0]:bb[2],:]
+        cropped, _ = align.utils.crop(img, det, margin)
         aligned = misc.imresize(cropped, (image_size, image_size), interp='bilinear')
         prewhitened = facenet.prewhiten(aligned)
         img_list[i] = prewhitened
@@ -171,9 +167,9 @@ def parse_arguments(argv):
         help='Is the data directory already aligned and cropped?', default=True)
     parser.add_argument('--image_size', type=int,
         help='Image size (height, width) in pixels.', default=160)
-    parser.add_argument('--margin', type=int,
-        help='Margin for the crop around the bounding box (height, width) in pixels.',
-        default=44)
+    parser.add_argument('--margin', type=float,
+        help='Margin for the crop around the bounding box (height, width), as a proportion of the face height/width',
+        default=.4)
     parser.add_argument('--gpu_memory_fraction', type=float,
         help='Upper bound on the amount of GPU memory that will be used by the process.',
         default=1.0)

@@ -38,6 +38,7 @@ import tensorflow as tf
 from scipy import misc
 
 import align.detect_face
+import align.utils
 import facenet
 
 
@@ -120,7 +121,7 @@ class Detection:
     threshold = [0.6, 0.7, 0.7]  # three steps's threshold
     factor = 0.709  # scale factor
 
-    def __init__(self, face_crop_size=160, face_crop_margin=32):
+    def __init__(self, face_crop_size=160, face_crop_margin=0.4):
         self.pnet, self.rnet, self.onet = self._setup_mtcnn()
         self.face_crop_size = face_crop_size
         self.face_crop_margin = face_crop_margin
@@ -142,15 +143,12 @@ class Detection:
             face = Face()
             face.container_image = image
             face.bounding_box = np.zeros(4, dtype=np.int32)
-
-            img_size = np.asarray(image.shape)[0:2]
-            face.bounding_box[0] = np.maximum(bb[0] - self.face_crop_margin / 2, 0)
-            face.bounding_box[1] = np.maximum(bb[1] - self.face_crop_margin / 2, 0)
-            face.bounding_box[2] = np.minimum(bb[2] + self.face_crop_margin / 2, img_size[1])
-            face.bounding_box[3] = np.minimum(bb[3] + self.face_crop_margin / 2, img_size[0])
-            cropped = image[face.bounding_box[1]:face.bounding_box[3], face.bounding_box[0]:face.bounding_box[2], :]
+            cropped, (x0, y0, x1, y1) = align.utils.crop(image, bb, self.face_crop_margin)
+            face.bounding_box[0] = x0
+            face.bounding_box[1] = y0
+            face.bounding_box[2] = x1
+            face.bounding_box[3] = y1
             face.image = misc.imresize(cropped, (self.face_crop_size, self.face_crop_size), interp='bilinear')
-
             faces.append(face)
 
         return faces

@@ -35,6 +35,7 @@ import facenet
 import align.detect_face
 import random
 from time import sleep
+import utils
 
 def main(args):
     sleep(random.random())
@@ -114,13 +115,7 @@ def main(args):
                                 det_arr.append(np.squeeze(det))
 
                             for i, det in enumerate(det_arr):
-                                det = np.squeeze(det)
-                                bb = np.zeros(4, dtype=np.int32)
-                                bb[0] = np.maximum(det[0]-args.margin/2, 0)
-                                bb[1] = np.maximum(det[1]-args.margin/2, 0)
-                                bb[2] = np.minimum(det[2]+args.margin/2, img_size[1])
-                                bb[3] = np.minimum(det[3]+args.margin/2, img_size[0])
-                                cropped = img[bb[1]:bb[3],bb[0]:bb[2],:]
+                                cropped, (x0, y0, x1, y1) = utils.crop(img, np.squeeze(det), args.margin)
                                 scaled = misc.imresize(cropped, (args.image_size, args.image_size), interp='bilinear')
                                 nrof_successfully_aligned += 1
                                 filename_base, file_extension = os.path.splitext(output_filename)
@@ -129,7 +124,7 @@ def main(args):
                                 else:
                                     output_filename_n = "{}{}".format(filename_base, file_extension)
                                 misc.imsave(output_filename_n, scaled)
-                                text_file.write('%s %d %d %d %d\n' % (output_filename_n, bb[0], bb[1], bb[2], bb[3]))
+                                text_file.write('%s %d %d %d %d\n' % (output_filename_n, x0, y0, x1, y1))
                         else:
                             print('Unable to align "%s"' % image_path)
                             text_file.write('%s\n' % (output_filename))
@@ -145,8 +140,8 @@ def parse_arguments(argv):
     parser.add_argument('output_dir', type=str, help='Directory with aligned face thumbnails.')
     parser.add_argument('--image_size', type=int,
         help='Image size (height, width) in pixels.', default=182)
-    parser.add_argument('--margin', type=int,
-        help='Margin for the crop around the bounding box (height, width) in pixels.', default=44)
+    parser.add_argument('--margin', type=float,
+        help='Margin for the crop around the bounding box (height, width), as a proportion of the face height/width', default=.4)
     parser.add_argument('--random_order', 
         help='Shuffles the order of images to enable alignment using multiple processes.', action='store_true')
     parser.add_argument('--gpu_memory_fraction', type=float,
