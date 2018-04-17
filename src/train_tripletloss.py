@@ -28,7 +28,7 @@ from __future__ import division
 from __future__ import print_function
 
 from datetime import datetime
-import os.path
+import os
 import time
 import sys
 import tensorflow as tf
@@ -80,7 +80,7 @@ def main(args):
     
     with tf.Graph().as_default():
         tf.set_random_seed(args.seed)
-        global_step = tf.Variable(0, trainable=False)
+        global_step = tf.Variable(args.starting_global_step, trainable=False)
 
         # Placeholder for the learning rate
         learning_rate_placeholder = tf.placeholder(tf.float32, name='learning_rate')
@@ -426,6 +426,8 @@ def parse_arguments(argv):
         help='Upper bound on the amount of GPU memory that will be used by the process.', default=1.0)
     parser.add_argument('--pretrained_model', type=str,
         help='Load a pretrained model before training starts.')
+    parser.add_argument('--starting_global_step', type=int,
+        help='Start training from a particular global step (useful when using restoring model)', default=0)
     parser.add_argument('--data_dir', type=str,
         help='Path to the data directory containing aligned face patches.',
         default='~/datasets/casia/casia_maxpy_mtcnnalign_182_160')
