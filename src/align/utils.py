@@ -43,8 +43,8 @@ def crop(img, bb, margin):
     x0, y0, x1, y1 = bb[:4]
     margin_height = (y1 - y0) * margin / 2
     margin_width = (x1 - x0) * margin / 2
-    x0 = np.maximum(x0 - margin_width, 0)
-    y0 = np.maximum(y0 - margin_height, 0)
-    x1 = np.minimum(x1 + margin_width, img_width)
-    y1 = np.minimum(y1 + margin_height, img_height)
+    x0 = int(np.maximum(x0 - margin_width, 0))
+    y0 = int(np.maximum(y0 - margin_height, 0))
+    x1 = int(np.minimum(x1 + margin_width, img_width))
+    y1 = int(np.minimum(y1 + margin_height, img_height))
     return  img[y0:y1,x0:x1,:], (x0, y0, x1, y1)

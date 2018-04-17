@@ -35,6 +35,7 @@ import facenet
 import align.detect_face
 import random
 from time import sleep
+import utils
 
 def main(args):
     sleep(random.random())
@@ -114,7 +115,7 @@ def main(args):
                                 det_arr.append(np.squeeze(det))
 
                             for i, det in enumerate(det_arr):
-                                cropped, (x0, y0, x1, y1) = crop(img, np.squeeze(det), args.margin)
+                                cropped, (x0, y0, x1, y1) = utils.crop(img, np.squeeze(det), args.margin)
                                 scaled = misc.imresize(cropped, (args.image_size, args.image_size), interp='bilinear')
                                 nrof_successfully_aligned += 1
                                 filename_base, file_extension = os.path.splitext(output_filename)
