@@ -34,6 +34,7 @@ import sys
 import argparse
 import facenet
 import align.detect_face
+import align.utils
 from sklearn.cluster import DBSCAN
 
 
@@ -129,12 +130,7 @@ def align_data(image_list, image_size, margin, pnet, rnet, onet):
             for i in xrange(nrof_samples):
                 if bounding_boxes[i][4] > 0.95:
                     det = np.squeeze(bounding_boxes[i, 0:4])
-                    bb = np.zeros(4, dtype=np.int32)
-                    bb[0] = np.maximum(det[0] - margin / 2, 0)
-                    bb[1] = np.maximum(det[1] - margin / 2, 0)
-                    bb[2] = np.minimum(det[2] + margin / 2, img_size[1])
-                    bb[3] = np.minimum(det[3] + margin / 2, img_size[0])
-                    cropped = image_list[x][bb[1]:bb[3], bb[0]:bb[2], :]
+                    cropped, _ = align.utils.crop(image_list[x], det, margin)
                     aligned = misc.imresize(cropped, (image_size, image_size), interp='bilinear')
                     prewhitened = facenet.prewhiten(aligned)
                     img_list.append(prewhitened)
@@ -175,8 +171,8 @@ def parse_arguments(argv):
                         help='The output directory where the image clusters will be saved.')
     parser.add_argument('--image_size', type=int,
                         help='Image size (height, width) in pixels.', default=160)
-    parser.add_argument('--margin', type=int,
-                        help='Margin for the crop around the bounding box (height, width) in pixels.', default=44)
+    parser.add_argument('--margin', type=float,
+                        help='Margin for the crop around the bounding box (height, width), as a proportion of the face height/width', default=.4)
     parser.add_argument('--min_cluster_size', type=int,
                         help='The minimum amount of pictures required for a cluster.', default=1)
     parser.add_argument('--cluster_threshold', type=float,
