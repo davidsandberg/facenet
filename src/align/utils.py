@@ -32,6 +32,12 @@ def crop(img, bb, margin):
     margin = float from 0 to 1 for the amount of margin to add, relative to the
         bounding box dimensions (half margin added to each side)
     """
+    
+    if margin < 0:
+        raise ValueError("the margin must be a value between 0 and 1")
+    if margin > 1:
+        raise ValueError("the margin must be a value between 0 and 1 - this is a change from the existing API")
+    
     img_height = img.shape[0]
     img_width = img.shape[1]
     x0, y0, x1, y1 = bb[:4]
