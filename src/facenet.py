@@ -41,6 +41,9 @@ from tensorflow.python.platform import gfile
 import math
 from six import iteritems
 
+os.environ['TF_CPP_MIN_LOG_LEVEL'] = '2'
+
+
 def triplet_loss(anchor, positive, negative, alpha):
     """Calculate the triplet loss according to the FaceNet paper
     
