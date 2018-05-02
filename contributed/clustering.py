@@ -158,7 +158,7 @@ def compute_facial_encodings(sess,images_placeholder,embeddings,phase_train_plac
         return them. If no faces, or more than one face found, return nothing for that image.
 
         Inputs:
-            image_paths: a list of image paths
+            paths: a list of image paths
 
         Outputs:
             facial_encodings: (image_path, facial_encoding) dictionary of facial encodings
