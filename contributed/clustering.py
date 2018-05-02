@@ -239,7 +239,6 @@ def main(args):
             facial_encodings = compute_facial_encodings(sess,images_placeholder,embeddings,phase_train_placeholder,image_size,
                 embedding_size,nrof_images,nrof_batches,emb_array,args.batch_size,image_paths)
             sorted_clusters = cluster_facial_encodings(facial_encodings)
-            num_cluster = len(sorted_clusters)
                 
             # Copy image files to cluster folders
             for idx, cluster in enumerate(sorted_clusters):
