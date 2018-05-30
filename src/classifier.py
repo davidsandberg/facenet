@@ -92,7 +92,7 @@ def main(args):
             if (args.mode=='TRAIN'):
                 # Train classifier
                 print('Training classifier')
-                model = SVC(kernel='linear', probability=True)
+                model = SVC(kernel='rbf', probability=True, decision_function_shape='ovo')
                 model.fit(emb_array, labels)
             
                 # Create a list of class names
