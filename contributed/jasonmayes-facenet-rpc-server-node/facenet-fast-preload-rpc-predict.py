@@ -1,3 +1,10 @@
+#----------------------------------------------------
+#  jasonmayes-facenet-rpc-server-node
+#  By Jason Mayes 2018
+#  www.jasonmayes.com
+#  Github: https://github.com/jasonmayes/facenet
+#----------------------------------------------------
+
 from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
