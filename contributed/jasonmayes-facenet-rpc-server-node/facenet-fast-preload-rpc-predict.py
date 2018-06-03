@@ -1,5 +1,5 @@
 #----------------------------------------------------
-#  jasonmayes-facenet-rpc-server-node
+#  jasonmayes-facenet-precached-rpc-server
 #  By Jason Mayes 2018
 #  www.jasonmayes.com
 #  Github: https://github.com/jasonmayes/facenet
