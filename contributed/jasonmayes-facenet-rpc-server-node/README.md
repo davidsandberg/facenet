@@ -15,10 +15,11 @@ I decided to rewrite this to be optimised for web servers such as those running 
 
 Please ensure you change the commented variables near the top of the file to point to files on your system. Namely these are:
 
+```python
 MODEL = "/path/to/model.pb"
 CLASSIFIER_FILENAME = "/path/to/your/classifier.pkl"
 preload_image = "/path/to/some/image.jpg"
-
+```
 The preload_image is needed with some dummy jpg with a face to set the system up once before you make any RPC calls to the Python RPC server.
 
 
@@ -26,8 +27,9 @@ The preload_image is needed with some dummy jpg with a face to set the system up
 
 Ensure you change the following variable to a JPG you want to classify:
 
+```javascript
 var JPG_FILE = '/path/to/file.jpg';
-
+```
 Assuming the Python RPC server is running already and has printed out "Initiation complete" you can now use the example code to make RPC calls to Python from Node.js and it should be pretty fast - I am getting way under 100ms for a classification on a vanilla CPU instance on Google Compute Engine.
 
 Please note that to run this you need to install zerorpc for node - which may need you to compile from source as I had issues using the NPM version. Once that is installed though all should work fine :-)
