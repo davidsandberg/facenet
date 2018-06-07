@@ -257,8 +257,14 @@ def main(args):
 
                 print('Saving statistics')
                 with h5py.File(stat_file_name, 'w') as f:
-                    for key, value in stat.iteritems():
-                        f.create_dataset(key, data=value)
+                    # Python 2 code
+                    if sys.version_info[0] == 2:
+                        for key, value in stat.iteritems():
+                            f.create_dataset(key, data=value)
+                    # Python 3 code
+                    else:
+                        for key, value in stat.items():
+                            f.create_dataset(key, data=value)
     
     return model_dir
   
