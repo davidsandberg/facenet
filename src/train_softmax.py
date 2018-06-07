@@ -39,6 +39,7 @@ import facenet
 import lfw
 import h5py
 import math
+import six
 import tensorflow.contrib.slim as slim
 from tensorflow.python.ops import data_flow_ops
 from tensorflow.python.framework import ops
@@ -257,8 +258,14 @@ def main(args):
 
                 print('Saving statistics')
                 with h5py.File(stat_file_name, 'w') as f:
-                    for key, value in stat.iteritems():
-                        f.create_dataset(key, data=value)
+                    # Python 2 code
+                    if six.PY2:
+                        for key, value in stat.iteritems():
+                            f.create_dataset(key, data=value)
+                    # Python 3 code
+                    else:
+                        for key, value in stat.items():
+                            f.create_dataset(key, data=value)
     
     return model_dir
   
