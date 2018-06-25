@@ -511,8 +511,8 @@ def calculate_val_far(threshold, dist, actual_issame):
     false_accept = np.sum(np.logical_and(predict_issame, np.logical_not(actual_issame)))
     n_same = np.sum(actual_issame)
     n_diff = np.sum(np.logical_not(actual_issame))
-    val = float(true_accept) / float(n_same)
-    far = float(false_accept) / float(n_diff)
+    val = float(true_accept) / float(n_same) if n_same != 0 else 0
+    far = float(false_accept) / float(n_diff) if n_diff != 0 else 0
     return val, far
 
 def store_revision_info(src_path, output_dir, arg_string):
