@@ -93,7 +93,8 @@ def main(args):
                             img = facenet.to_rgb(img)
                         img = img[:,:,0:3]
     
-                        bounding_boxes, _ = align.detect_face.detect_face(img, minsize, pnet, rnet, onet, threshold, factor)
+                        bounding_boxes, points = align.detect_face.detect_face(img, minsize, pnet, rnet, onet,
+                                                                               threshold, factor)
                         nrof_faces = bounding_boxes.shape[0]
                         if nrof_faces>0:
                             det = bounding_boxes[:,0:4]
@@ -129,7 +130,18 @@ def main(args):
                                 else:
                                     output_filename_n = "{}{}".format(filename_base, file_extension)
                                 misc.imsave(output_filename_n, scaled)
-                                text_file.write('%s %d %d %d %d\n' % (output_filename_n, bb[0], bb[1], bb[2], bb[3]))
+                                if args.output_landmarks:
+                                    text_file.write('%s %d %d %d %d %d %d %d %d %d %d %d %d %d %d\n' %
+                                                    (output_filename_n, bb[0], bb[1], bb[2], bb[3],
+                                                     points[0][i], points[5][i],  # left eye (x, y)
+                                                     points[1][i], points[6][i],  # right eye
+                                                     points[2][i], points[7][i],  # nose
+                                                     points[3][i], points[8][i],  # left mouth corner
+                                                     points[4][i], points[9][i])  # right mouth corner
+                                                    )
+                                else:
+                                    text_file.write('%s %d %d %d %d\n' %
+                                                    (output_filename_n, bb[0], bb[1], bb[2], bb[3]))
                         else:
                             print('Unable to align "%s"' % image_path)
                             text_file.write('%s\n' % (output_filename))
@@ -144,15 +156,23 @@ def parse_arguments(argv):
     parser.add_argument('input_dir', type=str, help='Directory with unaligned images.')
     parser.add_argument('output_dir', type=str, help='Directory with aligned face thumbnails.')
     parser.add_argument('--image_size', type=int,
-        help='Image size (height, width) in pixels.', default=182)
+                        help='Image size (height, width) in pixels.', default=182)
     parser.add_argument('--margin', type=int,
-        help='Margin for the crop around the bounding box (height, width) in pixels.', default=44)
+                        help='Margin for the crop around the bounding box (height, width) in pixels.', default=44)
     parser.add_argument('--random_order', 
-        help='Shuffles the order of images to enable alignment using multiple processes.', action='store_true')
+                        help='Shuffles the order of images to enable alignment using multiple processes.',
+                        action='store_true')
     parser.add_argument('--gpu_memory_fraction', type=float,
-        help='Upper bound on the amount of GPU memory that will be used by the process.', default=1.0)
+                        help='Upper bound on the amount of GPU memory that will be used by the process.', default=1.0)
     parser.add_argument('--detect_multiple_faces', type=bool,
                         help='Detect and align multiple faces per image.', default=False)
+    parser.add_argument('--output_landmarks', type=bool,
+                        help='Write out the landmark coordinates in addition to the bounding box coordinates. '
+                             '(x, y) coordinates are in the following order: '
+                             'upper left bounding box, lower right bounding box, '
+                             'left eye, right eye, nose, left mouth center, right mouth center.',
+
+                        default=False)
     return parser.parse_args(argv)
 
 if __name__ == '__main__':
