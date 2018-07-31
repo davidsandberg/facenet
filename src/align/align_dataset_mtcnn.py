@@ -171,7 +171,6 @@ def parse_arguments(argv):
                              '(x, y) coordinates are in the following order: '
                              'upper left bounding box, lower right bounding box, '
                              'left eye, right eye, nose, left mouth center, right mouth center.',
-
                         default=False)
     return parser.parse_args(argv)
 
