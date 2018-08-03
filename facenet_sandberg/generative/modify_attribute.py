@@ -32,7 +32,7 @@ import tensorflow as tf
 import sys
 import argparse
 import importlib
-import facenet
+from facenet_sandberg import facenet
 import os
 import numpy as np
 import h5py

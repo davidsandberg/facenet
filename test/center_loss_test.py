@@ -23,7 +23,7 @@
 import unittest
 import tensorflow as tf
 import numpy as np
-import facenet
+from facenet_sandberg import facenet
 
 class CenterLossTest(unittest.TestCase):
   

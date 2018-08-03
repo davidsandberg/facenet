@@ -34,7 +34,7 @@ import sys
 import os
 import cv2
 import argparse
-import facenet
+from facenet_sandberg import facenet
 
 
 # File format: text files, each line is an image record containing 6 columns, delimited by TAB.

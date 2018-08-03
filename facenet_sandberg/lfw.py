@@ -29,7 +29,7 @@ from __future__ import print_function
 
 import os
 import numpy as np
-import facenet
+from facenet_sandberg import facenet
 
 def evaluate(embeddings, actual_issame, nrof_folds=10, distance_metric=0, subtract_mean=False):
     # Calculate evaluation metrics

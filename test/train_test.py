@@ -26,7 +26,7 @@ import numpy as np
 import cv2
 import os
 import shutil
-import download_and_extract  # @UnresolvedImport
+from facenet_sandberg import download_and_extract  # @UnresolvedImport
 import subprocess
 
 def memory_usage_psutil():

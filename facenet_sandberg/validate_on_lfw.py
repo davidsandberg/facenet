@@ -32,8 +32,8 @@ from __future__ import print_function
 import tensorflow as tf
 import numpy as np
 import argparse
-import facenet
-import lfw
+from facenet_sandberg import facenet
+from facenet_sandberg import lfw
 import os
 import sys
 from tensorflow.python.ops import data_flow_ops

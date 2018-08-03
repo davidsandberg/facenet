@@ -33,8 +33,8 @@ import sys
 import os
 import copy
 import argparse
-import facenet
-import align.detect_face
+from facenet_sandberg import facenet
+from facenet_sandberg.align import detect_face
 
 def main(args):
 

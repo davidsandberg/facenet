@@ -32,7 +32,7 @@ import sys
 import time
 import importlib
 import argparse
-import facenet
+from facenet_sandberg import facenet
 import numpy as np
 import h5py
 import os

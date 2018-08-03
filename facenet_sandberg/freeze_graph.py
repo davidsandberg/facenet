@@ -32,7 +32,7 @@ import tensorflow as tf
 import argparse
 import os
 import sys
-import facenet
+from facenet_sandberg import facenet
 from six.moves import xrange  # @UnresolvedImport
 
 def main(args):
