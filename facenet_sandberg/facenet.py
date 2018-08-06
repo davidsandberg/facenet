@@ -366,17 +366,12 @@ def load_model(model, input_map=None):
     #  or if it is a protobuf file with a frozen graph
     model_exp = os.path.expanduser(model)
     if (os.path.isfile(model_exp)):
-        print('Model filename: %s' % model_exp)
         with gfile.FastGFile(model_exp,'rb') as f:
             graph_def = tf.GraphDef()
             graph_def.ParseFromString(f.read())
             tf.import_graph_def(graph_def, input_map=input_map, name='')
     else:
-        print('Model directory: %s' % model_exp)
         meta_file, ckpt_file = get_model_filenames(model_exp)
-        
-        print('Metagraph file: %s' % meta_file)
-        print('Checkpoint file: %s' % ckpt_file)
       
         saver = tf.train.import_meta_graph(os.path.join(model_exp, meta_file), input_map=input_map)
         saver.restore(tf.get_default_session(), os.path.join(model_exp, ckpt_file))
