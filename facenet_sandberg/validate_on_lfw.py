@@ -78,13 +78,17 @@ def main(args):
             coord = tf.train.Coordinator()
             tf.train.start_queue_runners(coord=coord, sess=sess)
 
-            evaluate(sess, eval_enqueue_op, image_paths_placeholder, labels_placeholder, phase_train_placeholder, batch_size_placeholder, control_placeholder,
-                embeddings, label_batch, paths, actual_issame, args.lfw_batch_size, args.lfw_nrof_folds, args.distance_metric, args.subtract_mean,
-                args.use_flipped_images, args.use_fixed_image_standardization)
+            evaluate(sess, eval_enqueue_op, image_paths_placeholder, labels_placeholder, 
+                     phase_train_placeholder, batch_size_placeholder, control_placeholder,
+                     embeddings, label_batch, paths, actual_issame, args.lfw_batch_size, 
+                     args.lfw_nrof_folds, args.distance_metric, args.subtract_mean,
+                     args.use_flipped_images, args.use_fixed_image_standardization)
 
-              
-def evaluate(sess, enqueue_op, image_paths_placeholder, labels_placeholder, phase_train_placeholder, batch_size_placeholder, control_placeholder,
-        embeddings, labels, image_paths, actual_issame, batch_size, nrof_folds, distance_metric, subtract_mean, use_flipped_images, use_fixed_image_standardization):
+
+def evaluate(sess, enqueue_op, image_paths_placeholder, labels_placeholder, 
+             phase_train_placeholder, batch_size_placeholder, control_placeholder,
+             embeddings, labels, image_paths, actual_issame, batch_size, nrof_folds, 
+             distance_metric, subtract_mean, use_flipped_images, use_fixed_image_standardization):
     # Run forward pass to calculate embeddings
     print('Runnning forward pass on LFW images')
     
