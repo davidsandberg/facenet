@@ -23,15 +23,19 @@
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 # SOFTWARE.
 
-from __future__ import absolute_import
-from __future__ import division
-from __future__ import print_function
+from __future__ import absolute_import, division, print_function
 
-import os
-import numpy as np
+import argparse
 import glob
-from facenet_sandberg import facenet
+import os
+import sys
+from multiprocessing import Lock, Manager, Pool, Queue, Value
+from multiprocessing.dummy import Pool as ThreadPool
 from pathlib import Path
+
+import numpy as np
+from facenet_sandberg import facenet
+
 
 def evaluate(embeddings, labels, nrof_folds=10, distance_metric=0, subtract_mean=False):
     # Calculate evaluation metrics
@@ -84,34 +88,48 @@ def get_paths(lfw_dir, pairs):
     return path_list, labels
 
 
-def transform_directory_to_lfw_format(image_directory):
+def transform_to_lfw_format(image_directory, num_processes=os.cpu_count()):
     """Transforms an image dataset to lfw format image names.
        Base directory should have a folder per person with the person's name.
     
     Arguments:
         image_directory {str} -- base directory of people folders
     """
-
     all_folders = os.path.join(image_directory, "*", "")
     people_folders = glob.iglob(all_folders)
-    for person_folder in people_folders:
-        all_image_paths = glob.glob(person_folder)
-        person_name = os.path.basename(os.path.normpath(person_folder))
-        for index, image_path in enumerate(all_image_paths):
-            new_name = '_'.join(person_name.split()) 
-            file_ext = Path(image_path).suffix
-            os.rename(image_path, new_name + file_ext)
+    process_pool = Pool(num_processes)
+    process_pool.imap(rename, people_folders)
+    process_pool.close()
+    process_pool.join()
+
+
+def rename(person_folder):
+    """Renames all the images in a folder in lfw format
+    
+    Arguments:
+        person_folder {str} -- path to folder named after person
+    """
+
+    all_image_paths = glob.glob(os.path.join(person_folder, "*"))
+    person_name = os.path.basename(os.path.normpath(person_folder))
+    concat_name = '_'.join(person_name.split())
+    for index, image_path in enumerate(all_image_paths):
+        image_name = concat_name + '_' + '%04d' % (index + 1)
+        file_ext = Path(image_path).suffix
+        new_image_path = os.path.join(person_folder, image_name + file_ext)
+        os.rename(image_path, new_image_path)
+    os.rename(person_folder, person_folder.replace(person_name, concat_name))
 
 
 def add_extension(path):
     """Adds a image file extension to the path if it exists
-    
+
     Arguments:
         path {str} -- base path to image file 
-    
+
     Raises:
         RuntimeError -- [description]
-    
+
     Returns:
         str -- base path plus image file extension
     """
@@ -144,4 +162,21 @@ def read_pairs(pairs_filename):
     return np.array(pairs)
 
 
+def parse_arguments(argv):
+    """Argument parser
+    """
 
+    parser = argparse.ArgumentParser()
+
+    parser.add_argument(
+        'image_directory',
+        type=str,
+        help='Path to the data directory containing images to fix names')
+
+    return parser.parse_args(argv)
+
+
+if __name__ == '__main__':
+    args = parse_arguments(sys.argv[1:])
+    if args:
+        transform_to_lfw_format(args.image_directory)
