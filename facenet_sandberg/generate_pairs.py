@@ -21,8 +21,8 @@ def make_matches(image_dir:str , people: List[str], total_matches: int) -> List[
         if len(images) > 1:
             img1, img2 = sorted(
                 [
-                    int(''.join([i for i in random.choice(images) if i.isnumeric() and i != '0'])),
-                    int(''.join([i for i in random.choice(images) if i.isnumeric() and i != '0']))
+                    int(''.join([i for i in random.choice(images) if i.isnumeric()]).lstrip('0')),
+                    int(''.join([i for i in random.choice(images) if i.isnumeric()]).lstrip('0'))
                 ]
             )
             match = (person, img1, img2)
@@ -42,8 +42,8 @@ def make_mismatches(image_dir: str, people: List[str], total_matches: int) -> Li
             person2_images = os.listdir(os.path.join(image_dir, person2))
 
             if person1_images and person2_images:
-                img1 = int(''.join([i for i in random.choice(person1_images) if i.isnumeric() and i != '0']))
-                img2 = int(''.join([i for i in random.choice(person2_images) if i.isnumeric() and i != '0']))
+                img1 = int(''.join([i for i in random.choice(person1_images) if i.isnumeric()]).lstrip('0'))
+                img2 = int(''.join([i for i in random.choice(person2_images) if i.isnumeric()]).lstrip('0'))
 
             if person1.lower() > person2.lower():
                 person1, img1, person2, img2 = person2, img2, person1, img1
