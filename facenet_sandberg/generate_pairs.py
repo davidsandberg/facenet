@@ -8,7 +8,7 @@ import numpy as np
 from typing import List, Tuple
 
 def split_people_into_sets(image_dir: str, k_num_sets: int) -> List[List[str]]:
-    names = os.listdir(image_dir)
+    names = [d for d in os.listdir(image_dir) if os.path.isdir(os.path.join(image_dir, d))]
     random.shuffle(names)
     return [list(arr) for arr in np.array_split(names, k_num_sets)]
 
