@@ -15,8 +15,8 @@ from facenet_sandberg.align import align_dataset_mtcnn, detect_face
 from mtcnn.mtcnn import MTCNN
 from scipy import misc
 
-debug = False
-
+os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
+tf.logging.set_verbosity(tf.logging.ERROR)
 
 class Face:
     """Class representing a single face
@@ -72,37 +72,79 @@ class Identifier:
 
     @staticmethod
     def download_image(url: str) -> np.ndarray:
-        """Downloads an image from the url as a cv2 image
+        """Downloads an image from the url as a numpy array (opencv format)
 
         Arguments:
             url {str} -- url of image
 
         Returns:
-            cv2 image -- image array
+            np.ndarray -- array representing image
         """
 
         req = urlopen(url)
         arr = np.asarray(bytearray(req.read()), dtype=np.uint8)
         image = cv2.imdecode(arr, -1)
-        return image
+        return Identifier.fix_image(image)
 
     @staticmethod
     def get_image_from_path(image_path: str) -> np.ndarray:
-        return cv2.imread(image_path)
+        """Reads an image path to a numpy array (opencv format)
+        
+        Arguments:
+            image_path {str} -- path to image
+        
+        Returns:
+            np.ndarray -- array representing image
+        """
+
+        return Identifier.fix_image(cv2.imread(image_path))
 
     @staticmethod
     def get_images_from_dir(
             directory: str, recursive: bool) -> Generator[np.ndarray, None, None]:
+        """Gets images in a directory
+        
+        Arguments:
+            directory {str} -- path to directory
+            recursive {bool} -- if True searches all subfolders for images.
+                                else searches for images in folder only.
+        
+        Returns:
+            Generator[np.ndarray, None, None] -- generator of images
+        """
+
         if recursive:
             image_paths = iglob(os.path.join(
                 directory, '**', '*.*'), recursive=recursive)
         else:
             image_paths = iglob(os.path.join(directory, '*.*'))
         for image_path in image_paths:
-            yield cv2.imread(image_path)
+            yield Identifier.fix_image(cv2.imread(image_path))
+    
+    @staticmethod
+    def fix_image(image: np.ndarray):
+        if image.ndim < 2:
+            image = image[:, :, np.newaxis]
+        if image.ndim == 2:
+            image = facenet.to_rgb(image)
+        image = image[:, :, 0:3]
+        return image
 
     def vectorize(self, image: np.ndarray,
                   face_limit: int = 5) -> List[np.ndarray]:
+        """Gets face embeddings in a single image
+        
+        Arguments:
+            image {np.ndarray} -- Image to find embeddings 
+        
+        Keyword Arguments:
+            face_limit {int} -- max number of faces allowed 
+                                before image is discarded. (default: {5})
+        
+        Returns:
+            List[np.ndarray] -- list of embeddings
+        """
+
         faces: List[Face] = self.detect_encode(image, face_limit)
         vectors = [face.embedding for face in faces]
         return vectors
@@ -114,6 +156,20 @@ class Identifier:
                       face_limit: int = 5) -> Generator[List[np.ndarray],
                                                         None,
                                                         None]:
+        """Gets face embeddings from a generator of images
+        
+        Arguments:
+            image {np.ndarray} -- Image to find embeddings 
+        
+        Keyword Arguments:
+            face_limit {int} -- max number of faces allowed 
+                                before image is discarded. (default: {5})
+        
+        Returns:
+            Generator[List[np.ndarray]]-- generator of lists of images found in
+                                          each photo
+        """
+
         all_faces: Generator[List[Face], None, None] = self.detect_encode_all(
             images=images, save_memory=True, face_limit=face_limit)
         vectors: Generator[List[np.ndarray], None, None] = (
@@ -125,12 +181,12 @@ class Identifier:
         """Detects faces in an image and encodes them
 
         Arguments:
-            image {cv2 image (np array)} -- image to find faces and encode
+            image {np.ndarray} -- image to find faces and encode
             face_limit {int} -- Maximum # of faces allowed in image.
                                 If over limit returns empty list
 
         Returns:
-            Face[] -- list of Face objects with embeddings attached
+            List[Face] -- list of Face objects with embeddings attached
         """
 
         faces: List[Face] = self.detector.find_faces(image, face_limit)
@@ -160,7 +216,7 @@ class Identifier:
                                   of refference to the original image like a url. (default: {False})
 
         Returns:
-            Face[] -- List of Face objects with
+            Generator[List[Face]] -- Generator of lists of Face objects in each image
         """
 
         all_faces: Generator[List[Face], None, None] = self.detector.bulk_find_face(
@@ -182,7 +238,7 @@ class Identifier:
             distance_metric {int} -- 0 for Euclidian distance and 1 for Cosine similarity (default: {0})
 
         Returns:
-            bool, float -- returns True if match and distance
+            (bool, float) -- returns True if match and distance
         """
 
         distance = facenet.distance(embedding_1.reshape(
@@ -303,19 +359,22 @@ class Encoder:
         Returns:
             Faces with embeddings
         """
-
-        for faces in all_faces:
-            prewhitened_images = [facenet.prewhiten(
-                face.image) for face in faces]
+        # import pdb;pdb.set_trace()
+        face_list: List[List[Face]] = list(all_faces)
+        prewhitened_images = [facenet.prewhiten(face.image) for faces in face_list for face in faces]
+        if face_list:
             feed_dict = {self.images_placeholder: prewhitened_images,
-                         self.phase_train_placeholder: False}
+                            self.phase_train_placeholder: False}
             embed_array = self.sess.run(self.embeddings, feed_dict=feed_dict)
-            for index, face in enumerate(faces):
-                if save_memory:
-                    face.image = None
-                    face.container_image = None
-                face.embedding = embed_array[index]
-            yield faces
+            index = 0 
+            for faces in face_list:
+                for face in faces:
+                    if save_memory:
+                        face.image = None
+                        face.container_image = None
+                    face.embedding = embed_array[index]
+                    index+=1
+                yield faces
 
     def tear_down(self):
         if tf.get_default_session():

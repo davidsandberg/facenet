@@ -34,9 +34,13 @@ from typing import List
 
 import numpy as np
 import progressbar as pb
+import tensorflow as tf
 from facenet_sandberg import face, facenet
 from pathos.multiprocessing import ProcessPool
 from scipy import misc
+
+os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
+tf.logging.set_verbosity(tf.logging.ERROR)
 
 
 def main(
