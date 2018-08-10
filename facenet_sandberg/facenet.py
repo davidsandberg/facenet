@@ -302,8 +302,8 @@ def get_learning_rate_from_file(filename, epoch):
                 else:
                     return learning_rate
 
-class ImageClass():
-    "Stores the paths to images for a given class"
+class PersonClass():
+    "Stores the paths to images for a given person"
     def __init__(self, name, image_paths):
         self.name = name
         self.image_paths = image_paths
@@ -317,15 +317,15 @@ class ImageClass():
 def get_dataset(path, has_class_directories=True):
     dataset = []
     path_exp = os.path.expanduser(path)
-    classes = [path for path in os.listdir(path_exp) \
+    people = [path for path in os.listdir(path_exp) \
                     if os.path.isdir(os.path.join(path_exp, path))]
-    classes.sort()
-    nrof_classes = len(classes)
-    for i in range(nrof_classes):
-        class_name = classes[i]
-        facedir = os.path.join(path_exp, class_name)
+    people.sort()
+    num_people = len(people)
+    for i in range(num_people):
+        person_name = people[i]
+        facedir = os.path.join(path_exp, person_name)
         image_paths = get_image_paths(facedir)
-        dataset.append(ImageClass(class_name, image_paths))
+        dataset.append(PersonClass(person_name, image_paths))
   
     return dataset
 
@@ -355,8 +355,8 @@ def split_dataset(dataset, split_ratio, min_nrof_images_per_class, mode):
             if split==nrof_images_in_class:
                 split = nrof_images_in_class-1
             if split>=min_nrof_images_per_class and nrof_images_in_class-split>=1:
-                train_set.append(ImageClass(cls.name, paths[:split]))
-                test_set.append(ImageClass(cls.name, paths[split:]))
+                train_set.append(PersonClass(cls.name, paths[:split]))
+                test_set.append(PersonClass(cls.name, paths[split:]))
     else:
         raise ValueError('Invalid train/test split mode "%s"' % mode)
     return train_set, test_set

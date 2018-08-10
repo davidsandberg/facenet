@@ -130,8 +130,8 @@ def split_dataset(dataset, min_nrof_images_per_class, nrof_train_images_per_clas
         # Remove classes with less than min_nrof_images_per_class
         if len(paths)>=min_nrof_images_per_class:
             np.random.shuffle(paths)
-            train_set.append(facenet.ImageClass(cls.name, paths[:nrof_train_images_per_class]))
-            test_set.append(facenet.ImageClass(cls.name, paths[nrof_train_images_per_class:]))
+            train_set.append(facenet.PersonClass(cls.name, paths[:nrof_train_images_per_class]))
+            test_set.append(facenet.PersonClass(cls.name, paths[nrof_train_images_per_class:]))
     return train_set, test_set
 
             
