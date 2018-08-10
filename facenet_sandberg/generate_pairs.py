@@ -45,13 +45,13 @@ def make_mismatches(image_dir: str, people: List[str], total_matches: int) -> Li
                 img1 = int(''.join([i for i in random.choice(person1_images) if i.isnumeric()]).lstrip('0'))
                 img2 = int(''.join([i for i in random.choice(person2_images) if i.isnumeric()]).lstrip('0'))
 
-            if person1.lower() > person2.lower():
-                person1, img1, person2, img2 = person2, img2, person1, img1
-            
-            mismatch = (person1, img1, person2, img2)
-            if mismatch not in mismatches:
-                mismatches.append(mismatch)
-                curr_matches += 1
+                if person1.lower() > person2.lower():
+                    person1, img1, person2, img2 = person2, img2, person1, img1
+
+                mismatch = (person1, img1, person2, img2)
+                if mismatch not in mismatches:
+                    mismatches.append(mismatch)
+                    curr_matches += 1
     return sorted(mismatches, key=lambda x: x[0].lower())
 
 def write_pairs(fname: str, match_sets: List[List[Tuple[str, int, int]]], mismatch_sets: List[List[Tuple[str, int, str, int]]], k_num_sets: int, total_matches_mismatches: int) -> None:
@@ -60,19 +60,20 @@ def write_pairs(fname: str, match_sets: List[List[Tuple[str, int, int]]], mismat
         for match in match_set:
             file_contents += f'{match[0]}\t{match[1]}\t{match[2]}\n'
         for mismatch in mismatch_set:
-            file_contents += f'{mismatch[0]}\t{mismatch[1]}\t{mismatch[2]}\t{mismatch[3]}\n' 
+            file_contents += f'{mismatch[0]}\t{mismatch[1]}\t{mismatch[2]}\t{mismatch[3]}\n'
 
     with open(fname, 'w') as fpairs:
         fpairs.write(file_contents)
 
 if __name__ == '__main__':
     k_num_sets = 10
-    total_matches_mismatches = 100
-    image_dir = os.path.join(
-                    os.path.dirname(
-                        os.path.abspath(__file__)
-                    ), 
-                'images')
+    total_matches_mismatches = 15
+    #image_dir = os.path.join(
+    #                os.path.dirname(
+    #                    os.path.abspath(__file__)
+    #                ),
+    #            'images')
+    image_dir = '/home/miperel/redcross/facenet/datasets/lfw/raw_mtcnn'
 
     people_lists = split_people_into_sets(image_dir, k_num_sets)
     matches = []
@@ -80,6 +81,6 @@ if __name__ == '__main__':
     for people in people_lists:
         matches.append(make_matches(image_dir, people, total_matches_mismatches))
         mismatches.append(make_mismatches(image_dir, people, total_matches_mismatches))
-    
-    fname = 'new_pairs.txt'
+
+    fname = '/home/miperel/redcross/facenet/data/pairs.txt'
     write_pairs(fname, matches, mismatches, k_num_sets, total_matches_mismatches)
