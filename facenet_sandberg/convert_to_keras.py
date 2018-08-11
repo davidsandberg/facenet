@@ -15,11 +15,12 @@ def main(tf_ckpt_path, output_base_path, output_model_name):
     weights_filename = output_model_name + '_weights.h5'
     model_filename = output_model_name + '.h5'
 
-    npy_weights_dir, weights_dir, model_dir = create_output_directories(output_base_path)
+    npy_weights_dir, weights_dir, model_dir = create_output_directories(
+        output_base_path)
 
     extract_tensors_from_checkpoint_file(tf_ckpt_path, npy_weights_dir)
     model = InceptionResNetV1()
-    
+
     print('Loading numpy weights from', npy_weights_dir)
     for layer in model.layers:
         if layer.weights:
@@ -27,7 +28,10 @@ def main(tf_ckpt_path, output_base_path, output_model_name):
             for w in layer.weights:
                 weight_name = os.path.basename(w.name).replace(':0', '')
                 weight_file = layer.name + '_' + weight_name + '.npy'
-                weight_arr = np.load(os.path.join(npy_weights_dir, weight_file))
+                weight_arr = np.load(
+                    os.path.join(
+                        npy_weights_dir,
+                        weight_file))
                 weights.append(weight_arr)
             layer.set_weights(weights)
 
@@ -76,7 +80,8 @@ def extract_tensors_from_checkpoint_file(filename, output_folder):
         if 'AuxLogit' in key:
             continue
 
-        # convert tensor name into the corresponding Keras layer weight name and save
+        # convert tensor name into the corresponding Keras layer weight name
+        # and save
         path = os.path.join(output_folder, get_filename(key))
         arr = reader.get_tensor(key)
         np.save(path, arr)
@@ -92,12 +97,12 @@ def parse_arguments(argv):
         'tf_ckpt_path',
         type=str,
         help='Path to the directory containing pretrained tensorflow checkpoints.')
-    
+
     parser.add_argument(
         'output_base_path',
         type=str,
         help='Base path for the desired output directory.')
-    
+
     parser.add_argument(
         'output_model_name',
         type=str,

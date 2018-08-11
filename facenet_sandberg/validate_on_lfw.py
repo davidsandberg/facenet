@@ -143,8 +143,8 @@ def evaluate(
         use_flipped_images,
         use_fixed_image_standardization):
     # Run forward pass to calculate embeddings
-    widgets = ['Runnning forward pass on LFW images', pb.Percentage(), ' ', 
-            pb.Bar(marker=pb.RotatingMarker()), ' ', pb.ETA()]
+    widgets = ['Runnning forward pass on LFW images', pb.Percentage(), ' ',
+               pb.Bar(marker=pb.RotatingMarker()), ' ', pb.ETA()]
 
     # Enqueue one epoch of image paths and labels
     # nrof_pairs * nrof_images_per_pair

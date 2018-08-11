@@ -18,6 +18,13 @@ from scipy import misc
 os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
 tf.logging.set_verbosity(tf.logging.ERROR)
 
+Image = np.ndarray
+Embedding = np.ndarray
+EmbeddingsGenerator = Generator[List[Embedding], None, None]
+ImageGenerator = Generator[Image, None, None]
+FacesGenerator = Generator[List[Face], None, None]
+
+
 class Face:
     """Class representing a single face
 
@@ -34,9 +41,9 @@ class Face:
     def __init__(self):
         self.name: str = None
         self.bounding_box: List[float] = None
-        self.image: np.ndarray = None
-        self.container_image: np.ndarray = None
-        self.embedding: np.ndarray = None
+        self.image: Image = None
+        self.container_image: Image = None
+        self.embedding: Embedding = None
         self.matches: List[Match] = []
         self.url: str = None
 
@@ -71,14 +78,14 @@ class Identifier:
         self.threshold: float = threshold
 
     @staticmethod
-    def download_image(url: str) -> np.ndarray:
+    def download_image(url: str) -> Image:
         """Downloads an image from the url as a numpy array (opencv format)
 
         Arguments:
             url {str} -- url of image
 
         Returns:
-            np.ndarray -- array representing image
+            Image -- array representing image
         """
 
         req = urlopen(url)
@@ -87,30 +94,30 @@ class Identifier:
         return Identifier.fix_image(image)
 
     @staticmethod
-    def get_image_from_path(image_path: str) -> np.ndarray:
+    def get_image_from_path(image_path: str) -> Image:
         """Reads an image path to a numpy array (opencv format)
-        
+
         Arguments:
             image_path {str} -- path to image
-        
+
         Returns:
-            np.ndarray -- array representing image
+            Image -- array representing image
         """
 
         return Identifier.fix_image(cv2.imread(image_path))
 
     @staticmethod
     def get_images_from_dir(
-            directory: str, recursive: bool) -> Generator[np.ndarray, None, None]:
+            directory: str, recursive: bool) -> ImageGenerator:
         """Gets images in a directory
-        
+
         Arguments:
             directory {str} -- path to directory
             recursive {bool} -- if True searches all subfolders for images.
                                 else searches for images in folder only.
-        
+
         Returns:
-            Generator[np.ndarray, None, None] -- generator of images
+            ImageGenerator -- generator of images
         """
 
         if recursive:
@@ -120,9 +127,9 @@ class Identifier:
             image_paths = iglob(os.path.join(directory, '*.*'))
         for image_path in image_paths:
             yield Identifier.fix_image(cv2.imread(image_path))
-    
+
     @staticmethod
-    def fix_image(image: np.ndarray):
+    def fix_image(image: Image):
         if image.ndim < 2:
             image = image[:, :, np.newaxis]
         if image.ndim == 2:
@@ -130,58 +137,57 @@ class Identifier:
         image = image[:, :, 0:3]
         return image
 
-    def vectorize(self, image: np.ndarray,
-                  face_limit: int = 5) -> List[np.ndarray]:
+    def vectorize(self, image: Image,
+                  prealigned: bool = False,
+                  face_limit: int = 5) -> List[Image]:
         """Gets face embeddings in a single image
-        
-        Arguments:
-            image {np.ndarray} -- Image to find embeddings 
-        
-        Keyword Arguments:
-            face_limit {int} -- max number of faces allowed 
-                                before image is discarded. (default: {5})
-        
-        Returns:
-            List[np.ndarray] -- list of embeddings
-        """
 
-        faces: List[Face] = self.detect_encode(image, face_limit)
-        vectors = [face.embedding for face in faces]
+        Arguments:
+            image {Image} -- Image to find embeddings
+
+        Keyword Arguments:
+            prealigned {bool} -- is the image already aligned
+            face_limit {int} -- max number of faces allowed
+                                before image is discarded. (default: {5})
+
+        Returns:
+            List[Image] -- list of embeddings
+        """
+        if not prealigned:
+            faces: List[Face] = self.detect_encode(image, face_limit)
+            vectors = [face.embedding for face in faces]
+        else:
+            vectors = [self.encoder.generate_embedding(image)]
         return vectors
 
     def vectorize_all(self,
-                      images: Generator[np.ndarray,
-                                        None,
-                                        None],
-                      face_limit: int = 5) -> Generator[List[np.ndarray],
-                                                        None,
-                                                        None]:
+                      images: ImageGenerator,
+                      face_limit: int = 5) -> EmbeddingsGenerator:
         """Gets face embeddings from a generator of images
-        
+
         Arguments:
-            image {np.ndarray} -- Image to find embeddings 
-        
+            images {ImageGenerator} -- Images to find embeddings for
+
         Keyword Arguments:
-            face_limit {int} -- max number of faces allowed 
+            face_limit {int} -- max number of faces allowed
                                 before image is discarded. (default: {5})
-        
+
         Returns:
-            Generator[List[np.ndarray]]-- generator of lists of images found in
+            EmbeddingGenerator-- generator of lists of images found in
                                           each photo
         """
 
-        all_faces: Generator[List[Face], None, None] = self.detect_encode_all(
+        all_faces = self.detect_encode_all(
             images=images, save_memory=True, face_limit=face_limit)
-        vectors: Generator[List[np.ndarray], None, None] = (
-            face.embedding for faces in all_faces for face in faces)
+        vectors = (face.embedding for faces in all_faces for face in faces)
         return vectors
 
-    def detect_encode(self, image: np.ndarray,
+    def detect_encode(self, image: Image,
                       face_limit: int=5) -> List[Face]:
         """Detects faces in an image and encodes them
 
         Arguments:
-            image {np.ndarray} -- image to find faces and encode
+            image {Image} -- image to find faces and encode
             face_limit {int} -- Maximum # of faces allowed in image.
                                 If over limit returns empty list
 
@@ -189,24 +195,20 @@ class Identifier:
             List[Face] -- list of Face objects with embeddings attached
         """
 
-        faces: List[Face] = self.detector.find_faces(image, face_limit)
+        faces = self.detector.find_faces(image, face_limit)
         for face in faces:
             face.embedding = self.encoder.generate_embedding(face.image)
         return faces
 
     def detect_encode_all(self,
-                          images: Generator[np.ndarray,
-                                            None,
-                                            None],
+                          images: ImageGenerator,
                           urls: [str]=None,
                           save_memory: bool=False,
-                          face_limit: int=5) -> Generator[List[Face],
-                                                          None,
-                                                          None]:
+                          face_limit: int=5) -> FacesGenerator:
         """For a list of images finds and encodes all faces
 
         Arguments:
-            images {List or iterable of cv2 images} -- images to encode
+            images {ImageGenerator} -- images to encode
 
         Keyword Arguments:
             urls {str[]} -- Optional list of urls to attach to Face objects.
@@ -216,16 +218,15 @@ class Identifier:
                                   of refference to the original image like a url. (default: {False})
 
         Returns:
-            Generator[List[Face]] -- Generator of lists of Face objects in each image
+            FaceGenerator -- Generator of lists of Face objects in each image
         """
 
-        all_faces: Generator[List[Face], None, None] = self.detector.bulk_find_face(
-            images, urls, face_limit)
+        all_faces = self.detector.bulk_find_face(images, urls, face_limit)
         return self.encoder.get_all_embeddings(all_faces, save_memory)
 
     def compare_embedding(self,
-                          embedding_1: np.ndarray,
-                          embedding_2: np.ndarray,
+                          embedding_1: Embedding,
+                          embedding_2: Embedding,
                           distance_metric: int=0) -> (bool,
                                                       float):
         """Compares the distance between two embeddings
@@ -248,8 +249,8 @@ class Identifier:
             is_match = True
         return is_match, distance
 
-    def compare_images(self, image_1: np.ndarray,
-                       image_2: np.ndarray) -> Match:
+    def compare_images(self, image_1: Image,
+                       image_2: Image) -> Match:
         """Compares two images for matching faces
 
         Arguments:
@@ -289,8 +290,7 @@ class Identifier:
 
         all_images = self.get_images_from_dir(image_directory, recursive)
         all_matches = []
-        all_faces_lists: Generator[List[Face], None,
-                                   None] = self.detect_encode_all(all_images)
+        all_faces_lists = self.detect_encode_all(all_images)
         all_faces: Generator[Face, None, None] = (
             face for faces in all_faces_lists for face in faces)
         # Really inefficient way to check all combinations
@@ -324,14 +324,14 @@ class Encoder:
         self.phase_train_placeholder = tf.get_default_graph(
         ).get_tensor_by_name("phase_train:0")
 
-    def generate_embedding(self, image: np.ndarray) -> np.ndarray:
+    def generate_embedding(self, image: Image) -> Embedding:
         """Generates embeddings for a Face object with image
 
         Arguments:
-            image {cv2 image (np array)} -- Image of face. Should be aligned.
+            image {Image} -- Image of face. Should be aligned.
 
         Returns:
-            numpy.ndarray -- a single vector representing a face embedding
+            Embedding -- a single vector representing a face embedding
         """
 
         prewhiten_face = facenet.prewhiten(image)
@@ -342,12 +342,8 @@ class Encoder:
         return self.sess.run(self.embeddings, feed_dict=feed_dict)[0]
 
     def get_all_embeddings(self,
-                           all_faces: Generator[List[Face],
-                                                None,
-                                                None],
-                           save_memory: bool=False) -> Generator[List[Face],
-                                                                 None,
-                                                                 None]:
+                           all_faces: FacesGenerator,
+                           save_memory: bool=False) -> FacesGenerator:
         """Generates embeddings for list of images
 
         Arguments:
@@ -359,21 +355,22 @@ class Encoder:
         Returns:
             Faces with embeddings
         """
-        # import pdb;pdb.set_trace()
         face_list: List[List[Face]] = list(all_faces)
-        prewhitened_images = [facenet.prewhiten(face.image) for faces in face_list for face in faces]
+        prewhitened_images = [
+            facenet.prewhiten(
+                face.image) for faces in face_list for face in faces]
         if face_list:
             feed_dict = {self.images_placeholder: prewhitened_images,
-                            self.phase_train_placeholder: False}
+                         self.phase_train_placeholder: False}
             embed_array = self.sess.run(self.embeddings, feed_dict=feed_dict)
-            index = 0 
+            index = 0
             for faces in face_list:
                 for face in faces:
                     if save_memory:
                         face.image = None
                         face.container_image = None
                     face.embedding = embed_array[index]
-                    index+=1
+                    index += 1
                 yield faces
 
     def tear_down(self):
@@ -404,11 +401,9 @@ class Detector:
         self.detect_multiple_faces = detect_multiple_faces
 
     def bulk_find_face(self,
-                       images: Generator[np.ndarray,
-                                         None, None],
+                       images: ImageGenerator,
                        urls: List[str] = None,
-                       face_limit: int=5) -> Generator[List[Face],
-                                                       None, None]:
+                       face_limit: int=5) -> FacesGenerator:
         for index, image in enumerate(images):
             faces = self.find_faces(image, face_limit)
             if urls and index < len(urls):
@@ -418,7 +413,7 @@ class Detector:
             else:
                 yield faces
 
-    def find_faces(self, image: np.ndarray, face_limit: int=5) -> List[Face]:
+    def find_faces(self, image: Image, face_limit: int=5) -> List[Face]:
         faces = []
         results = self.detector.detect_faces(image)
         img_size = np.asarray(image.shape)[0:2]
@@ -440,9 +435,7 @@ class Detector:
 
                 face.bounding_box = bb
                 face.image = misc.imresize(
-                    cropped, 
-                    (self.face_crop_size, self.face_crop_size), 
-                    interp='bilinear')
+                    cropped, (self.face_crop_size, self.face_crop_size), interp='bilinear')
 
                 faces.append(face)
         return faces
@@ -459,8 +452,13 @@ class Detector:
         return [x1, y1, x2, y2]
 
 
-def align_dataset(input_dir, output_dir, image_size=182,
-                  margin=44, random_order=False, detect_multiple_faces=False):
+def align_dataset(
+        input_dir,
+        output_dir,
+        image_size=182,
+        margin=44,
+        random_order=False,
+        detect_multiple_faces=False):
     align_dataset_mtcnn.main(
         input_dir,
         output_dir,

@@ -128,7 +128,7 @@ class Aligner:
                 self.align(person)
         print('Total number of images: %d' % int(self.num_images_total.value))
         print('Number of successfully aligned images: %d' %
-                int(self.num_sucessful.value))
+              int(self.num_sucessful.value))
 
     def align(self, person: facenet.PersonClass):
         # import pdb;pdb.set_trace()
@@ -155,7 +155,8 @@ class Aligner:
                                    text_file, output_class_dir)
         self.timer.update(int(self.num_sucessful.value))
 
-    def process_image(self, detector, image_path: str, text_file: str, output_class_dir: str):
+    def process_image(self, detector, image_path: str,
+                      text_file: str, output_class_dir: str):
         output_filename = self.get_file_name(image_path, output_class_dir)
         if not os.path.exists(output_filename):
             try:
@@ -198,7 +199,8 @@ class Aligner:
             self.num_images_total.value += add_amount
 
     @staticmethod
-    def fix_image(image: np.ndarray, image_path: str, output_filename: str, text_file: str):
+    def fix_image(image: np.ndarray, image_path: str,
+                  output_filename: str, text_file: str):
         if image.ndim < 2:
             print('Unable to align "%s"' % image_path)
             text_file.write('%s\n' % (output_filename))
