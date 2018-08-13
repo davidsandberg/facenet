@@ -114,7 +114,9 @@ def rename(person_folder):
         person_folder {str} -- path to folder named after person
     """
 
-    all_image_paths = glob.glob(os.path.join(person_folder, "*"))
+    all_image_paths = glob.glob(os.path.join(person_folder, "*.*"))
+    all_image_paths = [image for image in all_image_paths if image.endswith(
+        ".jpg") or image.endswith(".png")]
     person_name = os.path.basename(os.path.normpath(person_folder))
     concat_name = '_'.join(person_name.split())
     for index, image_path in enumerate(all_image_paths):
