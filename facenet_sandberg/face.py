@@ -31,8 +31,8 @@ class Face:
     Attributes:
         name {str} -- Name of person
         bounding_box {Float[]} -- box around their face in container_image
-        image {cv2 image (np array)} -- Image cropped around face
-        container_image {cv2 image (np array)} -- Original image
+        image {Image} -- Image cropped around face
+        container_image {Image} -- Original image
         embedding {Float} -- Face embedding
         matches {Matches[]} -- List of matches to the face
         url {str} -- Url where image came from

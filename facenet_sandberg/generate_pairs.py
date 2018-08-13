@@ -5,10 +5,10 @@
 import io
 import os
 import random
-import numpy as np
 from argparse import ArgumentParser, Namespace
-from typing import List, Tuple, Set
+from typing import List, Set, Tuple
 
+import numpy as np
 
 Mismatch = Tuple[str, int, str, int]
 Match = Tuple[str, int, int]
@@ -52,16 +52,11 @@ def _make_matches(image_dir: str,
     curr_matches = 0
     while curr_matches < total_matches:
         person = random.choice(people)
-        images = os.listdir(os.path.join(image_dir, person))
+        images = _clean_images(image_dir, person)
         if len(images) > 1:
             img1, img2 = sorted(
-                [
-                    int(''.join([i for i in random.choice(images)
-                                 if i.isnumeric()]).lstrip('0')),
-                    int(''.join([i for i in random.choice(images)
-                                 if i.isnumeric()]).lstrip('0'))
-                ]
-            )
+                [images.index(random.choice(images)),
+                 images.index(random.choice(images))])
             match = (person, img1, img2)
             if (img1 != img2) and (match not in matches):
                 matches.add(match)
@@ -78,13 +73,11 @@ def _make_mismatches(image_dir: str,
         person1 = random.choice(people)
         person2 = random.choice(people)
         if person1 != person2:
-            person1_images = os.listdir(os.path.join(image_dir, person1))
-            person2_images = os.listdir(os.path.join(image_dir, person2))
+            person1_images = _clean_images(image_dir, person1)
+            person2_images = _clean_images(image_dir, person2)
             if person1_images and person2_images:
-                img1 = int(''.join([i for i in random.choice(person1_images)
-                                    if i.isnumeric()]).lstrip('0'))
-                img2 = int(''.join([i for i in random.choice(person2_images)
-                                    if i.isnumeric()]).lstrip('0'))
+                img1 = person1_images.index(random.choice(person1_images))
+                img2 = person2_images.index(random.choice(person2_images))
                 if person1.lower() > person2.lower():
                     person1, img1, person2, img2 = person2, img2, person1, img1
                 mismatch = (person1, img1, person2, img2)
@@ -92,6 +85,13 @@ def _make_mismatches(image_dir: str,
                     mismatches.add(mismatch)
                     curr_matches += 1
     return sorted(list(mismatches), key=lambda x: x[0].lower())
+
+
+def _clean_images(base: str, folder: str):
+    images = os.listdir(os.path.join(base, folder))
+    images = [image for image in images if image.endswith(
+        ".jpg") or image.endswith(".png")]
+    return images
 
 
 def _main(args: CommandLineArgs) -> None:
