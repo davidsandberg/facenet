@@ -2,46 +2,53 @@
 # Section f: http://vis-www.cs.umass.edu/lfw/lfw.pdf
 # More succint, less explicit: http://vis-www.cs.umass.edu/lfw/README.txt
 
+import io
 import os
 import random
-import sys
-import argparse
 import numpy as np
-from typing import List, Tuple, cast
+from argparse import ArgumentParser, Namespace
+from typing import List, Tuple, Set
 
 
 Mismatch = Tuple[str, int, str, int]
 Match = Tuple[str, int, int]
+CommandLineArgs = Namespace
 
 
 def write_pairs(fname: str,
                 match_folds: List[List[Match]],
                 mismatch_folds: List[List[Mismatch]],
-                k_num_sets: int,
-                total_matches_mismatches: int) -> None:
-    file_contents = f'{k_num_sets}\t{total_matches_mismatches}\n'
-    for match_fold, mismatch_fold in zip(match_folds, mismatch_folds):
-        for match in match_fold:
-            file_contents += f'{match[0]}\t{match[1]}\t{match[2]}\n'
-        for mismatch in mismatch_fold:
-            file_contents += f'{mismatch[0]}\t{mismatch[1]}\t\
-{mismatch[2]}\t{mismatch[3]}\n'
-    with open(fname, 'w') as fpairs:
-        fpairs.write(file_contents)
+                num_folds: int,
+                num_matches_mismatches: int) -> None:
+    metadata = f'{num_folds}\t{num_matches_mismatches}\n'
+    with io.open(fname,
+                 'w',
+                 io.DEFAULT_BUFFER_SIZE,
+                 encoding='utf-8') as fpairs:
+        fpairs.write(metadata)
+        for match_fold, mismatch_fold in zip(match_folds, mismatch_folds):
+            for match in match_fold:
+                line = f'{match[0]}\t{match[1]}\t{match[2]}\n'
+                fpairs.write(line)
+            for mismatch in mismatch_fold:
+                line = f'{mismatch[0]}\t{mismatch[1]}\t{mismatch[2]}\t\
+{mismatch[3]}\n'
+                fpairs.write(line)
+        fpairs.flush()
 
 
 def _split_people_into_folds(image_dir: str,
-                             k_num_sets: int) -> List[List[str]]:
+                             num_folds: int) -> List[List[str]]:
     names = [d for d in os.listdir(image_dir)
              if os.path.isdir(os.path.join(image_dir, d))]
     random.shuffle(names)
-    return [list(arr) for arr in np.array_split(names, k_num_sets)]
+    return [list(arr) for arr in np.array_split(names, num_folds)]
 
 
 def _make_matches(image_dir: str,
                   people: List[str],
                   total_matches: int) -> List[Match]:
-    matches = cast(List[Match], [])
+    matches: Set[Match] = set()
     curr_matches = 0
     while curr_matches < total_matches:
         person = random.choice(people)
@@ -57,15 +64,15 @@ def _make_matches(image_dir: str,
             )
             match = (person, img1, img2)
             if (img1 != img2) and (match not in matches):
-                matches.append(match)
+                matches.add(match)
                 curr_matches += 1
-    return sorted(matches, key=lambda x: x[0].lower())
+    return sorted(list(matches), key=lambda x: x[0].lower())
 
 
 def _make_mismatches(image_dir: str,
                      people: List[str],
                      total_matches: int) -> List[Mismatch]:
-    mismatches = cast(List[Mismatch], [])
+    mismatches: Set[Mismatch] = set()
     curr_matches = 0
     while curr_matches < total_matches:
         person1 = random.choice(people)
@@ -82,13 +89,36 @@ def _make_mismatches(image_dir: str,
                     person1, img1, person2, img2 = person2, img2, person1, img1
                 mismatch = (person1, img1, person2, img2)
                 if mismatch not in mismatches:
-                    mismatches.append(mismatch)
+                    mismatches.add(mismatch)
                     curr_matches += 1
-    return sorted(mismatches, key=lambda x: x[0].lower())
+    return sorted(list(mismatches), key=lambda x: x[0].lower())
 
 
-def _parse_arguments(argv):
-    parser = argparse.ArgumentParser()
+def _main(args: CommandLineArgs) -> None:
+    people_folds = _split_people_into_folds(args.image_dir, args.num_folds)
+    matches = []
+    mismatches = []
+    for fold in people_folds:
+        matches.append(_make_matches(args.image_dir,
+                                     fold,
+                                     args.num_matches_mismatches))
+        mismatches.append(_make_mismatches(args.image_dir,
+                                           fold,
+                                           args.num_matches_mismatches))
+    write_pairs(args.pairs_file_name,
+                matches,
+                mismatches,
+                args.num_folds,
+                args.num_matches_mismatches)
+
+
+def _cli() -> None:
+    args = _parse_arguments()
+    _main(args)
+
+
+def _parse_arguments() -> CommandLineArgs:
+    parser = ArgumentParser()
     parser.add_argument('--image_dir',
                         type=str,
                         required=True,
@@ -105,23 +135,8 @@ def _parse_arguments(argv):
                         type=int,
                         required=True,
                         help='Number of matches/mismatches per fold.')
-    return parser.parse_args(sys.argv[1:])
+    return parser.parse_args()
 
 
 if __name__ == '__main__':
-    args = _parse_arguments(sys.argv[1:])
-    people_folds = _split_people_into_folds(args.image_dir, args.num_folds)
-    matches = []
-    mismatches = []
-    for fold in people_folds:
-        matches.append(_make_matches(args.image_dir,
-                                     fold,
-                                     args.num_matches_mismatches))
-        mismatches.append(_make_mismatches(args.image_dir,
-                                           fold,
-                                           args.num_matches_mismatches))
-    write_pairs(args.pairs_file_name,
-                matches,
-                mismatches,
-                args.num_folds,
-                args.num_matches_mismatches)
+    _cli()
