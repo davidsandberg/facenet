@@ -18,12 +18,6 @@ from scipy import misc
 os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
 tf.logging.set_verbosity(tf.logging.ERROR)
 
-Image = np.ndarray
-Embedding = np.ndarray
-EmbeddingsGenerator = Generator[List[Embedding], None, None]
-ImageGenerator = Generator[Image, None, None]
-FacesGenerator = Generator[List[Face], None, None]
-
 
 class Face:
     """Class representing a single face
@@ -63,6 +57,13 @@ class Match:
         self.face_2: Face = Face()
         self.score: float = float("inf")
         self.is_match: bool = False
+
+
+Image = np.ndarray
+Embedding = np.ndarray
+EmbeddingsGenerator = Generator[List[Embedding], None, None]
+ImageGenerator = Generator[Image, None, None]
+FacesGenerator = Generator[List[Face], None, None]
 
 
 class Identifier:
