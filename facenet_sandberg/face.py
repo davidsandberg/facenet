@@ -145,7 +145,9 @@ class Identifier:
                 save_memory=True,
                 detect_multiple_faces=detect_multiple_faces,
                 face_limit=face_limit)
-            vectors = [face.embedding for faces in all_faces for face in faces]
+            vectors = []
+            for faces in all_faces:
+                vectors += [face.embedding for face in faces]
         else:
             vectors = self.encoder.generate_embeddings(images)
         return vectors
