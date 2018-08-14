@@ -11,7 +11,7 @@ import cv2
 import numpy as np
 import tensorflow as tf
 from facenet_sandberg import facenet, validate_on_lfw
-from facenet_sandberg.align import align_dataset_mtcnn, detect_face
+from facenet_sandberg.align import align_dataset_mtcnn
 from mtcnn.mtcnn import MTCNN
 from scipy import misc
 

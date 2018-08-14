@@ -2,7 +2,7 @@ from setuptools import find_packages, setup
 
 setup(
     name='facenet_sandberg',
-    version='1.0.11',
+    version='1.0.12',
     description="Face recognition using TensorFlow",
     long_description="Face recognition with Google's FaceNet deep neural network & TensorFlow. Mirror of https://github.com/davidsandberg/facenet.",
     url='https://github.com/armanrahman22/facenet',
