@@ -79,15 +79,6 @@ class Identifier:
 
     @staticmethod
     def download_image(url: str) -> Image:
-        """Downloads an image from the url as a numpy array (opencv format)
-
-        Arguments:
-            url {str} -- url of image
-
-        Returns:
-            Image -- array representing image
-        """
-
         req = urlopen(url)
         arr = np.asarray(bytearray(req.read()), dtype=np.uint8)
         image = cv2.imdecode(arr, -1)
@@ -95,31 +86,11 @@ class Identifier:
 
     @staticmethod
     def get_image_from_path(image_path: str) -> Image:
-        """Reads an image path to a numpy array (opencv format)
-
-        Arguments:
-            image_path {str} -- path to image
-
-        Returns:
-            Image -- array representing image
-        """
-
         return Identifier.fix_image(cv2.imread(image_path))
 
     @staticmethod
     def get_images_from_dir(
             directory: str, recursive: bool) -> ImageGenerator:
-        """Gets images in a directory
-
-        Arguments:
-            directory {str} -- path to directory
-            recursive {bool} -- if True searches all subfolders for images.
-                                else searches for images in folder only.
-
-        Returns:
-            ImageGenerator -- generator of images
-        """
-
         if recursive:
             image_paths = iglob(os.path.join(
                 directory, '**', '*.*'), recursive=recursive)
@@ -139,22 +110,18 @@ class Identifier:
 
     def vectorize(self, image: Image,
                   prealigned: bool = False,
-                  face_limit: int = 5) -> List[Image]:
+                  detect_multiple_faces: bool=True,
+                  face_limit: int = 5) -> List[Embedding]:
         """Gets face embeddings in a single image
-
-        Arguments:
-            image {Image} -- Image to find embeddings
-
         Keyword Arguments:
             prealigned {bool} -- is the image already aligned
             face_limit {int} -- max number of faces allowed
                                 before image is discarded. (default: {5})
 
-        Returns:
-            List[Image] -- list of embeddings
         """
         if not prealigned:
-            faces: List[Face] = self.detect_encode(image, face_limit)
+            faces = self.detect_encode(
+                image, detect_multiple_faces, face_limit)
             vectors = [face.embedding for face in faces]
         else:
             vectors = [self.encoder.generate_embedding(image)]
@@ -162,40 +129,35 @@ class Identifier:
 
     def vectorize_all(self,
                       images: ImageGenerator,
-                      face_limit: int = 5) -> EmbeddingsGenerator:
+                      prealigned: bool = False,
+                      detect_multiple_faces: bool=True,
+                      face_limit: int = 5) -> List[List[Embedding]]:
         """Gets face embeddings from a generator of images
-
-        Arguments:
-            images {ImageGenerator} -- Images to find embeddings for
-
         Keyword Arguments:
+            prealigned {bool} -- is the image already aligned
             face_limit {int} -- max number of faces allowed
                                 before image is discarded. (default: {5})
-
-        Returns:
-            EmbeddingGenerator-- generator of lists of images found in
-                                          each photo
         """
 
-        all_faces = self.detect_encode_all(
-            images=images, save_memory=True, face_limit=face_limit)
-        vectors = (face.embedding for faces in all_faces for face in faces)
+        if not prealigned:
+            all_faces = self.detect_encode_all(
+                images=images,
+                save_memory=True,
+                detect_multiple_faces=detect_multiple_faces,
+                face_limit=face_limit)
+            vectors = [face.embedding for faces in all_faces for face in faces]
+        else:
+            vectors = self.encoder.generate_embeddings(images)
         return vectors
 
     def detect_encode(self, image: Image,
+                      detect_multiple_faces: bool=True,
                       face_limit: int=5) -> List[Face]:
         """Detects faces in an image and encodes them
-
-        Arguments:
-            image {Image} -- image to find faces and encode
-            face_limit {int} -- Maximum # of faces allowed in image.
-                                If over limit returns empty list
-
-        Returns:
-            List[Face] -- list of Face objects with embeddings attached
         """
 
-        faces = self.detector.find_faces(image, face_limit)
+        faces = self.detector.find_faces(
+            image, detect_multiple_faces, face_limit)
         for face in faces:
             face.embedding = self.encoder.generate_embedding(face.image)
         return faces
@@ -204,25 +166,19 @@ class Identifier:
                           images: ImageGenerator,
                           urls: [str]=None,
                           save_memory: bool=False,
+                          detect_multiple_faces: bool=True,
                           face_limit: int=5) -> FacesGenerator:
         """For a list of images finds and encodes all faces
 
-        Arguments:
-            images {ImageGenerator} -- images to encode
-
         Keyword Arguments:
-            urls {str[]} -- Optional list of urls to attach to Face objects.
-                            Should be same length as images if used. (default: {None})
             save_memory {bool} -- Saves memory by deleting image from Face objects.
-                                  Should only be used if with you have some other kind
-                                  of refference to the original image like a url. (default: {False})
-
-        Returns:
-            FaceGenerator -- Generator of lists of Face objects in each image
+                                Should only be used if with you have some other kind
+                                of refference to the original image like a url. (default: {False})
         """
 
-        all_faces = self.detector.bulk_find_face(images, urls, face_limit)
-        return self.encoder.get_all_embeddings(all_faces, save_memory)
+        all_faces = self.detector.bulk_find_face(
+            images, urls, detect_multiple_faces, face_limit)
+        return self.encoder.get_face_embeddings(all_faces, save_memory)
 
     def compare_embedding(self,
                           embedding_1: Embedding,
@@ -231,15 +187,9 @@ class Identifier:
                                                       float):
         """Compares the distance between two embeddings
 
-        Arguments:
-            embedding_1 {numpy.ndarray} -- face embedding
-            embedding_2 {numpy.ndarray} -- face embedding
-
         Keyword Arguments:
             distance_metric {int} -- 0 for Euclidian distance and 1 for Cosine similarity (default: {0})
 
-        Returns:
-            (bool, float) -- returns True if match and distance
         """
 
         distance = facenet.distance(embedding_1.reshape(
@@ -249,21 +199,13 @@ class Identifier:
             is_match = True
         return is_match, distance
 
-    def compare_images(self, image_1: Image,
-                       image_2: Image) -> Match:
-        """Compares two images for matching faces
-
-        Arguments:
-            image_1 {cv2 image (np array)} -- openCV image
-            image_2 {cv2 image (np array)} -- openCV image
-
-        Returns:
-            Match -- Match object which has the two images, is_match, and score
-        """
-
+    def compare_images(self, image_1: Image, image_2: Image,
+                       detect_multiple_faces: bool=True, face_limit: int=5) -> Match:
         match = Match()
-        image_1_faces = self.detect_encode(image_1)
-        image_2_faces = self.detect_encode(image_2)
+        image_1_faces = self.detect_encode(
+            image_1, detect_multiple_faces, face_limit)
+        image_2_faces = self.detect_encode(
+            image_2, detect_multiple_faces, face_limit)
         if image_1_faces and image_2_faces:
             for face_1 in image_1_faces:
                 for face_2 in image_2_faces:
@@ -280,12 +222,6 @@ class Identifier:
     def find_all_matches(self, image_directory: str,
                          recursive: bool) -> List[Match]:
         """Finds all matches in a directory of images
-
-        Arguments:
-            image_directory {str} -- directory of images
-
-        Returns:
-            Match[] -- List of Match objects
         """
 
         all_images = self.get_images_from_dir(image_directory, recursive)
@@ -325,15 +261,6 @@ class Encoder:
         ).get_tensor_by_name("phase_train:0")
 
     def generate_embedding(self, image: Image) -> Embedding:
-        """Generates embeddings for a Face object with image
-
-        Arguments:
-            image {Image} -- Image of face. Should be aligned.
-
-        Returns:
-            Embedding -- a single vector representing a face embedding
-        """
-
         prewhiten_face = facenet.prewhiten(image)
 
         # Run forward pass to calculate embeddings
@@ -341,21 +268,25 @@ class Encoder:
             prewhiten_face], self.phase_train_placeholder: False}
         return self.sess.run(self.embeddings, feed_dict=feed_dict)[0]
 
-    def get_all_embeddings(self,
-                           all_faces: FacesGenerator,
-                           save_memory: bool=False) -> FacesGenerator:
-        """Generates embeddings for list of images
+    def generate_embeddings(self,
+                            all_images: ImageGenerator):
+        prewhitened_images = [
+            facenet.prewhiten(image) for image in all_images]
+        embeddings = []
+        if prewhitened_images:
+            feed_dict = {self.images_placeholder: prewhitened_images,
+                         self.phase_train_placeholder: False}
+            embeddings = self.sess.run(self.embeddings, feed_dict=feed_dict)
+        return embeddings
 
-        Arguments:
-            all_faces -- array of face images
-
+    def get_face_embeddings(self,
+                            all_faces: FacesGenerator,
+                            save_memory: bool=False) -> FacesGenerator:
+        """Generates embeddings from generator of Faces
         Keyword Arguments:
             save_memory -- save memory by deleting image from Face object  (default: {False})
-
-        Returns:
-            Faces with embeddings
         """
-        face_list: List[List[Face]] = list(all_faces)
+        face_list = list(all_faces)
         prewhitened_images = [
             facenet.prewhiten(
                 face.image) for faces in face_list for face in faces]
@@ -403,9 +334,10 @@ class Detector:
     def bulk_find_face(self,
                        images: ImageGenerator,
                        urls: List[str] = None,
+                       detect_multiple_faces: bool=True,
                        face_limit: int=5) -> FacesGenerator:
         for index, image in enumerate(images):
-            faces = self.find_faces(image, face_limit)
+            faces = self.find_faces(image, detect_multiple_faces, face_limit)
             if urls and index < len(urls):
                 for face in faces:
                     face.url = urls[index]
@@ -413,11 +345,14 @@ class Detector:
             else:
                 yield faces
 
-    def find_faces(self, image: Image, face_limit: int=5) -> List[Face]:
+    def find_faces(self, image: Image, detect_multiple_faces: bool=True,
+                   face_limit: int=5) -> List[Face]:
         faces = []
         results = self.detector.detect_faces(image)
         img_size = np.asarray(image.shape)[0:2]
         if len(results) < face_limit:
+            if not detect_multiple_faces:
+                results = results[:1]
             for result in results:
                 face = Face()
                 # bb[x, y, dx, dy]

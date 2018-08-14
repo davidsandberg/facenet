@@ -31,8 +31,7 @@ def write_pairs(fname: str,
                 line = f'{match[0]}\t{match[1]}\t{match[2]}\n'
                 fpairs.write(line)
             for mismatch in mismatch_fold:
-                line = f'{mismatch[0]}\t{mismatch[1]}\t{mismatch[2]}\t\
-{mismatch[3]}\n'
+                line = f'{mismatch[0]}\t{mismatch[1]}\t{mismatch[2]}\t{mismatch[3]}\n'
                 fpairs.write(line)
         fpairs.flush()
 
@@ -55,8 +54,8 @@ def _make_matches(image_dir: str,
         images = _clean_images(image_dir, person)
         if len(images) > 1:
             img1, img2 = sorted(
-                [images.index(random.choice(images)),
-                 images.index(random.choice(images))])
+                [images.index(random.choice(images)) + 1,
+                 images.index(random.choice(images)) + 1])
             match = (person, img1, img2)
             if (img1 != img2) and (match not in matches):
                 matches.add(match)
@@ -76,8 +75,8 @@ def _make_mismatches(image_dir: str,
             person1_images = _clean_images(image_dir, person1)
             person2_images = _clean_images(image_dir, person2)
             if person1_images and person2_images:
-                img1 = person1_images.index(random.choice(person1_images))
-                img2 = person2_images.index(random.choice(person2_images))
+                img1 = person1_images.index(random.choice(person1_images)) + 1
+                img2 = person2_images.index(random.choice(person2_images)) + 1
                 if person1.lower() > person2.lower():
                     person1, img1, person2, img2 = person2, img2, person1, img1
                 mismatch = (person1, img1, person2, img2)
