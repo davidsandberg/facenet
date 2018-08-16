@@ -1,0 +1,50 @@
+from typing import Dict, Generator, List, Tuple
+
+import numpy as np
+
+
+class Face:
+    """Class representing a single face
+
+    Attributes:
+        name {str} -- Name of person
+        bounding_box {Float[]} -- box around their face in container_image
+        image {Image} -- Image cropped around face
+        container_image {Image} -- Original image
+        embedding {Float} -- Face embedding
+        matches {Matches[]} -- List of matches to the face
+        url {str} -- Url where image came from
+    """
+
+    def __init__(self):
+        self.name: str = None
+        self.bounding_box: List[float] = None
+        self.image: Image = None
+        self.container_image: Image = None
+        self.embedding: Embedding = None
+        self.matches: List[Match] = []
+        self.url: str = None
+
+
+class Match:
+    """Class representing a match between two faces
+
+    Attributes:
+        face_1 {Face} -- Face object for person 1
+        face_2 {Face} -- Face object for person 2
+        score {Float} -- Distance between two face embeddings
+        is_match {bool} -- whether is match between faces
+    """
+
+    def __init__(self):
+        self.face_1: Face = Face()
+        self.face_2: Face = Face()
+        self.score: float = float("inf")
+        self.is_match: bool = False
+
+
+Image = np.ndarray
+Embedding = np.ndarray
+EmbeddingsGenerator = Generator[List[Embedding], None, None]
+ImageGenerator = Generator[Image, None, None]
+FacesGenerator = Generator[List[Face], None, None]

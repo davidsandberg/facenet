@@ -35,12 +35,27 @@ from typing import List
 import numpy as np
 import progressbar as pb
 import tensorflow as tf
-from facenet_sandberg import face, facenet
+from facenet_sandberg import facenet
+from facenet_sandberg.inference import facenet_encoder, mtcnn_detector
 from pathos.multiprocessing import ProcessPool
 from scipy import misc
 
 os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
 tf.logging.set_verbosity(tf.logging.ERROR)
+
+widgets = ['Aligning Dataset', pb.Percentage(), ' ',
+           pb.Bar(marker=pb.RotatingMarker()), ' ', pb.ETA()]
+global_image_size = None
+global_margin = None
+global_detect_multiple_faces = None
+global_output_dir = None
+global_random_order = None
+global_facenet_model_checkpoint = None
+timer = None
+num_sucessful = Value(c_int)  # defaults to 0
+num_sucessful_lock = Lock()
+num_images_total = Value(c_int)
+num_images_total_lock = Lock()
 
 
 def main(
@@ -50,7 +65,8 @@ def main(
         image_size: int=182,
         margin: int=44,
         detect_multiple_faces: bool=False,
-        num_processes: int=1):
+        num_processes: int=1,
+        facenet_model_checkpoint: str=''):
     """Aligns an image dataset
 
     Arguments:
@@ -66,155 +82,146 @@ def main(
         detect_multiple_faces {bool} -- Detect and align multiple faces per image.
                                         (default: {False})
         num_processes {int} -- Number of processes to use (default: {1})
+        facenet_model_checkpoint {str} -- path to facenet model if detecting mutiple faces (default: {''})
     """
+    global timer
+    global global_image_size
+    global global_margin
+    global global_detect_multiple_faces
+    global global_output_dir
+    global global_random_order
+    global global_facenet_model_checkpoint
+    global_image_size = image_size
+    global_margin = margin
+    global_detect_multiple_faces = detect_multiple_faces
+    global_output_dir = output_dir
+    global_random_order = random_order
+    global_facenet_model_checkpoint = facenet_model_checkpoint
 
     output_dir = os.path.expanduser(output_dir)
     os.makedirs(output_dir, exist_ok=True)
-
-    # Store some git revision info in a text file in the log directory
-    src_path, _ = os.path.split(os.path.realpath(__file__))
-    facenet.store_revision_info(src_path, output_dir, ' '.join(sys.argv))
 
     dataset = facenet.get_dataset(input_dir)
     if random_order:
         random.shuffle(dataset)
 
-    input_dir_all = os.path.join(input_dir, '**', '*.*')
-    num_images = sum(1 for x in iglob(
-        input_dir_all, recursive=True))
+    num_images = sum(len(i) for i in dataset)
+    timer = pb.ProgressBar(widgets=widgets, maxval=num_images).start()
 
     num_processes = min(num_processes, os.cpu_count())
+    if num_processes > 1:
+        process_pool = ProcessPool(num_processes)
+        process_pool.map(align, dataset)
+        process_pool.close()
+        process_pool.join()
+    else:
+        for person in dataset:
+            align(person)
 
-    aligner = Aligner(
-        image_size=image_size,
-        margin=margin,
-        detect_multiple_faces=detect_multiple_faces,
-        output_dir=output_dir,
-        random_order=random_order,
-        num_processes=num_processes,
-        num_images=num_images)
-
-    aligner.align_multiprocess(dataset=dataset)
-
-    print('Creating networks and loading parameters')
+    timer.finish()
+    print('Total number of images: %d' % int(num_images_total.value))
+    print('Number of faces found and aligned: %d' %
+          int(num_sucessful.value))
 
 
-class Aligner:
+def align(person: facenet.PersonClass):
+    detector = mtcnn_detector.Detector(
+        detect_multiple_faces=global_detect_multiple_faces)
+    output_class_dir = os.path.join(global_output_dir, person.name)
 
-    def __init__(self, image_size: int, margin: int, detect_multiple_faces: bool,
-                 output_dir: str, random_order: bool, num_processes: int, num_images: int):
-        widgets = ['Aligning Dataset', pb.Percentage(), ' ',
-                   pb.Bar(marker=pb.RotatingMarker()), ' ', pb.ETA()]
-        self.image_size = image_size
-        self.margin = margin
-        self.detect_multiple_faces = detect_multiple_faces
-        self.output_dir = output_dir
-        self.random_order = random_order
-        self.num_processes = num_processes
-        self.timer = pb.ProgressBar(widgets=widgets, maxval=num_images).start()
-        self.num_sucessful = Value(c_int)  # defaults to 0
-        self.num_sucessful_lock = Lock()
-        self.num_images_total = Value(c_int)
-        self.num_images_total_lock = Lock()
+    if not os.path.exists(output_class_dir):
+        os.makedirs(output_class_dir)
+        if global_random_order:
+            random.shuffle(person.image_paths)
 
-    def align_multiprocess(self, dataset: List[facenet.PersonClass]):
-        if self.num_processes > 1:
-            process_pool = ProcessPool(self.num_processes)
-            process_pool.imap(self.align, dataset)
-            process_pool.close()
-            process_pool.join()
-        else:
-            for person in dataset:
-                self.align(person)
-        print('Total number of images: %d' % int(self.num_images_total.value))
-        print('Number of successfully aligned images: %d' %
-              int(self.num_sucessful.value))
-
-    def align(self, person: facenet.PersonClass):
-        # import pdb;pdb.set_trace()
-        detector = face.Detector(
-            face_crop_size=self.image_size,
-            face_crop_margin=self.margin,
-            detect_multiple_faces=self.detect_multiple_faces)
-        # Add a random key to the filename to allow alignment using multiple
-        # processes
-        random_key = np.random.randint(0, high=99999)
-        bounding_boxes_filename = os.path.join(
-            self.output_dir, 'bounding_boxes_%05d.txt' % random_key)
-        output_class_dir = os.path.join(self.output_dir, person.name)
-
-        if not os.path.exists(output_class_dir):
-            os.makedirs(output_class_dir)
-            if self.random_order:
-                random.shuffle(person.image_paths)
-
-        with open(bounding_boxes_filename, "w") as text_file:
-            for image_path in person.image_paths:
-                self.increment_total()
-                self.process_image(detector, image_path,
-                                   text_file, output_class_dir)
-        self.timer.update(int(self.num_sucessful.value))
-
-    def process_image(self, detector, image_path: str,
-                      text_file: str, output_class_dir: str):
-        output_filename = self.get_file_name(image_path, output_class_dir)
+    all_faces = []
+    for image_path in person.image_paths:
+        increment_total()
+        output_filename = get_file_name(image_path, output_class_dir)
         if not os.path.exists(output_filename):
-            try:
-                image = misc.imread(image_path)
-            except (IOError, ValueError, IndexError) as error:
-                error_message = '{}: {}'.format(image_path, error)
-                print(error_message)
-            else:
-                image = self.fix_image(
-                    image, image_path, output_filename, text_file)
-                faces = detector.find_faces(image)
-                for index, person in enumerate(faces):
-                    self.increment_sucessful()
-                    filename_base, file_extension = os.path.splitext(
-                        output_filename)
-                    if self.detect_multiple_faces:
-                        output_filename_n = "{}_{}{}".format(
-                            filename_base, index, file_extension)
-                    else:
-                        output_filename_n = "{}{}".format(
-                            filename_base, file_extension)
-                    misc.imsave(output_filename_n, person.image)
-                    text_file.write(
-                        '%s %d %d %d %d\n' %
-                        (output_filename_n,
-                         person.bounding_box[0],
-                         person.bounding_box[1],
-                         person.bounding_box[2],
-                         person.bounding_box[3]))
+            faces = process_image(detector, image_path, output_filename)
+            if faces:
+                all_faces.append(faces)
+
+    if global_detect_multiple_faces and global_facenet_model_checkpoint and all_faces:
+        encoder = facenet_encoder.Facenet(global_facenet_model_checkpoint)
+        anchor = get_anchor(all_faces)
+        if anchor:
+            final_face_paths = []
+            for faces in all_faces:
+                if not faces:
+                    pass
+                if len(faces) > 1:
+                    best_face = encoder.get_best_match(anchor, faces)
+                    misc.imsave(best_face.name, best_face.image)
+                elif len(faces) == 1:
+                    misc.imsave(faces[0].name, faces[0].image)
+    else:
+        for faces in all_faces:
+            if faces:
+                for person in faces:
+                    misc.imsave(person.name, person.image)
+    timer.update(int(num_images_total.value))
+
+
+def get_anchor(all_faces):
+    for faces in all_faces:
+        if faces and len(faces) == 1:
+            return faces[0]
+    if all_faces:
+        if all_faces[0]:
+            if all_faces[0][0]:
+                return all_faces[0][0]
+    return None
+
+
+def process_image(detector, image_path: str, output_filename: str):
+    if not os.path.exists(output_filename):
+        try:
+            image = misc.imread(image_path)
+        except (IOError, ValueError, IndexError) as error:
+            # error_message = '{}: {}'.format(image_path, error)
+            # print(error_message)
+            return []
         else:
-            print('Unable to align "%s"' % image_path)
-            text_file.write('%s\n' % (output_filename))
+            image = fix_image(image, image_path)
+            faces = detector.find_faces(image)
+            for index, person in enumerate(faces):
+                increment_sucessful()
+                filename_base, file_extension = os.path.splitext(
+                    output_filename)
+                output_filename_n = "{}{}".format(
+                    filename_base, file_extension)
+                person.name = output_filename_n
+            return faces
+    else:
+        print('Unable to align "%s"' % image_path)
 
-    def increment_sucessful(self, add_amount: int=1):
-        with self.num_sucessful_lock:
-            self.num_sucessful.value += add_amount
 
-    def increment_total(self, add_amount: int=1):
-        with self.num_images_total_lock:
-            self.num_images_total.value += add_amount
+def increment_sucessful(add_amount: int=1):
+    with num_sucessful_lock:
+        num_sucessful.value += add_amount
 
-    @staticmethod
-    def fix_image(image: np.ndarray, image_path: str,
-                  output_filename: str, text_file: str):
-        if image.ndim < 2:
-            print('Unable to align "%s"' % image_path)
-            text_file.write('%s\n' % (output_filename))
-        if image.ndim == 2:
-            image = facenet.to_rgb(image)
-        image = image[:, :, 0:3]
-        return image
 
-    @staticmethod
-    def get_file_name(image_path: str, output_class_dir: str) -> str:
-        filename = os.path.splitext(os.path.split(image_path)[1])[0]
-        output_filename = os.path.join(
-            output_class_dir, filename + '.png')
-        return output_filename
+def increment_total(add_amount: int=1):
+    with num_images_total_lock:
+        num_images_total.value += add_amount
+
+
+def fix_image(image: np.ndarray, image_path: str):
+    if image.ndim < 2:
+        print('Unable to align "%s"' % image_path)
+    if image.ndim == 2:
+        image = facenet.to_rgb(image)
+    image = image[:, :, 0:3]
+    return image
+
+
+def get_file_name(image_path: str, output_class_dir: str) -> str:
+    filename = os.path.splitext(os.path.split(image_path)[1])[0]
+    output_filename = os.path.join(
+        output_class_dir, filename + '.png')
+    return output_filename
 
 
 def parse_arguments(argv):
@@ -224,6 +231,8 @@ def parse_arguments(argv):
                         help='Directory with unaligned images.')
     parser.add_argument('output_dir', type=str,
                         help='Directory with aligned face thumbnails.')
+    parser.add_argument('facenet_model_checkpoint', type=str,
+                        help='Path to facenet model', default='')
     parser.add_argument(
         '--image_size',
         type=int,
@@ -240,9 +249,8 @@ def parse_arguments(argv):
         action='store_true')
     parser.add_argument(
         '--detect_multiple_faces',
-        type=bool,
         help='Detect and align multiple faces per image.',
-        default=False)
+        action='store_true')
     parser.add_argument(
         '--num_processes',
         type=int,
@@ -261,4 +269,5 @@ if __name__ == '__main__':
             args.image_size,
             args.margin,
             args.detect_multiple_faces,
-            args.num_processes)
+            args.num_processes,
+            args.facenet_model_checkpoint)

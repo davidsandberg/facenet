@@ -2,7 +2,7 @@ from setuptools import find_packages, setup
 
 setup(
     name='facenet_sandberg',
-    version='1.0.13',
+    version='1.0.20',
     description="Face recognition using TensorFlow",
     long_description="Face recognition with Google's FaceNet deep neural network & TensorFlow. Mirror of https://github.com/davidsandberg/facenet.",
     url='https://github.com/armanrahman22/facenet',
@@ -13,6 +13,7 @@ setup(
     license='MIT',
     install_requires=[
         'tensorflow', 'scipy', 'scikit-learn', 'opencv-python',
-        'h5py', 'matplotlib', 'Pillow', 'requests', 'psutil', 'progressbar', 'mtcnn', 'pathos'
+        'h5py', 'matplotlib', 'Pillow', 'requests', 'psutil',
+        'progressbar', 'mtcnn', 'pathos', 'dask', 'tensorlayer'
     ]
 )

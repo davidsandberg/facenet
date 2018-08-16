@@ -95,7 +95,8 @@ def main(args):
                         dists_sqr = np.sum(np.square(diffs), axis=1)
                         class_variance[cls] = np.mean(dists_sqr)
                         class_center[cls, :] = center
-                        distance_to_center[index_arr[cls]: index_arr[cls + 1]] = np.sqrt(dists_sqr)
+                        distance_to_center[index_arr[cls]
+                            : index_arr[cls + 1]] = np.sqrt(dists_sqr)
                         emb_array = np.delete(emb_array, cls_idx, axis=0)
                         idx_array = np.delete(idx_array, cls_idx, axis=0)
                         lab_array = np.delete(lab_array, cls_idx, axis=0)

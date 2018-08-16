@@ -54,7 +54,12 @@ def find_threshold(var, percentile):
 
 
 def save_variables_and_metagraph(
-        sess, saver, summary_writer, model_dir: str, model_name: str, step: int):
+        sess,
+        saver,
+        summary_writer,
+        model_dir: str,
+        model_name: str,
+        step: int):
     # Save the model checkpoint
     print('Saving variables')
     start_time = time.time()
