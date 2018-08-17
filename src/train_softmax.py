@@ -177,12 +177,17 @@ def main(args):
         total_loss = tf.add_n([cross_entropy_mean] + regularization_losses, name='total_loss')
 
         # Build a Graph that trains the model with one batch of examples and updates the model parameters
+        # freeze all of the layers except for the last block
+        block_8_beginning = [v.name for v in tf.trainable_variables()].index('InceptionResnetV1/Block8/Branch_0/Conv2d_1x1/weights:0')
+        var_to_update = [v for v in tf.trainable_variables()[block_8_beginning:]]
         train_op = facenet.train(total_loss, global_step, args.optimizer, 
-            learning_rate, args.moving_average_decay, tf.global_variables(), args.log_histograms)
+            learning_rate, args.moving_average_decay, var_to_update, args.log_histograms)
         
         # Create a saver
-        saver = tf.train.Saver(tf.trainable_variables(), max_to_keep=3)
-
+	# Do not load last logits layer as it has a different number of outputs than custom dataset
+        all_vars = tf.trainable_variables()
+        var_to_restore = [v for v in all_vars if not v.name.startswith('Logits')]
+        saver = tf.train.Saver(var_to_restore, max_to_keep=5,keep_checkpoint_every_n_hours=1.0)
         # Build the summary operation based on the TF collection of Summaries.
         summary_op = tf.summary.merge_all()
 
@@ -257,7 +262,7 @@ def main(args):
 
                 print('Saving statistics')
                 with h5py.File(stat_file_name, 'w') as f:
-                    for key, value in stat.iteritems():
+                    for key, value in stat.items():
                         f.create_dataset(key, data=value)
     
     return model_dir
