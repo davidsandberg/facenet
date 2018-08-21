@@ -12,3 +12,4 @@ progressbar
 mtcnn
 pathos
 dask
+tinytag

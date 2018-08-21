@@ -94,3 +94,4 @@ ENV/
 .idea
 Untitled.ipynb
 .DS_Store
+debug/

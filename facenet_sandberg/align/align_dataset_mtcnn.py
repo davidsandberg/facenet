@@ -165,7 +165,7 @@ def align(person: facenet.PersonClass):
                 all_faces.append(faces)
 
     if global_detect_multiple_faces and global_facenet_model_checkpoint and all_faces:
-        encoder = facenet_encoder.Facenet(global_facenet_model_checkpoint)
+        encoder = facenet_encoder.Facenet(model_path=global_facenet_model_checkpoint)
         anchor = get_anchor(all_faces)
         if anchor:
             final_face_paths = []
@@ -257,17 +257,17 @@ def parse_arguments(argv):
         '--image_height',
         type=int,
         help='Image height in pixels.',
-        default=160)
+        default=112)
     parser.add_argument(
         '--image_width',
         type=int,
         help='Image width in pixels.',
-        default=160)
+        default=96)
     parser.add_argument(
         '--margin',
         type=float,
         help='Margin for the crop around the bounding box (height, width) in pixels.',
-        default=0.4)
+        default=0.24)
     parser.add_argument(
         '--scale_factor',
         type=float,

@@ -38,6 +38,9 @@ class Facenet:
 
     def generate_embedding(self, image: Image) -> Embedding:
         h, w, c = image.shape
+        if h != self.image_height or w != self.image_width:
+            import pdb
+            pdb.set_trace()
         assert h == self.image_height and w == self.image_width
         prewhiten_face = facenet.prewhiten(image)
 
@@ -108,11 +111,15 @@ class Facenet:
 
     def get_best_match(self, anchor: Face,
                        faces: List[Face], save_memory: bool=False) -> Face:
-        anchor.embedding = self.generate_embedding(anchor.image)
+        anchor_image = resized = misc.imresize(
+            anchor.image, (self.image_height, self.image_width), interp='bilinear')
+        anchor.embedding = self.generate_embedding(anchor_image)
         min_dist = float('inf')
         min_face = None
         for face in faces:
-            face.embedding = self.generate_embedding(face.image)
+            face_image = resized = misc.imresize(
+                face.image, (self.image_height, self.image_width), interp='bilinear')
+            face.embedding = self.generate_embedding(face_image)
             dist = utils.get_distance(anchor.embedding, face.embedding)
             if dist < min_dist:
                 min_dist = dist

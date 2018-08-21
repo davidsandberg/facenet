@@ -14,7 +14,7 @@ from scipy import misc
 warnings.filterwarnings("ignore", message="numpy.dtype size changed")
 warnings.filterwarnings("ignore", message="numpy.ufunc size changed")
 os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
-debug = False
+debug = True
 
 
 class Detector:
@@ -83,7 +83,7 @@ class Detector:
                 bbs.append(bb)
                 face.bounding_box = bb
                 resized = misc.imresize(
-                    cropped, (self.face_crop_width, self.face_crop_height), interp='bilinear')
+                    cropped, (self.face_crop_height, self.face_crop_width), interp='bilinear')
                 if not self.is_rgb:
                     resized = resized[..., ::-1]
                 face.image = resized
