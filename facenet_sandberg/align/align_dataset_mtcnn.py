@@ -142,6 +142,11 @@ def main(
 
 
 def align(person: facenet.PersonClass):
+    output_class_dir = os.path.join(global_output_dir, person.name)
+    if already_done(person, output_class_dir):
+        increment_total(len(person.image_paths))
+        timer.update(int(num_images_total.value))
+        return None
     detector = mtcnn_detector.Detector(face_crop_height=global_image_height,
                                        face_crop_width=global_image_width,
                                        face_crop_margin=global_margin,
@@ -149,7 +154,6 @@ def align(person: facenet.PersonClass):
                                        steps_threshold=global_steps_threshold,
                                        is_rgb=global_is_rgb,
                                        detect_multiple_faces=global_detect_multiple_faces)
-    output_class_dir = os.path.join(global_output_dir, person.name)
 
     if not os.path.exists(output_class_dir):
         os.makedirs(output_class_dir)
@@ -172,11 +176,13 @@ def align(person: facenet.PersonClass):
                     misc.imsave(best_face.name, best_face.image)
                 elif len(faces) == 1:
                     misc.imsave(faces[0].name, faces[0].image)
+        encoder.tear_down()
     else:
         for faces in all_faces:
             if faces:
                 for person in faces:
                     misc.imsave(person.name, person.image)
+    del detector
     timer.update(int(num_images_total.value))
 
 
@@ -189,6 +195,11 @@ def gen_all_faces(person: facenet.PersonClass,
             faces = process_image(detector, image_path, output_filename)
             if faces:
                 yield faces
+
+
+def already_done(person: facenet.PersonClass, output_class_dir: str):
+    total = sum(os.path.exists(get_file_name(image_path, output_class_dir)) for image_path in person.image_paths)
+    return total == len(person.image_paths)
 
 
 def get_anchor(person: facenet.PersonClass,

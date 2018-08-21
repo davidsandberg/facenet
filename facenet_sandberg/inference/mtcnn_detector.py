@@ -14,7 +14,7 @@ from scipy import misc
 warnings.filterwarnings("ignore", message="numpy.dtype size changed")
 warnings.filterwarnings("ignore", message="numpy.ufunc size changed")
 os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
-debug = True
+debug = False
 
 
 class Detector:
@@ -31,6 +31,7 @@ class Detector:
                 0.7,
                 0.7],
             is_rgb: bool=True):
+        import tensorflow as tf
         self.detector = MTCNN(
             weights_file=None,
             min_face_size=min_face_size,
