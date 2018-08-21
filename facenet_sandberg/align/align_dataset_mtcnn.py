@@ -37,6 +37,7 @@ import progressbar as pb
 import tensorflow as tf
 from facenet_sandberg import facenet
 from facenet_sandberg.inference import facenet_encoder, mtcnn_detector, utils
+from facenet_sandberg.inference.common_types import *
 from pathos.multiprocessing import ProcessPool
 from scipy import misc
 
@@ -127,7 +128,7 @@ def main(
     num_processes = min(num_processes, os.cpu_count())
     if num_processes > 1:
         process_pool = ProcessPool(num_processes)
-        process_pool.map(align, dataset)
+        process_pool.imap(align, dataset)
         process_pool.close()
         process_pool.join()
     else:
@@ -155,18 +156,12 @@ def align(person: facenet.PersonClass):
         if global_random_order:
             random.shuffle(person.image_paths)
 
-    all_faces = []
-    for image_path in person.image_paths:
-        increment_total()
-        output_filename = get_file_name(image_path, output_class_dir)
-        if not os.path.exists(output_filename):
-            faces = process_image(detector, image_path, output_filename)
-            if faces:
-                all_faces.append(faces)
+    all_faces = gen_all_faces(person, output_class_dir, detector)
 
     if global_detect_multiple_faces and global_facenet_model_checkpoint and all_faces:
-        encoder = facenet_encoder.Facenet(model_path=global_facenet_model_checkpoint)
-        anchor = get_anchor(all_faces)
+        encoder = facenet_encoder.Facenet(
+            model_path=global_facenet_model_checkpoint)
+        anchor = get_anchor(person, output_class_dir, detector)
         if anchor:
             final_face_paths = []
             for faces in all_faces:
@@ -185,24 +180,36 @@ def align(person: facenet.PersonClass):
     timer.update(int(num_images_total.value))
 
 
-def get_anchor(all_faces):
-    for faces in all_faces:
-        if faces and len(faces) == 1:
+def gen_all_faces(person: facenet.PersonClass,
+                  output_class_dir: str, detector: mtcnn_detector.Detector) -> FacesGenerator:
+    for image_path in person.image_paths:
+        increment_total()
+        output_filename = get_file_name(image_path, output_class_dir)
+        if not os.path.exists(output_filename):
+            faces = process_image(detector, image_path, output_filename)
+            if faces:
+                yield faces
+
+
+def get_anchor(person: facenet.PersonClass,
+               output_class_dir: str, detector: mtcnn_detector.Detector) -> Face:
+    first_face = None
+    for image_path in person.image_paths:
+        output_filename = get_file_name(image_path, output_class_dir)
+        faces = process_image(detector, image_path, output_filename)
+        if faces and not first_face:
+            first_face = faces[0]
+        if len(faces) == 1:
             return faces[0]
-    if all_faces:
-        if all_faces[0]:
-            if all_faces[0][0]:
-                return all_faces[0][0]
-    return None
+    return first_face
 
 
-def process_image(detector, image_path: str, output_filename: str):
+def process_image(detector: mtcnn_detector.Detector,
+                  image_path: str, output_filename: str) -> List[Face]:
     if not os.path.exists(output_filename):
         try:
             image = misc.imread(image_path)
         except (IOError, ValueError, IndexError) as error:
-            # error_message = '{}: {}'.format(image_path, error)
-            # print(error_message)
             return []
         else:
             image = fix_image(image, image_path)
@@ -229,7 +236,7 @@ def increment_total(add_amount: int=1):
         num_images_total.value += add_amount
 
 
-def fix_image(image: np.ndarray, image_path: str):
+def fix_image(image: np.ndarray, image_path: str) -> Image:
     if image.ndim < 2:
         print('Unable to align "%s"' % image_path)
     if image.ndim == 2:
