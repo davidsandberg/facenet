@@ -198,7 +198,8 @@ def gen_all_faces(person: facenet.PersonClass,
 
 
 def already_done(person: facenet.PersonClass, output_class_dir: str):
-    total = sum(os.path.exists(get_file_name(image_path, output_class_dir)) for image_path in person.image_paths)
+    total = sum(os.path.exists(get_file_name(image_path, output_class_dir))
+                for image_path in person.image_paths)
     return total == len(person.image_paths)
 
 
@@ -217,24 +218,21 @@ def get_anchor(person: facenet.PersonClass,
 
 def process_image(detector: mtcnn_detector.Detector,
                   image_path: str, output_filename: str) -> List[Face]:
-    if not os.path.exists(output_filename):
-        try:
-            image = misc.imread(image_path)
-        except (IOError, ValueError, IndexError) as error:
-            return []
-        else:
-            image = fix_image(image, image_path)
-            faces = detector.find_faces(image)
-            for index, person in enumerate(faces):
-                increment_sucessful()
-                filename_base, file_extension = os.path.splitext(
-                    output_filename)
-                output_filename_n = "{}{}".format(
-                    filename_base, file_extension)
-                person.name = output_filename_n
-            return faces
+    try:
+        image = misc.imread(image_path)
+    except (IOError, ValueError, IndexError) as error:
+        return []
     else:
-        print('Unable to align "%s"' % image_path)
+        image = fix_image(image, image_path)
+        faces = detector.find_faces(image)
+        for index, person in enumerate(faces):
+            increment_sucessful()
+            filename_base, file_extension = os.path.splitext(
+                output_filename)
+            output_filename_n = "{}{}".format(
+                filename_base, file_extension)
+            person.name = output_filename_n
+        return faces
 
 
 def increment_sucessful(add_amount: int=1):
