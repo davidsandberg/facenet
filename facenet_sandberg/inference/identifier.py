@@ -49,7 +49,7 @@ class Identifier:
             self.encoder = facenet_encoder.Facenet(
                 model_path=model_path,
                 batch_size=batch_size)
-        self.threshold: float = threshold
+        self.threshold = threshold
 
     def vectorize(self, image: Image,
                   prealigned: bool = False,

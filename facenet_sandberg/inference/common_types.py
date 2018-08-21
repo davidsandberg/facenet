@@ -17,13 +17,13 @@ class Face:
     """
 
     def __init__(self):
-        self.name: str = None
-        self.bounding_box: List[float] = None
-        self.image: Image = None
-        self.container_image: Image = None
-        self.embedding: Embedding = None
-        self.matches: List[Match] = []
-        self.url: str = None
+        self.name = None
+        self.bounding_box = None
+        self.image = None
+        self.container_image = None
+        self.embedding = None
+        self.matches = []
+        self.url = None
 
 
 class Match:
@@ -37,10 +37,10 @@ class Match:
     """
 
     def __init__(self):
-        self.face_1: Face = Face()
-        self.face_2: Face = Face()
-        self.score: float = float("inf")
-        self.is_match: bool = False
+        self.face_1 = Face()
+        self.face_2 = Face()
+        self.score = float("inf")
+        self.is_match = False
 
 
 Image = np.ndarray
