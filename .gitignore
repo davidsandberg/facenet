@@ -92,3 +92,5 @@ ENV/
 
 # PyCharm project setting
 .idea
+Untitled.ipynb
+.DS_Store

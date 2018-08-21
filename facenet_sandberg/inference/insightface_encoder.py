@@ -3,6 +3,7 @@ import warnings
 from typing import Dict, Generator, List, Tuple
 
 import numpy as np
+import progressbar as pb
 import tensorflow as tf
 import tensorlayer as tl
 from facenet_sandberg import facenet
@@ -18,7 +19,7 @@ tf.logging.set_verbosity(tf.logging.ERROR)
 
 class Insightface:
     def __init__(self, model_path: str,
-                 image_height: int=96,
+                 image_height: int=112,
                  image_width: int=112,
                  batch_size: int=64):
         import tensorflow as tf
@@ -98,9 +99,12 @@ class Insightface:
         featurized_batches = []
         cur_batch = np.zeros(
             [self.batch_size, self.image_height, self.image_width, 3])
-        clean_images = map(self.fix_image, all_images)
+        clean_images = list(map(self.fix_image, all_images))
         index = 0
-        for image in clean_images:
+        widgets = ['Encoding:', pb.Percentage(), ' ',
+                   pb.Bar(), ' ', pb.ETA(), ' ', pb.Timer()]
+        timer = pb.ProgressBar(widgets=widgets, max_value=len(clean_images))
+        for image in timer(clean_images):
             cur_batch[index] = image
             if index % (self.batch_size - 1) == 0 and index != 0:
                 featurized_batches += self.extract_batch(cur_batch)
@@ -112,6 +116,7 @@ class Insightface:
         cur_batch = cur_batch[[np.any(image) for image in cur_batch]]
         if cur_batch.size > 0:
             featurized_batches += self.extract_batch(cur_batch)
+        timer.finish()
         return featurized_batches
 
     def get_face_embeddings(self,

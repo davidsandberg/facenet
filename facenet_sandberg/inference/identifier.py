@@ -30,12 +30,22 @@ class Identifier:
             threshold: float = 1.10,
             is_insightface: bool=False,
             batch_size: int=64):
-        self.detector = mtcnn_detector.Detector()
         if is_insightface:
+            self.detector = mtcnn_detector.Detector(
+                face_crop_height=112,
+                face_crop_width=112,
+                face_crop_margin=44,
+                steps_threshold=[
+                    0.6,
+                    0.7,
+                    0.9],
+                scale_factor=0.85,
+                is_rgb=False)
             self.encoder = insightface_encoder.Insightface(
                 model_path=model_path,
                 batch_size=batch_size)
         else:
+            self.detector = mtcnn_detector.Detector()
             self.encoder = facenet_encoder.Facenet(
                 model_path=model_path,
                 batch_size=batch_size)

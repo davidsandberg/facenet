@@ -28,8 +28,12 @@ in the same directory, and the metagraph should have the extension '.meta'.
 from __future__ import absolute_import, division, print_function
 
 import argparse
+import math
 import os
 import sys
+import warnings
+from enum import Enum, auto
+from typing import List, Tuple, Union, cast
 
 import numpy as np
 import progressbar as pb
@@ -38,7 +42,20 @@ from facenet_sandberg import facenet, lfw
 from scipy import interpolate
 from scipy.optimize import brentq
 from sklearn import metrics
+from sklearn.metrics import accuracy_score, precision_score, recall_score
+from sklearn.metrics.pairwise import paired_distances
+from sklearn.model_selection import KFold
 from tensorflow.python.ops import data_flow_ops
+
+warnings.filterwarnings("ignore", message="numpy.dtype size changed")
+warnings.filterwarnings("ignore", message="numpy.ufunc size changed")
+os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
+tf.logging.set_verbosity(tf.logging.ERROR)
+
+
+class DistanceMetric(Enum):
+    ANGULAR_DISTANCE = auto()
+    EUCLIDEAN_SQUARED = auto()
 
 
 def main(lfw_dir, model, lfw_pairs, use_flipped_images, subtract_mean,
@@ -143,8 +160,8 @@ def evaluate(
         use_flipped_images,
         use_fixed_image_standardization):
     # Run forward pass to calculate embeddings
-    widgets = ['Runnning forward pass on LFW images', pb.Percentage(), ' ',
-               pb.Bar(marker=pb.RotatingMarker()), ' ', pb.ETA()]
+    widgets = ['Scoring', pb.Percentage(), ' ',
+               pb.Bar(marker=pb.Bar()), ' ', pb.ETA()]
 
     # Enqueue one epoch of image paths and labels
     # nrof_pairs * nrof_images_per_pair
@@ -175,14 +192,17 @@ def evaluate(
     emb_array = np.zeros((nrof_images, embedding_size))
     lab_array = np.zeros((nrof_images,))
 
-    timer = pb.ProgressBar(widgets=widgets, maxval=nrof_batches).start()
+    timer = pb.ProgressBar(
+        widgets=widgets, maxval=int(
+            nrof_batches + 1)).start()
     for i in range(nrof_batches):
         feed_dict = {phase_train_placeholder: False,
                      batch_size_placeholder: batch_size}
         emb, lab = sess.run([embeddings, labels], feed_dict=feed_dict)
         lab_array[lab] = lab
         emb_array[lab, :] = emb
-        timer.update(i)
+        timer.update(i + 1)
+    timer.finish()
     embeddings = np.zeros((nrof_embeddings, embedding_size * nrof_flips))
     if use_flipped_images:
         # Concatenate embeddings for flipped and non flipped version of the
@@ -192,18 +212,127 @@ def evaluate(
     else:
         embeddings = emb_array
 
-    assert np.array_equal(lab_array, np.arange(
-        nrof_images)), 'Wrong labels used for evaluation, possibly caused by training examples left in the input pipeline'
-    tpr, fpr, accuracy, val, val_std, far = lfw.evaluate(
-        embeddings, actual_issame, nrof_folds=nrof_folds, distance_metric=distance_metric, subtract_mean=subtract_mean)
+    accuracy, recall, precision = score(embeddings,
+                                        np.asarray(actual_issame),
+                                        nrof_folds,
+                                        'ANGULAR_DISTANCE',
+                                        'ACCURACY',
+                                        subtract_mean,
+                                        False,
+                                        0,
+                                        4,
+                                        0.01)
+    print(f'Accuracy: {accuracy}')
+    print(f'Recall: {recall}')
+    print(f'Precision: {precision}')
 
-    print('Accuracy: %2.5f+-%2.5f' % (np.mean(accuracy), np.std(accuracy)))
-    print('Validation rate: %2.5f+-%2.5f @ FAR=%2.5f' % (val, val_std, far))
+    # assert np.array_equal(lab_array, np.arange(
+    #     nrof_images)), 'Wrong labels used for evaluation, possibly caused by training examples left in the input pipeline'
+    # tpr, fpr, accuracy, val, val_std, far = lfw.evaluate(
+    # embeddings, actual_issame, nrof_folds=nrof_folds,
+    # distance_metric=distance_metric, subtract_mean=subtract_mean)
 
-    auc = metrics.auc(fpr, tpr)
-    print('Area Under Curve (AUC): %1.3f' % auc)
-    eer = brentq(lambda x: 1. - x - interpolate.interp1d(fpr, tpr)(x), 0., 1.)
-    print('Equal Error Rate (EER): %1.3f' % eer)
+    # print('Accuracy: %2.5f+-%2.5f' % (np.mean(accuracy), np.std(accuracy)))
+    # print('Validation rate: %2.5f+-%2.5f @ FAR=%2.5f' % (val, val_std, far))
+
+    # auc = metrics.auc(fpr, tpr)
+    # print('Area Under Curve (AUC): %1.3f' % auc)
+    # eer = brentq(lambda x: 1. - x - interpolate.interp1d(fpr, tpr)(x), 0., 1.)
+    # print('Equal Error Rate (EER): %1.3f' % eer)
+
+
+def score(embeddings: np.ndarray,
+          labels: np.ndarray,
+          num_folds: int,
+          distance_metric: DistanceMetric,
+          threshold_metric: str,
+          subtract_mean: bool,
+          divide_stddev: bool,
+          threshold_start: float,
+          threshold_end: float,
+          threshold_step: float) -> Tuple[np.float, np.float, np.float]:
+    thresholds = np.arange(threshold_start, threshold_end, threshold_step)
+    embeddings1 = embeddings[0::2]
+    embeddings2 = embeddings[1::2]
+    accuracy, recall, precision = _score_k_fold(thresholds,
+                                                embeddings1,
+                                                embeddings2,
+                                                labels,
+                                                num_folds,
+                                                threshold_metric,
+                                                subtract_mean,
+                                                divide_stddev)
+    return np.mean(accuracy), np.mean(recall), np.mean(precision)
+
+
+def _score_k_fold(thresholds: np.ndarray,
+                  embeddings1: np.ndarray,
+                  embeddings2: np.ndarray,
+                  labels: np.ndarray,
+                  num_folds: int,
+                  threshold_metric: str,
+                  subtract_mean: bool,
+                  divide_stddev: bool) -> Tuple[np.ndarray,
+                                                np.ndarray,
+                                                np.ndarray]:
+    k_fold = KFold(n_splits=num_folds, shuffle=True)
+    accuracy = np.zeros((num_folds))
+    recall = np.zeros((num_folds))
+    precision = np.zeros((num_folds))
+    splits = k_fold.split(np.arange(len(labels)))
+    for fold_idx, (train_set, test_set) in enumerate(splits):
+        train_embeddings = np.concatenate([embeddings1[train_set],
+                                           embeddings2[train_set]])
+        mean = np.mean(train_embeddings, axis=0) if subtract_mean else 0.0
+        stddev = np.std(train_embeddings, axis=0) if divide_stddev else 1.0
+        dist = _distance_between_embeddings((embeddings1 - mean) / stddev,
+                                            (embeddings2 - mean) / stddev)
+        best_threshold = _calculate_best_threshold(thresholds,
+                                                   dist[train_set],
+                                                   labels[train_set],
+                                                   threshold_metric)
+        predictions = np.less(dist[test_set], best_threshold)
+        accuracy[fold_idx] = accuracy_score(labels[test_set], predictions)
+        recall[fold_idx] = recall_score(labels[test_set], predictions)
+        precision[fold_idx] = precision_score(labels[test_set], predictions)
+    return accuracy, recall, precision
+
+
+def _distance_between_embeddings(
+        embeddings1: np.ndarray,
+        embeddings2: np.ndarray) -> np.ndarray:
+    # if distance_metric == DistanceMetric.EUCLIDEAN_SQUARED:
+    #     return np.square(
+    #         paired_distances(
+    #             embeddings1,
+    #             embeddings2,
+    #             metric='euclidean'))
+    # elif distance_metric == DistanceMetric.ANGULAR_DISTANCE:
+        # Angular Distance: https://en.wikipedia.org/wiki/Cosine_similarity
+    similarity = 1 - paired_distances(
+        embeddings1,
+        embeddings2,
+        metric='cosine')
+    return np.arccos(similarity) / math.pi
+
+
+def _calculate_best_threshold(thresholds: np.ndarray,
+                              dist: np.ndarray,
+                              labels: np.ndarray,
+                              threshold_metric: str) -> np.float:
+
+    if threshold_metric == 'ACCURACY':
+        threshold_score = accuracy_score
+    elif threshold_metric == 'PRECISION':
+        threshold_score = precision_score
+    elif threshold_metric == 'RECALL':
+        threshold_score = recall_score
+    threshold_scores = np.zeros((len(thresholds)))
+    for threshold_idx, threshold in enumerate(thresholds):
+        predictions = np.less(dist, threshold)
+        threshold_scores[threshold_idx] = threshold_score(labels, predictions)
+    best_threshold_index = np.argmax(threshold_scores)
+    return thresholds[best_threshold_index]
 
 
 def parse_arguments(argv):

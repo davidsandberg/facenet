@@ -36,7 +36,7 @@ import numpy as np
 import progressbar as pb
 import tensorflow as tf
 from facenet_sandberg import facenet
-from facenet_sandberg.inference import facenet_encoder, mtcnn_detector
+from facenet_sandberg.inference import facenet_encoder, mtcnn_detector, utils
 from pathos.multiprocessing import ProcessPool
 from scipy import misc
 
@@ -45,8 +45,12 @@ tf.logging.set_verbosity(tf.logging.ERROR)
 
 widgets = ['Aligning Dataset', pb.Percentage(), ' ',
            pb.Bar(marker=pb.RotatingMarker()), ' ', pb.ETA()]
-global_image_size = None
+global_image_height = None
+global_image_width = None
 global_margin = None
+global_scale_factor = None
+global_steps_threshold = None
+global_is_rgb = None
 global_detect_multiple_faces = None
 global_output_dir = None
 global_random_order = None
@@ -62,8 +66,12 @@ def main(
         input_dir: str,
         output_dir: str,
         random_order: bool=False,
-        image_size: int=182,
-        margin: int=44,
+        image_height: int=182,
+        image_width: int=182,
+        margin: float=0.4,
+        scale_factor: float=0.0,
+        steps_threshold: List[float]=[0.6, 0.7, 0.7],
+        is_rgb: bool=True,
         detect_multiple_faces: bool=False,
         num_processes: int=1,
         facenet_model_checkpoint: str=''):
@@ -85,14 +93,22 @@ def main(
         facenet_model_checkpoint {str} -- path to facenet model if detecting mutiple faces (default: {''})
     """
     global timer
-    global global_image_size
+    global global_image_height
+    global global_image_width
     global global_margin
+    global global_scale_factor
+    global global_steps_threshold
+    global global_is_rgb
     global global_detect_multiple_faces
     global global_output_dir
     global global_random_order
     global global_facenet_model_checkpoint
-    global_image_size = image_size
+    global_image_height = image_height
+    global_image_width = image_width
     global_margin = margin
+    global_scale_factor = scale_factor
+    global_steps_threshold = steps_threshold
+    global_is_rgb = is_rgb
     global_detect_multiple_faces = detect_multiple_faces
     global_output_dir = output_dir
     global_random_order = random_order
@@ -125,8 +141,13 @@ def main(
 
 
 def align(person: facenet.PersonClass):
-    detector = mtcnn_detector.Detector(
-        detect_multiple_faces=global_detect_multiple_faces)
+    detector = mtcnn_detector.Detector(face_crop_height=global_image_height,
+                                       face_crop_width=global_image_width,
+                                       face_crop_margin=global_margin,
+                                       scale_factor=global_scale_factor,
+                                       steps_threshold=global_steps_threshold,
+                                       is_rgb=global_is_rgb,
+                                       detect_multiple_faces=global_detect_multiple_faces)
     output_class_dir = os.path.join(global_output_dir, person.name)
 
     if not os.path.exists(output_class_dir):
@@ -226,7 +247,6 @@ def get_file_name(image_path: str, output_class_dir: str) -> str:
 
 def parse_arguments(argv):
     parser = argparse.ArgumentParser()
-
     parser.add_argument('input_dir', type=str,
                         help='Directory with unaligned images.')
     parser.add_argument('output_dir', type=str,
@@ -234,15 +254,34 @@ def parse_arguments(argv):
     parser.add_argument('facenet_model_checkpoint', type=str,
                         help='Path to facenet model', default='')
     parser.add_argument(
-        '--image_size',
+        '--image_height',
         type=int,
-        help='Image size (height, width) in pixels.',
-        default=182)
+        help='Image height in pixels.',
+        default=160)
+    parser.add_argument(
+        '--image_width',
+        type=int,
+        help='Image width in pixels.',
+        default=160)
     parser.add_argument(
         '--margin',
-        type=int,
+        type=float,
         help='Margin for the crop around the bounding box (height, width) in pixels.',
-        default=44)
+        default=0.4)
+    parser.add_argument(
+        '--scale_factor',
+        type=float,
+        help='Factor to scale',
+        default=0.709)
+    parser.add_argument(
+        '--steps_threshold',
+        type=List[float],
+        help='Thresholds',
+        default=[0.6, 0.7, 0.7])
+    parser.add_argument(
+        '--is_rgb',
+        help='load with rgb vs bgr',
+        action='store_true')
     parser.add_argument(
         '--random_order',
         help='Shuffles the order of images to enable alignment using multiple processes.',
@@ -266,8 +305,12 @@ if __name__ == '__main__':
             args.input_dir,
             args.output_dir,
             args.random_order,
-            args.image_size,
+            args.image_height,
+            args.image_width,
             args.margin,
+            args.scale_factor,
+            args.steps_threshold,
+            args.is_rgb,
             args.detect_multiple_faces,
             args.num_processes,
             args.facenet_model_checkpoint)
