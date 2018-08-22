@@ -32,6 +32,7 @@ from glob import iglob
 from multiprocessing import Lock, Value
 from typing import List
 
+import cv2
 import numpy as np
 import progressbar as pb
 import tensorflow as tf
@@ -59,6 +60,8 @@ global_facenet_model_checkpoint = None
 timer = None
 num_sucessful = Value(c_int)  # defaults to 0
 num_sucessful_lock = Lock()
+num_unsucessful = Value(c_int)
+num_unsucessful_lock = Lock()
 num_images_total = Value(c_int)
 num_images_total_lock = Lock()
 
@@ -139,6 +142,8 @@ def main(
     print('Total number of images: %d' % int(num_images_total.value))
     print('Number of faces found and aligned: %d' %
           int(num_sucessful.value))
+    print('Number of unsuccessful: %d' %
+          int(num_unsucessful.value))
 
 
 def align(person: facenet.PersonClass):
@@ -173,15 +178,18 @@ def align(person: facenet.PersonClass):
                     pass
                 if len(faces) > 1:
                     best_face = encoder.get_best_match(anchor, faces)
-                    misc.imsave(best_face.name, best_face.image)
+                    cv2.imwrite(best_face.name, best_face.image)
+                    # misc.imsave(best_face.name, best_face.image)
                 elif len(faces) == 1:
-                    misc.imsave(faces[0].name, faces[0].image)
+                    cv2.imwrite(faces[0].name, faces[0].image)
+                    # misc.imsave(faces[0].name, faces[0].image)
         encoder.tear_down()
     else:
         for faces in all_faces:
             if faces:
                 for person in faces:
-                    misc.imsave(person.name, person.image)
+                    cv2.imwrite(person.name, person.image)
+                    # misc.imsave(person.name, person.image)
     del detector
     timer.update(int(num_images_total.value))
 
@@ -225,6 +233,8 @@ def process_image(detector: mtcnn_detector.Detector,
     else:
         image = fix_image(image, image_path)
         faces = detector.find_faces(image)
+        if not faces:
+            increment_unsucessful()
         for index, person in enumerate(faces):
             increment_sucessful()
             filename_base, file_extension = os.path.splitext(
@@ -238,6 +248,11 @@ def process_image(detector: mtcnn_detector.Detector,
 def increment_sucessful(add_amount: int=1):
     with num_sucessful_lock:
         num_sucessful.value += add_amount
+
+
+def increment_unsucessful(add_amount: int=1):
+    with num_unsucessful_lock:
+        num_unsucessful.value += add_amount
 
 
 def increment_total(add_amount: int=1):
@@ -278,22 +293,22 @@ def parse_arguments(argv):
         '--image_width',
         type=int,
         help='Image width in pixels.',
-        default=96)
+        default=112)
     parser.add_argument(
         '--margin',
         type=float,
         help='Margin for the crop around the bounding box (height, width) in pixels.',
-        default=0.24)
+        default=0.3)
     parser.add_argument(
         '--scale_factor',
         type=float,
         help='Factor to scale',
-        default=0.709)
+        default=0.85)
     parser.add_argument(
         '--steps_threshold',
         type=List[float],
         help='Thresholds',
-        default=[0.6, 0.7, 0.7])
+        default=[0.6, 0.7, 0.9])
     parser.add_argument(
         '--is_rgb',
         help='load with rgb vs bgr',

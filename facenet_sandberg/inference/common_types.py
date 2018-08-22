@@ -48,3 +48,4 @@ Embedding = np.ndarray
 EmbeddingsGenerator = Generator[List[Embedding], None, None]
 ImageGenerator = Generator[Image, None, None]
 FacesGenerator = Generator[List[Face], None, None]
+Keypoints = Dict[str, Tuple[int, int]]

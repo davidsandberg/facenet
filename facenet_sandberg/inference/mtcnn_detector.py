@@ -61,8 +61,6 @@ class Detector:
     def find_faces(self, image: Image, detect_multiple_faces: bool=True,
                    face_limit: int=5) -> List[Face]:
         faces = []
-        old = []
-        bbs = []
         results = self.detector.detect_faces(image)
         img_size = np.asarray(image.shape)[0:2]
         if len(results) < face_limit:
@@ -71,31 +69,23 @@ class Detector:
             for result in results:
                 face = Face()
                 bb = result['box']
-                old.append(bb)
                 # bb[x, y, dx, dy] -> bb[x1, y1, x2, y2]
                 bb = utils.fit_bounding_box(
                     img_size[0], img_size[1], bb[0], bb[1], bb[2], bb[3])
                 if bb[2] - bb[0] < self.min_face_size or bb[3] - \
                         bb[1] < self.min_face_size:
                     pass
-                cropped, (x0, y0, x1, y1) = utils.crop(
-                    image, bb, self.face_crop_margin)
-                bb = [x0, y0, x1, y1]
-                bbs.append(bb)
-                face.bounding_box = bb
-                resized = misc.imresize(
-                    cropped, (self.face_crop_height, self.face_crop_width), interp='bilinear')
-                if not self.is_rgb:
-                    resized = resized[..., ::-1]
+                processed = utils.preprocess(
+                    image,
+                    self.face_crop_height,
+                    self.face_crop_width,
+                    self.face_crop_margin,
+                    bb,
+                    result['keypoints'])
+                resized = cv2.resize(
+                    processed, (self.face_crop_height, self.face_crop_width))
+                # BGR to RGB
+                resized = cv2.cvtColor(resized, cv2.COLOR_BGR2RGB)
                 face.image = resized
                 faces.append(face)
-        if debug:
-            os.makedirs('debug', exist_ok=True)
-            for bb in bbs:
-                image = cv2.rectangle(
-                    image, (bb[0], bb[1]), (bb[0] + bb[2], bb[1] + bb[3]), (0, 255, 0), 4)
-            for bb in old:
-                image = cv2.rectangle(
-                    image, (bb[0], bb[1]), (bb[0] + bb[2], bb[1] + bb[3]), (255, 0, 0), 4)
-            cv2.imwrite('debug/' + str(time.strftime("%c")) + '.png', image)
         return faces

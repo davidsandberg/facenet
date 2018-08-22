@@ -38,9 +38,6 @@ class Facenet:
 
     def generate_embedding(self, image: Image) -> Embedding:
         h, w, c = image.shape
-        if h != self.image_height or w != self.image_width:
-            import pdb
-            pdb.set_trace()
         assert h == self.image_height and w == self.image_width
         prewhiten_face = facenet.prewhiten(image)
 

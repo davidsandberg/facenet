@@ -29,6 +29,7 @@ class Identifier:
             model_path: str,
             threshold: float = 1.10,
             is_insightface: bool=False,
+            is_centerface: bool=False,
             batch_size: int=64):
         if is_insightface:
             self.detector = mtcnn_detector.Detector(
@@ -44,6 +45,22 @@ class Identifier:
             self.encoder = insightface_encoder.Insightface(
                 model_path=model_path,
                 batch_size=batch_size)
+        if is_centerface:
+            self.detector = mtcnn_detector.Detector(
+                face_crop_height=112,
+                face_crop_width=96,
+                face_crop_margin=44,
+                steps_threshold=[
+                    0.6,
+                    0.7,
+                    0.9],
+                scale_factor=0.85,
+                is_rgb=False)
+            self.encoder = insightface_encoder.Insightface(
+                model_path=model_path,
+                batch_size=batch_size,
+                image_height=112,
+                image_width=96)
         else:
             self.detector = mtcnn_detector.Detector()
             self.encoder = facenet_encoder.Facenet(

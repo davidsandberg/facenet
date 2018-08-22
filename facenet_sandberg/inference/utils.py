@@ -7,6 +7,7 @@ import numpy as np
 from facenet_sandberg import facenet
 from facenet_sandberg.inference import utils
 from facenet_sandberg.inference.common_types import *
+from skimage import transform as trans
 
 
 def fit_bounding_box(max_y: int, max_x: int, x1: int,
@@ -106,3 +107,72 @@ def crop(image: Image, bb: List[float], margin: float) -> Image:
     x1 = int(np.minimum(x1 + margin_width, img_width))
     y1 = int(np.minimum(y1 + margin_height, img_height))
     return image[y0:y1, x0:x1, :], (x0, y0, x1, y1)
+
+
+def get_transform_matrix(left_eye: Tuple[int, int], right_eye: Tuple[int, int],
+                         desiredLeftEye: Tuple[float, float]=(0.35, 0.35), desiredFaceHeight: int=112,
+                         desiredFaceWidth: int=112, margin: float=0.0):
+    # compute the angle between the eye centers
+    dY = right_eye[1] - left_eye[1]
+    dX = right_eye[0] - left_eye[0]
+    angle = np.degrees(np.arctan2(dY, dX))
+
+    # compute the desired right eye x-coordinate
+    desiredRightEyeX = 1.0 - desiredLeftEye[0]
+
+    # determine the scale of the new resulting image by taking
+    dist = np.sqrt((dX ** 2) + (dY ** 2))
+    desiredDist = (desiredRightEyeX - desiredLeftEye[0])
+    desiredDist *= desiredFaceWidth
+    scale = (desiredDist / dist)
+
+    # median point between the two eyes in the input image
+    x_center = (left_eye[0] + right_eye[0]) // 2
+    y_center = (left_eye[1] + right_eye[1]) // 2
+    eye_center = (x_center, y_center)
+
+    # grab the rotation matrix for rotating and scaling the face
+    M = cv2.getRotationMatrix2D(eye_center, angle, scale)
+
+    # update the translation component of the matrix
+    tX = (desiredFaceWidth * (margin + 1)) * 0.5
+    tY = (desiredFaceHeight * (margin + 1)) * desiredLeftEye[1]
+    x_shift = (tX - eye_center[0])
+    y_shift = (tY - eye_center[1])
+    M[0, 2] += x_shift
+    M[1, 2] += y_shift
+    return M
+
+
+def preprocess(image: Image, desired_height: int, desired_width: int,
+               margin: float, bbox: List[int]=None, landmark: Keypoints=None):
+    image_height, image_width = image.shape[:2]
+    margin_height = int(desired_height + desired_height * margin)
+    margin_width = int(desired_width + desired_width * margin)
+    M = None
+    if landmark is not None:
+        left_eye = landmark['left_eye']
+        right_eye = landmark['right_eye']
+        M = get_transform_matrix(
+            left_eye,
+            right_eye,
+            (0.35, 0.35),
+            desired_height,
+            desired_width,
+            margin)
+
+    if bbox is None:
+        # use center crop
+        bbox = [0, 0, 0, 0]
+        bbox[0] = int(image_height * 0.0625)
+        bbox[1] = int(image_width * 0.0625)
+        bbox[2] = image.shape[1] - bbox[0]
+        bbox[3] = image.shape[0] - bbox[1]
+    if M is None:
+        cropped = crop(image, bbox, margin)[0]
+        return cropped
+    else:
+        # do align using landmark
+        warped = cv2.warpAffine(
+            image, M, (margin_height, margin_width), flags=cv2.INTER_CUBIC)
+        return warped
