@@ -173,18 +173,18 @@ def align(person: facenet.PersonClass):
                     pass
                 if len(faces) > 1:
                     best_face = encoder.get_best_match(anchor, faces)
-                    cv2.imwrite(best_face.name, best_face.image)
-                    # misc.imsave(best_face.name, best_face.image)
+                    # cv2.imwrite(best_face.name, best_face.image)
+                    misc.imsave(best_face.name, best_face.image)
                 elif len(faces) == 1:
-                    cv2.imwrite(faces[0].name, faces[0].image)
-                    # misc.imsave(faces[0].name, faces[0].image)
+                    # cv2.imwrite(faces[0].name, faces[0].image)
+                    misc.imsave(faces[0].name, faces[0].image)
         encoder.tear_down()
     else:
         for faces in all_faces:
             if faces:
                 for person in faces:
-                    cv2.imwrite(person.name, person.image)
-                    # misc.imsave(person.name, person.image)
+                    # cv2.imwrite(person.name, person.image)
+                    misc.imsave(person.name, person.image)
     del detector
     timer.update(int(num_images_total.value))
 
