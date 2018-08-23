@@ -29,7 +29,8 @@ class Detector:
             steps_threshold: List[float]=[
                 0.6,
                 0.7,
-                0.7]):
+                0.7],
+            is_rgb: bool=True):
         import tensorflow as tf
         self.detector = MTCNN(
             weights_file=None,
@@ -41,6 +42,7 @@ class Detector:
         self.face_crop_margin = face_crop_margin
         self.detect_multiple_faces = detect_multiple_faces
         self.min_face_size = min_face_size
+        self.is_rgb = is_rgb
 
     def bulk_find_face(self,
                        images: ImageGenerator,
@@ -83,7 +85,8 @@ class Detector:
                 resized = cv2.resize(
                     processed, (self.face_crop_height, self.face_crop_width))
                 # BGR to RGB
-                resized = resized[..., ::-1]
+                if self.is_rgb:
+                    resized = resized[..., ::-1]
                 face.image = resized
                 faces.append(face)
         return faces

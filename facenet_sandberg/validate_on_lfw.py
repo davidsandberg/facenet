@@ -350,7 +350,8 @@ def parse_arguments(argv):
     parser.add_argument(
         'lfw_dir',
         type=str,
-        help='Path to the data directory containing aligned LFW face patches.')
+        help='Path to the data directory containing aligned LFW face patches.',
+        default='/Users/armanrahman/datasets/eame_test_facenet_old')
     parser.add_argument(
         '--lfw_batch_size',
         type=int,
@@ -359,7 +360,8 @@ def parse_arguments(argv):
     parser.add_argument(
         'model',
         type=str,
-        help='Could be either a directory containing the meta_file and ckpt_file or a model protobuf (.pb) file')
+        help='Could be either a directory containing the meta_file and ckpt_file or a model protobuf (.pb) file',
+        default='/Users/armanrahman/models/facenet_model.pb')
     parser.add_argument(
         '--image_size',
         type=int,
@@ -369,7 +371,7 @@ def parse_arguments(argv):
         '--lfw_pairs',
         type=str,
         help='The file containing the pairs to use for validation.',
-        default='data/pairs.txt')
+        default='/Users/armanrahman/datasets/eame_test_pairs_facenet.txt')
     parser.add_argument(
         '--lfw_nrof_folds',
         type=int,

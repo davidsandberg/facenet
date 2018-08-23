@@ -283,17 +283,17 @@ def parse_arguments(argv):
         '--image_height',
         type=int,
         help='Image height in pixels.',
-        default=112)
+        default=160)
     parser.add_argument(
         '--image_width',
         type=int,
         help='Image width in pixels.',
-        default=112)
+        default=160)
     parser.add_argument(
         '--margin',
         type=float,
         help='Margin for the crop around the bounding box (height, width) in pixels.',
-        default=0.3)
+        default=0.25)
     parser.add_argument(
         '--scale_factor',
         type=float,
