@@ -83,7 +83,7 @@ class Detector:
                 resized = cv2.resize(
                     processed, (self.face_crop_height, self.face_crop_width))
                 # BGR to RGB
-                resized = cv2.cvtColor(resized, cv2.COLOR_BGR2RGB)
+                resized = resized[..., ::-1]
                 face.image = resized
                 faces.append(face)
         return faces
