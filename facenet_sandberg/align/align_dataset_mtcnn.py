@@ -52,7 +52,6 @@ global_image_width = None
 global_margin = None
 global_scale_factor = None
 global_steps_threshold = None
-global_is_rgb = None
 global_detect_multiple_faces = None
 global_output_dir = None
 global_random_order = None
@@ -75,7 +74,6 @@ def main(
         margin: float=0.4,
         scale_factor: float=0.0,
         steps_threshold: List[float]=[0.6, 0.7, 0.7],
-        is_rgb: bool=True,
         detect_multiple_faces: bool=False,
         num_processes: int=1,
         facenet_model_checkpoint: str=''):
@@ -102,7 +100,6 @@ def main(
     global global_margin
     global global_scale_factor
     global global_steps_threshold
-    global global_is_rgb
     global global_detect_multiple_faces
     global global_output_dir
     global global_random_order
@@ -112,7 +109,6 @@ def main(
     global_margin = margin
     global_scale_factor = scale_factor
     global_steps_threshold = steps_threshold
-    global_is_rgb = is_rgb
     global_detect_multiple_faces = detect_multiple_faces
     global_output_dir = output_dir
     global_random_order = random_order
@@ -157,7 +153,6 @@ def align(person: facenet.PersonClass):
                                        face_crop_margin=global_margin,
                                        scale_factor=global_scale_factor,
                                        steps_threshold=global_steps_threshold,
-                                       is_rgb=global_is_rgb,
                                        detect_multiple_faces=global_detect_multiple_faces)
 
     if not os.path.exists(output_class_dir):
@@ -310,10 +305,6 @@ def parse_arguments(argv):
         help='Thresholds',
         default=[0.6, 0.7, 0.9])
     parser.add_argument(
-        '--is_rgb',
-        help='load with rgb vs bgr',
-        action='store_true')
-    parser.add_argument(
         '--random_order',
         help='Shuffles the order of images to enable alignment using multiple processes.',
         action='store_true')
@@ -341,7 +332,6 @@ if __name__ == '__main__':
             args.margin,
             args.scale_factor,
             args.steps_threshold,
-            args.is_rgb,
             args.detect_multiple_faces,
             args.num_processes,
             args.facenet_model_checkpoint)

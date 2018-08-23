@@ -45,7 +45,7 @@ class Identifier:
             self.encoder = insightface_encoder.Insightface(
                 model_path=model_path,
                 batch_size=batch_size)
-        if is_centerface:
+        elif is_centerface:
             self.detector = mtcnn_detector.Detector(
                 face_crop_height=112,
                 face_crop_width=96,

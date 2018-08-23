@@ -109,9 +109,8 @@ def crop(image: Image, bb: List[float], margin: float) -> Image:
     return image[y0:y1, x0:x1, :], (x0, y0, x1, y1)
 
 
-def get_transform_matrix(left_eye: Tuple[int, int], right_eye: Tuple[int, int],
-                         desiredLeftEye: Tuple[float, float]=(0.35, 0.35), desiredFaceHeight: int=112,
-                         desiredFaceWidth: int=112, margin: float=0.0):
+def get_transform_matrix(left_eye: Tuple[int, int], right_eye: Tuple[int, int], desiredLeftEye: Tuple[float, float]=(
+        0.35, 0.35), desiredFaceHeight: int=112, desiredFaceWidth: int=112, margin: float=0.0):
     # compute the angle between the eye centers
     dY = right_eye[1] - left_eye[1]
     dX = right_eye[0] - left_eye[0]
@@ -151,15 +150,22 @@ def preprocess(image: Image, desired_height: int, desired_width: int,
     margin_width = int(desired_width + desired_width * margin)
     M = None
     if landmark is not None:
-        left_eye = landmark['left_eye']
-        right_eye = landmark['right_eye']
-        M = get_transform_matrix(
-            left_eye,
-            right_eye,
-            (0.35, 0.35),
-            desired_height,
-            desired_width,
-            margin)
+        # Points chosen to align face in bottom center of image
+        src = np.array([[38.2946, 51.6963],
+                        [73.5318, 51.5014],
+                        [56.0252, 71.7366],
+                        [41.5493, 92.3655],
+                        [70.7299, 92.2041]], dtype=np.float32)
+        dx = (margin_width - 112) / 2
+        dy = (margin_height - 112) / 2
+        src[:, 0] += dx
+        src[:, 1] += dy
+        points = np.asarray([[point[0], point[1]]
+                             for point in landmark.values()])
+        dst = points.astype(np.float32)
+        tform = trans.SimilarityTransform()
+        tform.estimate(dst, src)
+        M = tform.params[0:2, :]
 
     if bbox is None:
         # use center crop

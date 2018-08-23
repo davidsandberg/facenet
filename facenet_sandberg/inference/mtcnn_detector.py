@@ -29,8 +29,7 @@ class Detector:
             steps_threshold: List[float]=[
                 0.6,
                 0.7,
-                0.7],
-            is_rgb: bool=True):
+                0.7]):
         import tensorflow as tf
         self.detector = MTCNN(
             weights_file=None,
@@ -41,7 +40,6 @@ class Detector:
         self.face_crop_width = face_crop_width
         self.face_crop_margin = face_crop_margin
         self.detect_multiple_faces = detect_multiple_faces
-        self.is_rgb = is_rgb
         self.min_face_size = min_face_size
 
     def bulk_find_face(self,
