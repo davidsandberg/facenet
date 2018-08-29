@@ -1,13 +1,12 @@
 import os
 import warnings
-from typing import Dict, Generator, List, Tuple
+from typing import Dict, Generator, List, Optional, Tuple, cast
 
 import numpy as np
 import progressbar as pb
 import tensorflow as tf
-from facenet_sandberg import facenet
-from facenet_sandberg.inference import utils
-from facenet_sandberg.inference.common_types import *
+from facenet_sandberg import facenet, utils
+from facenet_sandberg.common_types import *
 from scipy import misc
 
 warnings.filterwarnings("ignore", message="numpy.dtype size changed")
@@ -22,7 +21,7 @@ class Facenet:
             model_path: str,
             image_height: int=160,
             image_width: int=160,
-            batch_size: int=64):
+            batch_size: int=64) -> None:
         import tensorflow as tf
         self.sess = tf.Session()
         with self.sess.as_default():
@@ -39,7 +38,7 @@ class Facenet:
     def generate_embedding(self, image: Image) -> Embedding:
         h, w, c = image.shape
         assert h == self.image_height and w == self.image_width
-        prewhiten_face = facenet.prewhiten(image)
+        prewhiten_face = utils.fixed_standardize(image)
 
         # Run forward pass to calculate embeddings
         feed_dict = {self.images_placeholder: [
@@ -55,26 +54,19 @@ class Facenet:
 
     def generate_embeddings(self,
                             all_images: ImageGenerator) -> List[Embedding]:
-        featurized_batches = []
-        cur_batch = np.zeros(
-            [self.batch_size, self.image_height, self.image_width, 3])
-        clean_images = list(map(facenet.prewhiten, all_images))
-        index = 0
+        featurized_batches = cast(List[Embedding], [])
+        clean_images = np.array(list(map(utils.fixed_standardize, all_images)))
+
         widgets = ['Encoding:', pb.Percentage(), ' ',
                    pb.Bar(), ' ', pb.ETA(), ' ', pb.Timer()]
-        timer = pb.ProgressBar(widgets=widgets, max_value=len(clean_images))
-        for image in timer(clean_images):
-            cur_batch[index] = image
-            if index % (self.batch_size - 1) == 0 and index != 0:
-                featurized_batches += self.extract_batch(cur_batch)
-                cur_batch = np.zeros(
-                    [self.batch_size, self.image_height, self.image_width, 3])
-                index = -1
-            index += 1
-        # finish up remainder (get non zero rows)
-        cur_batch = cur_batch[[np.any(image) for image in cur_batch]]
-        if cur_batch.size > 0:
-            featurized_batches += self.extract_batch(cur_batch)
+        timer = pb.ProgressBar(
+            widgets=widgets,
+            max_value=clean_images.shape[0])
+        for index in range(0, clean_images.shape[0], self.batch_size):
+            end_index = min(index + self.batch_size, clean_images.shape[0])
+            timer.update(end_index)
+            batch = clean_images[index:end_index, :]
+            featurized_batches += self.extract_batch(batch)
         timer.finish()
         return featurized_batches
 
@@ -89,9 +81,9 @@ class Facenet:
         face_list = list(all_faces)
         total_num_faces = sum([1 for faces in face_list for face in faces])
         prewhitened_images = (
-            facenet.prewhiten(
+            utils.fixed_standardize(
                 face.image) for faces in face_list for face in faces)
-
+        prewhitened_images = cast(ImageGenerator, prewhitened_images)
         embed_array = self.generate_embeddings(prewhitened_images)
         total_num_embeddings = len(embed_array)
         assert total_num_embeddings == total_num_faces
@@ -107,18 +99,21 @@ class Facenet:
             yield faces
 
     def get_best_match(self, anchor: Face,
-                       faces: List[Face], save_memory: bool=False) -> Face:
-        anchor_image = resized = misc.imresize(
+                       faces: List[Face], save_memory: bool=False) -> Optional[Face]:
+        anchor_image = misc.imresize(
             anchor.image, (self.image_height, self.image_width), interp='bilinear')
         anchor.embedding = self.generate_embedding(anchor_image)
         min_dist = float('inf')
-        min_face = None
+        min_face = faces[0] if faces else None
         for face in faces:
             face_image = resized = misc.imresize(
                 face.image, (self.image_height, self.image_width), interp='bilinear')
             face.embedding = self.generate_embedding(face_image)
-            dist = utils.get_distance(anchor.embedding, face.embedding)
-            if dist < min_dist:
+            dist = utils.embedding_distance(
+                anchor.embedding,
+                face.embedding,
+                DistanceMetric.EUCLIDEAN_SQUARED)
+            if dist < min_dist and dist < 1.0:
                 min_dist = dist
                 min_face = face
         return min_face

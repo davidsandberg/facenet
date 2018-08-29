@@ -33,6 +33,7 @@ from subprocess import PIPE, Popen
 
 import numpy as np
 import tensorflow as tf
+from facenet_sandberg.inference.utils import *
 from scipy import interpolate, misc
 from six import iteritems
 from sklearn.model_selection import KFold
@@ -251,14 +252,6 @@ def train(
     return train_op
 
 
-def prewhiten(x):
-    mean = np.mean(x)
-    std = np.std(x)
-    std_adj = np.maximum(std, 1.0 / np.sqrt(x.size))
-    y = np.multiply(np.subtract(x, mean), 1 / std_adj)
-    return y
-
-
 def crop(image, random_crop, image_size):
     if image.shape[1] > image_size:
         sz1 = int(image.shape[1] // 2)
@@ -300,7 +293,7 @@ def load_data(
         if img.ndim == 2:
             img = to_rgb(img)
         if do_prewhiten:
-            img = prewhiten(img)
+            img = utils.normalize_image(img)
         img = crop(img, do_random_crop, image_size)
         img = flip(img, do_random_flip)
         images[i, :, :, :] = img
@@ -357,20 +350,6 @@ def get_learning_rate_from_file(filename, epoch):
                     learning_rate = lr
                 else:
                     return learning_rate
-
-
-class PersonClass():
-    "Stores the paths to images for a given person"
-
-    def __init__(self, name, image_paths):
-        self.name = name
-        self.image_paths = image_paths
-
-    def __str__(self):
-        return self.name + ', ' + str(len(self.image_paths)) + ' images'
-
-    def __len__(self):
-        return len(self.image_paths)
 
 
 def get_dataset(path, has_class_directories=True):
@@ -470,24 +449,6 @@ def get_model_filenames(model_dir):
                 max_step = step
                 ckpt_file = step_str.groups()[0]
     return meta_file, ckpt_file
-
-
-def distance(embeddings1, embeddings2, distance_metric=0):
-    if distance_metric == 0:
-        # Euclidian distance
-        diff = np.subtract(embeddings1, embeddings2)
-        dist = np.sum(np.square(diff), 1)
-    elif distance_metric == 1:
-        # Distance based on cosine similarity
-        dot = np.sum(np.multiply(embeddings1, embeddings2), axis=1)
-        norm = np.linalg.norm(embeddings1, axis=1) * \
-            np.linalg.norm(embeddings2, axis=1)
-        similarity = dot / norm
-        dist = np.arccos(similarity) / math.pi
-    else:
-        raise 'Undefined distance metric %d' % distance_metric
-
-    return dist
 
 
 def calculate_roc(
@@ -617,36 +578,6 @@ def calculate_val_far(threshold, dist, actual_issame):
     val = float(true_accept) / float(n_same)
     far = float(false_accept) / float(n_diff)
     return val, far
-
-
-def store_revision_info(src_path, output_dir, arg_string):
-    try:
-        # Get git hash
-        cmd = ['git', 'rev-parse', 'HEAD']
-        gitproc = Popen(cmd, stdout=PIPE, cwd=src_path)
-        (stdout, _) = gitproc.communicate()
-        git_hash = stdout.strip()
-    except OSError as e:
-        git_hash = ' '.join(cmd) + ': ' + e.strerror
-
-    try:
-        # Get local changes
-        cmd = ['git', 'diff', 'HEAD']
-        gitproc = Popen(cmd, stdout=PIPE, cwd=src_path)
-        (stdout, _) = gitproc.communicate()
-        git_diff = stdout.strip()
-    except OSError as e:
-        git_diff = ' '.join(cmd) + ': ' + e.strerror
-
-    # Store a text file in the log directory
-    rev_info_filename = os.path.join(output_dir, 'revision_info.txt')
-    with open(rev_info_filename, "w") as text_file:
-        text_file.write('arguments: %s\n--------------------\n' % arg_string)
-        text_file.write(
-            'tensorflow version: %s\n--------------------\n' %
-            tf.__version__)  # @UndefinedVariable
-        text_file.write('git hash: %s\n--------------------\n' % git_hash)
-        text_file.write('%s' % git_diff)
 
 
 def list_variables(filename):

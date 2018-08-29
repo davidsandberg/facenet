@@ -1,6 +1,35 @@
+from enum import Enum
 from typing import Dict, Generator, List, Tuple
 
 import numpy as np
+
+Landmarks = Dict[str, Tuple[int, int]]
+
+
+class DistanceMetric(Enum):
+    ANGULAR_DISTANCE = 1
+    EUCLIDEAN_SQUARED = 0
+
+
+class PersonClass:
+    "Stores the paths to images for a given person"
+
+    def __init__(self, name: str, image_paths: List[str]) -> None:
+        self.name = name
+        self.image_paths = image_paths
+
+    def __str__(self):
+        return self.name + ', ' + str(len(self.image_paths)) + ' images'
+
+    def __len__(self):
+        return len(self.image_paths)
+
+
+class AlignResult:
+    def __init__(
+            self, bounding_box: List[int], landmarks: Landmarks=None) -> None:
+        self.bounding_box = bounding_box
+        self.landmarks = landmarks
 
 
 class Face:
@@ -45,7 +74,7 @@ class Match:
 
 Image = np.ndarray
 Embedding = np.ndarray
-EmbeddingsGenerator = Generator[List[Embedding], None, None]
-ImageGenerator = Generator[Image, None, None]
+EmbeddingsGenerator = Generator[List[np.ndarray], None, None]
+ImageGenerator = Generator[np.ndarray, None, None]
+FaceGenerator = Generator[Face, None, None]
 FacesGenerator = Generator[List[Face], None, None]
-Keypoints = Dict[str, Tuple[int, int]]

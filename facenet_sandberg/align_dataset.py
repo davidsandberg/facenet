@@ -30,15 +30,16 @@ import sys
 from ctypes import c_int
 from glob import iglob
 from multiprocessing import Lock, Value
-from typing import List
+from typing import List, Optional, cast
 
 import cv2
 import numpy as np
 import progressbar as pb
 import tensorflow as tf
 from facenet_sandberg import facenet
-from facenet_sandberg.inference import facenet_encoder, mtcnn_detector, utils
-from facenet_sandberg.inference.common_types import *
+from facenet_sandberg.common_types import *
+from facenet_sandberg.inference import facenet_encoder, mtcnn_detector
+from facenet_sandberg.utils import *
 from pathos.multiprocessing import ProcessPool
 from scipy import misc
 
@@ -47,16 +48,16 @@ tf.logging.set_verbosity(tf.logging.ERROR)
 
 widgets = ['Aligning Dataset', pb.Percentage(), ' ',
            pb.Bar(marker=pb.RotatingMarker()), ' ', pb.ETA()]
-global_image_height = None
-global_image_width = None
-global_margin = None
-global_scale_factor = None
-global_steps_threshold = None
-global_detect_multiple_faces = None
-global_output_dir = None
-global_random_order = None
-global_facenet_model_checkpoint = None
-timer = None
+global_image_height = 0
+global_image_width = 0
+global_margin = 0.0
+global_scale_factor = 0.0
+global_steps_threshold = [0.0]
+global_detect_multiple_faces = False
+global_output_dir = ""
+global_random_order = False
+global_facenet_model_checkpoint = ""
+timer = pb.ProgressBar(widgets=widgets)
 num_sucessful = Value(c_int)  # defaults to 0
 num_sucessful_lock = Lock()
 num_unsucessful = Value(c_int)
@@ -94,7 +95,6 @@ def main(
         num_processes {int} -- Number of processes to use (default: {1})
         facenet_model_checkpoint {str} -- path to facenet model if detecting mutiple faces (default: {''})
     """
-    global timer
     global global_image_height
     global global_image_width
     global global_margin
@@ -122,7 +122,8 @@ def main(
         random.shuffle(dataset)
 
     num_images = sum(len(i) for i in dataset)
-    timer = pb.ProgressBar(widgets=widgets, maxval=num_images).start()
+    timer.maxval = num_images
+    timer.start()
 
     num_processes = min(num_processes, os.cpu_count())
     if num_processes > 1:
@@ -142,7 +143,7 @@ def main(
           int(num_unsucessful.value))
 
 
-def align(person: facenet.PersonClass):
+def align(person: PersonClass) -> None:
     output_class_dir = os.path.join(global_output_dir, person.name)
     if already_done(person, output_class_dir):
         increment_total(len(person.image_paths))
@@ -163,33 +164,34 @@ def align(person: facenet.PersonClass):
     all_faces = gen_all_faces(person, output_class_dir, detector)
 
     if global_detect_multiple_faces and global_facenet_model_checkpoint and all_faces:
-        encoder = facenet_encoder.Facenet(
-            model_path=global_facenet_model_checkpoint)
+        encoder = None
         anchor = get_anchor(person, output_class_dir, detector)
         if anchor:
-            final_face_paths = []
             for faces in all_faces:
                 if not faces:
                     pass
-                if len(faces) > 1:
+                elif len(faces) > 1:
+                    if not encoder:
+                        encoder = facenet_encoder.Facenet(
+                            model_path=global_facenet_model_checkpoint)
                     best_face = encoder.get_best_match(anchor, faces)
-                    cv2.imwrite(best_face.name, best_face.image)
-                    # misc.imsave(best_face.name, best_face.image)
+                    if best_face:
+                        cv2.imwrite(best_face.name, best_face.image)
                 elif len(faces) == 1:
                     cv2.imwrite(faces[0].name, faces[0].image)
-                    # misc.imsave(faces[0].name, faces[0].image)
-        encoder.tear_down()
+        if encoder:
+            encoder.tear_down()
+            del encoder
     else:
         for faces in all_faces:
             if faces:
-                for person in faces:
-                    cv2.imwrite(person.name, person.image)
-                    # misc.imsave(person.name, person.image)
+                for face in faces:
+                    cv2.imwrite(face.name, face.image)
     del detector
     timer.update(int(num_images_total.value))
 
 
-def gen_all_faces(person: facenet.PersonClass,
+def gen_all_faces(person: PersonClass,
                   output_class_dir: str, detector: mtcnn_detector.Detector) -> FacesGenerator:
     for image_path in person.image_paths:
         increment_total()
@@ -200,14 +202,14 @@ def gen_all_faces(person: facenet.PersonClass,
                 yield faces
 
 
-def already_done(person: facenet.PersonClass, output_class_dir: str):
+def already_done(person: PersonClass, output_class_dir: str):
     total = sum(os.path.exists(get_file_name(image_path, output_class_dir))
                 for image_path in person.image_paths)
     return total == len(person.image_paths)
 
 
-def get_anchor(person: facenet.PersonClass,
-               output_class_dir: str, detector: mtcnn_detector.Detector) -> Face:
+def get_anchor(person: PersonClass,
+               output_class_dir: str, detector: mtcnn_detector.Detector) -> Optional[Face]:
     first_face = None
     for image_path in person.image_paths:
         output_filename = get_file_name(image_path, output_class_dir)
@@ -221,23 +223,18 @@ def get_anchor(person: facenet.PersonClass,
 
 def process_image(detector: mtcnn_detector.Detector,
                   image_path: str, output_filename: str) -> List[Face]:
-    try:
-        image = misc.imread(image_path)
-    except (IOError, ValueError, IndexError) as error:
-        return []
-    else:
-        image = fix_image(image, image_path)
-        faces = detector.find_faces(image)
-        if not faces:
-            increment_unsucessful()
-        for index, person in enumerate(faces):
-            increment_sucessful()
-            filename_base, file_extension = os.path.splitext(
-                output_filename)
-            output_filename_n = "{}{}".format(
-                filename_base, file_extension)
-            person.name = output_filename_n
-        return faces
+    image = utils.get_image_from_path_rgb(image_path)
+    faces = detector.find_faces(image)
+    if not faces:
+        increment_unsucessful()
+    for index, person in enumerate(faces):
+        increment_sucessful()
+        filename_base, file_extension = os.path.splitext(
+            output_filename)
+        output_filename_n = "{}{}".format(
+            filename_base, file_extension)
+        person.name = output_filename_n
+    return faces
 
 
 def increment_sucessful(add_amount: int=1):
@@ -253,15 +250,6 @@ def increment_unsucessful(add_amount: int=1):
 def increment_total(add_amount: int=1):
     with num_images_total_lock:
         num_images_total.value += add_amount
-
-
-def fix_image(image: np.ndarray, image_path: str) -> Image:
-    if image.ndim < 2:
-        print('Unable to align "%s"' % image_path)
-    if image.ndim == 2:
-        image = facenet.to_rgb(image)
-    image = image[:, :, 0:3]
-    return image
 
 
 def get_file_name(image_path: str, output_class_dir: str) -> str:

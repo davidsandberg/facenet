@@ -6,10 +6,10 @@ import warnings
 from typing import Dict, Generator, List, Tuple
 
 import tensorflow as tf
-from facenet_sandberg import facenet
+from facenet_sandberg import facenet, utils
+from facenet_sandberg.common_types import *
 from facenet_sandberg.inference import (facenet_encoder, insightface_encoder,
                                         mtcnn_detector)
-from facenet_sandberg.inference.common_types import *
 
 warnings.filterwarnings("ignore", message="numpy.dtype size changed")
 warnings.filterwarnings("ignore", message="numpy.ufunc size changed")
@@ -146,16 +146,13 @@ class Identifier:
     def compare_embedding(self,
                           embedding_1: Embedding,
                           embedding_2: Embedding,
-                          distance_metric: int=0) -> (bool,
-                                                      float):
+                          distance_metric: DistanceMetric) -> (bool,
+                                                               float):
         """Compares the distance between two embeddings
-
-        Keyword Arguments:
-            distance_metric {int} -- 0 for Euclidian distance and 1 for Cosine similarity (default: {0})
-
         """
 
-        distance = utils.get_distance(embedding_1, embedding_2)
+        distance = utils.embedding_distance(
+            embedding_1, embedding_2, distance_metric)
         is_match = False
         if distance < self.threshold:
             is_match = True
@@ -175,30 +172,28 @@ class Identifier:
         if image_1_faces and image_2_faces:
             for face_1 in image_1_faces:
                 for face_2 in image_2_faces:
-                    distance = utils.get_distance(face_1.embedding.reshape(
-                        1, -1), face_2.embedding.reshape(1, -1), distance_metric=0)
-                    if distance < match.score:
-                        match.score = distance
+                    is_match, score = self.compare_embedding(
+                        face_1.embedding, face_2.embedding, distance_metric)
+                    if score < match.score:
+                        match.score = score
                         match.face_1 = face_1
                         match.face_2 = face_2
-            if distance < self.threshold:
-                match.is_match = True
+                        match.is_match = is_match
         return match
 
-    def find_all_matches(self, image_directory: str,
-                         recursive: bool) -> List[Match]:
+    def find_all_matches(self, image_directory: str, recursive: bool,
+                         distance_metric: DistanceMetric=DistanceMetric.EUCLIDEAN_SQUARED) -> List[Match]:
         """Finds all matches in a directory of images
         """
 
         all_images = utils.get_images_from_dir(image_directory, recursive)
         all_matches = []
         all_faces_lists = self.detect_encode_all(all_images)
-        all_faces: Generator[Face, None, None] = (
-            face for faces in all_faces_lists for face in faces)
+        all_faces = (face for faces in all_faces_lists for face in faces)
         # Really inefficient way to check all combinations
         for face_1, face_2 in itertools.combinations(all_faces, 2):
             is_match, score = self.compare_embedding(
-                face_1.embedding, face_2.embedding)
+                face_1.embedding, face_2.embedding, distance_metric)
             if is_match:
                 match = Match()
                 match.face_1 = face_1

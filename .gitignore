@@ -95,3 +95,7 @@ ENV/
 Untitled.ipynb
 .DS_Store
 debug/
+
+.mypy_cache
+.vscode
+.vscode/settings.json

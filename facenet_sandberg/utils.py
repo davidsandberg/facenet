@@ -1,3 +1,4 @@
+import math
 import os
 from glob import glob, iglob
 from urllib.request import urlopen
@@ -5,13 +6,46 @@ from urllib.request import urlopen
 import cv2
 import numpy as np
 from facenet_sandberg import facenet
-from facenet_sandberg.inference import utils
-from facenet_sandberg.inference.common_types import *
+from facenet_sandberg.common_types import *
 from skimage import transform as trans
+from sklearn.metrics.pairwise import paired_distances
 
 
-def fit_bounding_box(max_y: int, max_x: int, x1: int,
-                     y1: int, dx: int, dy: int) -> List[int]:
+def normalize_image(image: Image) -> Image:
+    mean = np.mean(image)
+    std = np.std(image)
+    std_adj = np.maximum(std, 1.0 / np.sqrt(image.size))
+    y = np.multiply(np.subtract(image, mean), 1 / std_adj)
+    return y
+
+
+def fixed_standardize(image: Image) -> Image:
+    image = image - 127.5
+    image = image / 128.0
+    return image
+
+
+def fix_image(image: Image) -> Image:
+    if image.ndim < 2:
+        image = image[:, :, np.newaxis]
+    if image.ndim == 2:
+        image = add_color(image)
+    image = image[:, :, 0:3]
+    return image
+
+
+def add_color(image: Image) -> Image:
+    w, h = image.shape
+    ret = np.empty((w, h, 3), dtype=np.uint8)
+    ret[:, :, 0] = ret[:, :, 1] = ret[:, :, 2] = image
+    return ret
+
+
+def fix_mtcnn_bb(max_y: int, max_x: int, x1: int,
+                 y1: int, dx: int, dy: int) -> List[int]:
+    """ mtcnn results can be out of image so fix results
+    """
+
     x2 = x1 + dx
     y2 = y1 + dy
     x1 = max(min(x1, max_x), 0)
@@ -21,19 +55,35 @@ def fit_bounding_box(max_y: int, max_x: int, x1: int,
     return [x1, y1, x2, y2]
 
 
-def get_distance(embedding_1: Embedding,
-                 embedding_2: Embedding,
-                 distance_metric: int=0) -> float:
+def embedding_distance(embedding_1: Embedding,
+                       embedding_2: Embedding,
+                       distance_metric: DistanceMetric) -> float:
     """Compares the distance between two embeddings
-
-    Keyword Arguments:
-        distance_metric {int} -- 0 for Euclidian distance and 1 for Cosine similarity (default: {0})
-
     """
-
-    distance = facenet.distance(embedding_1.reshape(
+    distance = embedding_distance_bulk(embedding_1.reshape(
         1, -1), embedding_2.reshape(1, -1), distance_metric=distance_metric)[0]
     return distance
+
+
+def embedding_distance_bulk(
+        embeddings1: Embedding,
+        embeddings2: Embedding,
+        distance_metric: DistanceMetric) -> np.ndarray:
+    """Compares the distance between two arrays of embeddings
+    """
+    if distance_metric == DistanceMetric.EUCLIDEAN_SQUARED:
+        return np.square(
+            paired_distances(
+                embeddings1,
+                embeddings2,
+                metric='euclidean'))
+    elif distance_metric == DistanceMetric.ANGULAR_DISTANCE:
+        # Angular Distance: https://en.wikipedia.org/wiki/Cosine_similarity
+        similarity = 1 - paired_distances(
+            embeddings1,
+            embeddings2,
+            metric='cosine')
+        return np.arccos(similarity) / math.pi
 
 
 def download_image(url: str, is_rgb: bool=True) -> Image:
@@ -50,13 +100,13 @@ def get_image_from_path_rgb(image_path: str) -> Image:
     # BGR color space
     image = cv2.imread(image_path, cv2.IMREAD_COLOR)
     image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
-    return image
+    return fix_image(image)
 
 
 def get_image_from_path_bgr(image_path: str) -> Image:
     # BGR color space
     image = cv2.imread(image_path, cv2.IMREAD_COLOR)
-    return image
+    return fix_image(image)
 
 
 def get_images_from_dir(
@@ -74,16 +124,7 @@ def get_images_from_dir(
         yield image
 
 
-def fix_image(image: Image) -> Image:
-    if image.ndim < 2:
-        image = image[:, :, np.newaxis]
-    if image.ndim == 2:
-        image = facenet.to_rgb(image)
-    image = image[:, :, 0:3]
-    return image
-
-
-def crop(image: Image, bb: List[float], margin: float) -> Image:
+def crop(image: Image, bb: List[int], margin: float) -> Image:
     """
     img = image from misc.imread, which should be in (H, W, C) format
     bb = pixel coordinates of bounding box: (x0, y0, x1, y1)
@@ -144,7 +185,7 @@ def get_transform_matrix(left_eye: Tuple[int, int], right_eye: Tuple[int, int], 
 
 
 def preprocess(image: Image, desired_height: int, desired_width: int,
-               margin: float, bbox: List[int]=None, landmark: Keypoints=None):
+               margin: float, bbox: List[int]=None, landmark: Landmarks=None):
     image_height, image_width = image.shape[:2]
     margin_height = int(desired_height + desired_height * margin)
     margin_width = int(desired_width + desired_width * margin)

@@ -68,7 +68,7 @@ def save_variables_and_metagraph(
     save_time_variables = time.time() - start_time
     print('Variables saved in %.2f seconds' % save_time_variables)
     metagraph_filename = os.path.join(model_dir, 'model-%s.meta' % model_name)
-    save_time_metagraph = 0
+    save_time_metagraph = 0.0
     if not os.path.exists(metagraph_filename):
         print('Saving metagraph')
         start_time = time.time()

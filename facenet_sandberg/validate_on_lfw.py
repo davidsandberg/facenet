@@ -32,13 +32,14 @@ import math
 import os
 import sys
 import warnings
-from enum import Enum, auto
+from enum import Enum
 from typing import List, Tuple, Union, cast
 
 import numpy as np
 import progressbar as pb
 import tensorflow as tf
-from facenet_sandberg import facenet, lfw
+from facenet_sandberg import facenet, lfw, utils
+from facenet_sandberg.common_types import *
 from scipy import interpolate
 from scipy.optimize import brentq
 from sklearn import metrics
@@ -51,11 +52,6 @@ warnings.filterwarnings("ignore", message="numpy.dtype size changed")
 warnings.filterwarnings("ignore", message="numpy.ufunc size changed")
 os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
 tf.logging.set_verbosity(tf.logging.ERROR)
-
-
-class DistanceMetric(Enum):
-    ANGULAR_DISTANCE = auto()
-    EUCLIDEAN_SQUARED = auto()
 
 
 def main(lfw_dir, model, lfw_pairs, use_flipped_images, subtract_mean,
@@ -222,9 +218,9 @@ def evaluate(
                                         0,
                                         4,
                                         0.01)
-    print(f'Accuracy: {accuracy}')
-    print(f'Recall: {recall}')
-    print(f'Precision: {precision}')
+    print('Accuracy: {}'.format(accuracy))
+    print('Recall: {}'.format(recall))
+    print('Precision: {}'.format(precision))
 
     # assert np.array_equal(lab_array, np.arange(
     #     nrof_images)), 'Wrong labels used for evaluation, possibly caused by training examples left in the input pipeline'
@@ -381,7 +377,7 @@ def parse_arguments(argv):
         '--distance_metric',
         type=int,
         help='Distance metric  0:euclidian, 1:cosine similarity.',
-        default=0)
+        default=1)
     parser.add_argument(
         '--use_flipped_images',
         help='Concatenates embeddings for the image and its horizontally flipped counterpart.',

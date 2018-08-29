@@ -1,14 +1,14 @@
+import math
 import os
 import warnings
-from typing import Dict, Generator, List, Tuple
+from typing import Dict, Generator, List, Tuple, cast
 
 import numpy as np
 import progressbar as pb
 import tensorflow as tf
 import tensorlayer as tl
-from facenet_sandberg import facenet
-from facenet_sandberg.inference import utils
-from facenet_sandberg.inference.common_types import *
+from facenet_sandberg import facenet, utils
+from facenet_sandberg.common_types import *
 from facenet_sandberg.models.L_Resnet_E_IR_fix_issue9 import get_resnet
 
 warnings.filterwarnings("ignore", message="numpy.dtype size changed")
@@ -21,7 +21,7 @@ class Insightface:
     def __init__(self, model_path: str,
                  image_height: int=112,
                  image_width: int=112,
-                 batch_size: int=64):
+                 batch_size: int=64) -> None:
         import tensorflow as tf
         import tensorflow.contrib.slim as slim
         from tensorflow.core.protobuf import config_pb2
@@ -76,7 +76,7 @@ class Insightface:
         return sess, embedding_tensor, feed_dict, images
 
     def generate_embedding(self, image: Image) -> Embedding:
-        image = self.fix_image(image)
+        image = utils.fixed_standardize(image)
         self.feed_dict.setdefault(self.input_placeholder, None)
         self.feed_dict[self.input_placeholder] = [image]
         feat = self.sess.run([self.embedding_tensor], feed_dict=self.feed_dict)
@@ -96,26 +96,19 @@ class Insightface:
     def generate_embeddings(
             self,
             all_images: ImageGenerator) -> List[Embedding]:
-        featurized_batches = []
-        cur_batch = np.zeros(
-            [self.batch_size, self.image_height, self.image_width, 3])
-        clean_images = list(map(self.fix_image, all_images))
-        index = 0
+        featurized_batches = cast(List[Embedding], [])
+        clean_images = np.array(list(map(utils.fixed_standardize, all_images)))
+
         widgets = ['Encoding:', pb.Percentage(), ' ',
                    pb.Bar(), ' ', pb.ETA(), ' ', pb.Timer()]
-        timer = pb.ProgressBar(widgets=widgets, max_value=len(clean_images))
-        for image in timer(clean_images):
-            cur_batch[index] = image
-            if index % (self.batch_size - 1) == 0 and index != 0:
-                featurized_batches += self.extract_batch(cur_batch)
-                cur_batch = np.zeros(
-                    [self.batch_size, self.image_height, self.image_width, 3])
-                index = -1
-            index += 1
-        # finish up remainder (get non zero rows)
-        cur_batch = cur_batch[[np.any(image) for image in cur_batch]]
-        if cur_batch.size > 0:
-            featurized_batches += self.extract_batch(cur_batch)
+        timer = pb.ProgressBar(
+            widgets=widgets,
+            max_value=clean_images.shape[0])
+        for index in range(0, clean_images.shape[0], self.batch_size):
+            end_index = min(index + self.batch_size, clean_images.shape[0])
+            timer.update(end_index)
+            batch = clean_images[index:end_index, :]
+            featurized_batches += self.extract_batch(batch)
         timer.finish()
         return featurized_batches
 
@@ -130,9 +123,9 @@ class Insightface:
         face_list = list(all_faces)
         total_num_faces = sum([1 for faces in face_list for face in faces])
         clean_images = (
-            self.fix_image(
+            utils.fixed_standardize(
                 face.image) for faces in face_list for face in faces)
-
+        clean_images = cast(ImageGenerator, clean_images)
         embed_array = self.generate_embeddings(clean_images)
         total_num_embeddings = len(embed_array)
         assert total_num_embeddings == total_num_faces
@@ -146,17 +139,6 @@ class Insightface:
                 face.embedding = embed_array[index]
                 index += 1
             yield faces
-
-    def fix_image(self, image: Image) -> Image:
-        h, w, c = image.shape
-        x1 = (w - self.image_width) // 2
-        y1 = (h - self.image_height) // 2
-        image = image[y1:(y1 + self.image_height),
-                      x1:(x1 + self.image_width), :]
-        image = (np.float32(image) - 127.5) / 128
-        h, w, c = image.shape
-        assert h == self.image_height and w == self.image_width and c == 3
-        return image
 
     def tear_down(self):
         self.sess.close()

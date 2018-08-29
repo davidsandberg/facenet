@@ -6,7 +6,7 @@ import io
 import os
 import random
 from argparse import ArgumentParser, Namespace
-from typing import List, Set, Tuple
+from typing import List, Set, Tuple, cast
 
 import numpy as np
 
@@ -20,7 +20,7 @@ def write_pairs(fname: str,
                 mismatch_folds: List[List[Mismatch]],
                 num_folds: int,
                 num_matches_mismatches: int) -> None:
-    metadata = f'{num_folds}\t{num_matches_mismatches}\n'
+    metadata = '{}\t{}\n'.format(num_folds, num_matches_mismatches)
     with io.open(fname,
                  'w',
                  io.DEFAULT_BUFFER_SIZE,
@@ -28,10 +28,11 @@ def write_pairs(fname: str,
         fpairs.write(metadata)
         for match_fold, mismatch_fold in zip(match_folds, mismatch_folds):
             for match in match_fold:
-                line = f'{match[0]}\t{match[1]}\t{match[2]}\n'
+                line = '{}\t{}\t{}\n'.format(match[0], match[1], match[2])
                 fpairs.write(line)
             for mismatch in mismatch_fold:
-                line = f'{mismatch[0]}\t{mismatch[1]}\t{mismatch[2]}\t{mismatch[3]}\n'
+                line = '{}\t{}\t{}\t{}\n'.format(
+                    mismatch[0], mismatch[1], mismatch[2], mismatch[3])
                 fpairs.write(line)
         fpairs.flush()
 
@@ -47,7 +48,7 @@ def _split_people_into_folds(image_dir: str,
 def _make_matches(image_dir: str,
                   people: List[str],
                   total_matches: int) -> List[Match]:
-    matches: Set[Match] = set()
+    matches = cast(Set[Match], set())
     curr_matches = 0
     while curr_matches < total_matches:
         person = random.choice(people)
@@ -66,7 +67,7 @@ def _make_matches(image_dir: str,
 def _make_mismatches(image_dir: str,
                      people: List[str],
                      total_matches: int) -> List[Mismatch]:
-    mismatches: Set[Mismatch] = set()
+    mismatches = cast(Set[Mismatch], set())
     curr_matches = 0
     while curr_matches < total_matches:
         person1 = random.choice(people)

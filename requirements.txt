@@ -1,4 +1,4 @@
-tensorflow==1.7
+tensorflow
 tensorlayer==1.7
 scipy
 scikit-learn
@@ -8,8 +8,9 @@ matplotlib
 Pillow
 requests
 psutil
-progressbar
+progressbar2
 mtcnn
 pathos
 dask
 tinytag
+docker
