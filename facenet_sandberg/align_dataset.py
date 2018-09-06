@@ -38,7 +38,7 @@ import progressbar as pb
 import tensorflow as tf
 from facenet_sandberg import facenet
 from facenet_sandberg.common_types import *
-from facenet_sandberg.inference import facenet_encoder, mtcnn_detector
+from facenet_sandberg.inference import align, facenet_encoder
 from facenet_sandberg.utils import *
 from pathos.multiprocessing import ProcessPool
 from scipy import misc
@@ -125,15 +125,15 @@ def main(
     timer.maxval = num_images
     timer.start()
 
-    num_processes = min(num_processes, os.cpu_count())
+    num_processes = cast(int, min(num_processes, os.cpu_count()))
     if num_processes > 1:
         process_pool = ProcessPool(num_processes)
-        process_pool.imap(align, dataset)
+        process_pool.imap(align_person, dataset)
         process_pool.close()
         process_pool.join()
     else:
         for person in dataset:
-            align(person)
+            align_person(person)
 
     timer.finish()
     print('Total number of images: %d' % int(num_images_total.value))
@@ -143,18 +143,18 @@ def main(
           int(num_unsucessful.value))
 
 
-def align(person: PersonClass) -> None:
+def align_person(person: PersonClass) -> None:
     output_class_dir = os.path.join(global_output_dir, person.name)
     if already_done(person, output_class_dir):
         increment_total(len(person.image_paths))
         timer.update(int(num_images_total.value))
         return None
-    detector = mtcnn_detector.Detector(face_crop_height=global_image_height,
-                                       face_crop_width=global_image_width,
-                                       face_crop_margin=global_margin,
-                                       scale_factor=global_scale_factor,
-                                       steps_threshold=global_steps_threshold,
-                                       detect_multiple_faces=global_detect_multiple_faces)
+    detector = align.Detector(face_crop_height=global_image_height,
+                              face_crop_width=global_image_width,
+                              face_crop_margin=global_margin,
+                              scale_factor=global_scale_factor,
+                              steps_threshold=global_steps_threshold,
+                              detect_multiple_faces=global_detect_multiple_faces)
 
     if not os.path.exists(output_class_dir):
         os.makedirs(output_class_dir)
@@ -192,7 +192,7 @@ def align(person: PersonClass) -> None:
 
 
 def gen_all_faces(person: PersonClass,
-                  output_class_dir: str, detector: mtcnn_detector.Detector) -> FacesGenerator:
+                  output_class_dir: str, detector: align.Detector) -> FacesGenerator:
     for image_path in person.image_paths:
         increment_total()
         output_filename = get_file_name(image_path, output_class_dir)
@@ -209,7 +209,7 @@ def already_done(person: PersonClass, output_class_dir: str):
 
 
 def get_anchor(person: PersonClass,
-               output_class_dir: str, detector: mtcnn_detector.Detector) -> Optional[Face]:
+               output_class_dir: str, detector: align.Detector) -> Optional[Face]:
     first_face = None
     for image_path in person.image_paths:
         output_filename = get_file_name(image_path, output_class_dir)
@@ -221,9 +221,9 @@ def get_anchor(person: PersonClass,
     return first_face
 
 
-def process_image(detector: mtcnn_detector.Detector,
+def process_image(detector: align.Detector,
                   image_path: str, output_filename: str) -> List[Face]:
-    image = utils.get_image_from_path_rgb(image_path)
+    image = get_image_from_path_rgb(image_path)
     faces = detector.find_faces(image)
     if not faces:
         increment_unsucessful()
@@ -261,11 +261,11 @@ def get_file_name(image_path: str, output_class_dir: str) -> str:
 
 def parse_arguments(argv):
     parser = argparse.ArgumentParser()
-    parser.add_argument('input_dir', type=str,
+    parser.add_argument('--input_dir', type=str,
                         help='Directory with unaligned images.')
-    parser.add_argument('output_dir', type=str,
+    parser.add_argument('--output_dir', type=str,
                         help='Directory with aligned face thumbnails.')
-    parser.add_argument('facenet_model_checkpoint', type=str,
+    parser.add_argument('--facenet_model_checkpoint', type=str,
                         help='Path to facenet model', default='')
     parser.add_argument(
         '--image_height',

@@ -8,8 +8,8 @@ from typing import Dict, Generator, List, Tuple
 import tensorflow as tf
 from facenet_sandberg import facenet, utils
 from facenet_sandberg.common_types import *
-from facenet_sandberg.inference import (facenet_encoder, insightface_encoder,
-                                        mtcnn_detector)
+from facenet_sandberg.inference import (align, facenet_encoder,
+                                        insightface_encoder)
 
 warnings.filterwarnings("ignore", message="numpy.dtype size changed")
 warnings.filterwarnings("ignore", message="numpy.ufunc size changed")
