@@ -33,12 +33,13 @@ from subprocess import PIPE, Popen
 
 import numpy as np
 import tensorflow as tf
-from facenet_sandberg.inference.utils import *
 from scipy import interpolate, misc
 from six import iteritems
 from sklearn.model_selection import KFold
 from tensorflow.python.platform import gfile
 from tensorflow.python.training import training
+
+from facenet_sandberg.utils import *
 
 
 def triplet_loss(anchor, positive, negative, alpha):
@@ -350,55 +351,6 @@ def get_learning_rate_from_file(filename, epoch):
                     learning_rate = lr
                 else:
                     return learning_rate
-
-
-def get_dataset(path, has_class_directories=True):
-    dataset = []
-    path_exp = os.path.expanduser(path)
-    people = sorted([path for path in os.listdir(path_exp)
-                     if os.path.isdir(os.path.join(path_exp, path))])
-    num_people = len(people)
-    for i in range(num_people):
-        person_name = people[i]
-        facedir = os.path.join(path_exp, person_name)
-        image_paths = get_image_paths(facedir)
-        dataset.append(PersonClass(person_name, image_paths))
-
-    return dataset
-
-
-def get_image_paths(facedir):
-    image_paths = []
-    if os.path.isdir(facedir):
-        images = os.listdir(facedir)
-        image_paths = [os.path.join(facedir, img) for img in images]
-    return image_paths
-
-
-def split_dataset(dataset, split_ratio, min_nrof_images_per_class, mode):
-    if mode == 'SPLIT_CLASSES':
-        nrof_classes = len(dataset)
-        class_indices = np.arange(nrof_classes)
-        np.random.shuffle(class_indices)
-        split = int(round(nrof_classes * (1 - split_ratio)))
-        train_set = [dataset[i] for i in class_indices[0:split]]
-        test_set = [dataset[i] for i in class_indices[split:-1]]
-    elif mode == 'SPLIT_IMAGES':
-        train_set = []
-        test_set = []
-        for cls in dataset:
-            paths = cls.image_paths
-            np.random.shuffle(paths)
-            nrof_images_in_class = len(paths)
-            split = int(math.floor(nrof_images_in_class * (1 - split_ratio)))
-            if split == nrof_images_in_class:
-                split = nrof_images_in_class - 1
-            if split >= min_nrof_images_per_class and nrof_images_in_class - split >= 1:
-                train_set.append(PersonClass(cls.name, paths[:split]))
-                test_set.append(PersonClass(cls.name, paths[split:]))
-    else:
-        raise ValueError('Invalid train/test split mode "%s"' % mode)
-    return train_set, test_set
 
 
 def load_model(model, input_map=None):

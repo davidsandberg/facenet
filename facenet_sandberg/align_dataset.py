@@ -25,7 +25,6 @@ from __future__ import absolute_import, division, print_function
 
 import argparse
 import os
-import random
 import sys
 from ctypes import c_int
 from glob import iglob
@@ -36,26 +35,28 @@ import cv2
 import numpy as np
 import progressbar as pb
 import tensorflow as tf
+from pathos.multiprocessing import ProcessPool
+from scipy import misc
+
 from facenet_sandberg import facenet
 from facenet_sandberg.common_types import *
 from facenet_sandberg.inference import align, facenet_encoder
 from facenet_sandberg.utils import *
-from pathos.multiprocessing import ProcessPool
-from scipy import misc
 
 os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
 tf.logging.set_verbosity(tf.logging.ERROR)
 
-widgets = ['Aligning Dataset', pb.Percentage(), ' ',
-           pb.Bar(marker=pb.RotatingMarker()), ' ', pb.ETA()]
+widgets = ['Aligning Dataset: ', pb.Percentage(), ' ',
+           pb.Bar(), ' ', pb.ETA()]
 global_image_height = 0
 global_image_width = 0
 global_margin = 0.0
 global_scale_factor = 0.0
 global_steps_threshold = [0.0]
 global_detect_multiple_faces = False
+global_use_faceboxes = False
+global_use_affine = False
 global_output_dir = ""
-global_random_order = False
 global_facenet_model_checkpoint = ""
 timer = pb.ProgressBar(widgets=widgets)
 num_sucessful = Value(c_int)  # defaults to 0
@@ -69,13 +70,14 @@ num_images_total_lock = Lock()
 def main(
         input_dir: str,
         output_dir: str,
-        random_order: bool=False,
         image_height: int=182,
         image_width: int=182,
         margin: float=0.4,
         scale_factor: float=0.0,
         steps_threshold: List[float]=[0.6, 0.7, 0.7],
         detect_multiple_faces: bool=False,
+        use_faceboxes: bool=False,
+        use_affine: bool=False,
         num_processes: int=1,
         facenet_model_checkpoint: str=''):
     """Aligns an image dataset
@@ -85,8 +87,6 @@ def main(
         output_dir {str} -- Directory with aligned face thumbnails.
 
     Keyword Arguments:
-        random_order {bool} -- Shuffles the order of images to enable alignment
-                                using multiple processes. (default: {False})
         image_size {int} -- Image size (height, width) in pixels. (default: {182})
         margin {int} -- Margin for the crop around the bounding box
                         (height, width) in pixels. (default: {44})
@@ -101,28 +101,29 @@ def main(
     global global_scale_factor
     global global_steps_threshold
     global global_detect_multiple_faces
+    global global_use_faceboxes
+    global global_use_affine
     global global_output_dir
-    global global_random_order
     global global_facenet_model_checkpoint
+    global timer
     global_image_height = image_height
     global_image_width = image_width
     global_margin = margin
     global_scale_factor = scale_factor
     global_steps_threshold = steps_threshold
     global_detect_multiple_faces = detect_multiple_faces
+    global_use_faceboxes = use_faceboxes
+    global_use_affine = use_affine
     global_output_dir = output_dir
-    global_random_order = random_order
     global_facenet_model_checkpoint = facenet_model_checkpoint
 
     output_dir = os.path.expanduser(output_dir)
     os.makedirs(output_dir, exist_ok=True)
 
-    dataset = facenet.get_dataset(input_dir)
-    if random_order:
-        random.shuffle(dataset)
+    dataset = get_dataset(input_dir)
 
     num_images = sum(len(i) for i in dataset)
-    timer.maxval = num_images
+    timer.max_value = num_images
     timer.start()
 
     num_processes = cast(int, min(num_processes, os.cpu_count()))
@@ -154,12 +155,12 @@ def align_person(person: PersonClass) -> None:
                               face_crop_margin=global_margin,
                               scale_factor=global_scale_factor,
                               steps_threshold=global_steps_threshold,
-                              detect_multiple_faces=global_detect_multiple_faces)
+                              detect_multiple_faces=global_detect_multiple_faces,
+                              use_affine=global_use_affine,
+                              use_faceboxes=global_use_faceboxes)
 
     if not os.path.exists(output_class_dir):
         os.makedirs(output_class_dir)
-        if global_random_order:
-            random.shuffle(person.image_paths)
 
     all_faces = gen_all_faces(person, output_class_dir, detector)
 
@@ -224,17 +225,19 @@ def get_anchor(person: PersonClass,
 def process_image(detector: align.Detector,
                   image_path: str, output_filename: str) -> List[Face]:
     image = get_image_from_path_rgb(image_path)
-    faces = detector.find_faces(image)
-    if not faces:
-        increment_unsucessful()
-    for index, person in enumerate(faces):
-        increment_sucessful()
-        filename_base, file_extension = os.path.splitext(
-            output_filename)
-        output_filename_n = "{}{}".format(
-            filename_base, file_extension)
-        person.name = output_filename_n
-    return faces
+    if image is not None:
+        faces = detector.find_faces(image)
+        if not faces:
+            increment_unsucessful()
+        for index, person in enumerate(faces):
+            increment_sucessful()
+            filename_base, file_extension = os.path.splitext(
+                output_filename)
+            output_filename_n = "{}{}".format(
+                filename_base, file_extension)
+            person.name = output_filename_n
+        return faces
+    return []
 
 
 def increment_sucessful(add_amount: int=1):
@@ -293,12 +296,16 @@ def parse_arguments(argv):
         help='Thresholds',
         default=[0.6, 0.7, 0.9])
     parser.add_argument(
-        '--random_order',
-        help='Shuffles the order of images to enable alignment using multiple processes.',
-        action='store_true')
-    parser.add_argument(
         '--detect_multiple_faces',
         help='Detect and align multiple faces per image.',
+        action='store_true')
+    parser.add_argument(
+        '--use_faceboxes',
+        help='Use Faceboxes in addition to MTCNN',
+        action='store_true')
+    parser.add_argument(
+        '--use_affine',
+        help='Affine transform image.',
         action='store_true')
     parser.add_argument(
         '--num_processes',
@@ -314,12 +321,13 @@ if __name__ == '__main__':
         main(
             args.input_dir,
             args.output_dir,
-            args.random_order,
             args.image_height,
             args.image_width,
             args.margin,
             args.scale_factor,
             args.steps_threshold,
             args.detect_multiple_faces,
+            args.use_faceboxes,
+            args.use_affine,
             args.num_processes,
             args.facenet_model_checkpoint)

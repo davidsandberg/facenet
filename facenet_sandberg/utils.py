@@ -1,14 +1,17 @@
 import math
 import os
+import pathlib
 from glob import glob, iglob
+from typing import Dict, Generator, List, Optional, Tuple, cast
 from urllib.request import urlopen
 
 import cv2
 import numpy as np
-from facenet_sandberg import facenet
-from facenet_sandberg.common_types import *
 from skimage import transform as trans
 from sklearn.metrics.pairwise import paired_distances
+
+from facenet_sandberg import facenet
+from facenet_sandberg.common_types import *
 
 
 def normalize_image(image: Image) -> Image:
@@ -41,13 +44,26 @@ def add_color(image: Image) -> Image:
     return ret
 
 
-def fix_mtcnn_bb(max_y: int, max_x: int, x1: int,
-                 y1: int, dx: int, dy: int) -> List[int]:
+def fix_mtcnn_bb(max_y: int, max_x: int, bounding_box: List[int]) -> List[int]:
     """ mtcnn results can be out of image so fix results
     """
-
+    x1, y1, dx, dy = bounding_box[:4]
     x2 = x1 + dx
     y2 = y1 + dy
+    x1 = max(min(x1, max_x), 0)
+    x2 = max(min(x2, max_x), 0)
+    y1 = max(min(y1, max_y), 0)
+    y2 = max(min(y2, max_y), 0)
+    return [x1, y1, x2, y2]
+
+
+def fix_faceboxes_bb(
+        max_y: int,
+        max_x: int,
+        bounding_box: List[int]) -> List[int]:
+    """ faceboxes order is different
+    """
+    y1, x1, y2, x2 = bounding_box[:4]
     x1 = max(min(x1, max_x), 0)
     x2 = max(min(x2, max_x), 0)
     y1 = max(min(y1, max_y), 0)
@@ -86,26 +102,38 @@ def embedding_distance_bulk(
         return np.arccos(similarity) / math.pi
 
 
-def download_image(url: str, is_rgb: bool=True) -> Image:
-    req = urlopen(url)
-    arr = np.asarray(bytearray(req.read()), dtype=np.uint8)
+def download_image(url: str, is_rgb: bool=True) -> Optional[Image]:
+    try:
+        req = urlopen(url)
+        arr = np.asarray(bytearray(req.read()), dtype=np.uint8)
+        # BGR color space
+        image = cv2.imdecode(arr, -1)
+        if is_rgb:
+            image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
+        return image
+    except BaseException:
+        print('Couldn\'t read: {}'.format(url))
+        return None
+
+
+def get_image_from_path_rgb(image_path: str) -> Optional[Image]:
     # BGR color space
-    image = cv2.imdecode(arr, -1)
-    if is_rgb:
+    try:
+        image = cv2.imread(image_path, cv2.IMREAD_COLOR)
         image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
-    return image
+        return fix_image(image)
+    except BaseException:
+        print('Couldn\'t read: {}'.format(image_path))
+        return None
 
 
-def get_image_from_path_rgb(image_path: str) -> Image:
+def get_image_from_path_bgr(image_path: str) -> Optional[Image]:
     # BGR color space
-    image = cv2.imread(image_path, cv2.IMREAD_COLOR)
-    image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
-    return fix_image(image)
-
-
-def get_image_from_path_bgr(image_path: str) -> Image:
-    # BGR color space
-    image = cv2.imread(image_path, cv2.IMREAD_COLOR)
+    try:
+        image = cv2.imread(image_path, cv2.IMREAD_COLOR)
+    except BaseException:
+        print('Couldn\'t read: {}'.format(image_path))
+        return None
     return fix_image(image)
 
 
@@ -122,6 +150,63 @@ def get_images_from_dir(
         if is_rgb:
             image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
         yield image
+
+
+def get_dataset(
+        path: str,
+        has_class_directories: bool=True) -> List[PersonClass]:
+    dataset = cast(List[PersonClass], [])
+    path_exp = os.path.expanduser(path)
+    people = sorted([path for path in os.listdir(path_exp)
+                     if os.path.isdir(os.path.join(path_exp, path))])
+    num_people = len(people)
+    for i in range(num_people):
+        person_name = people[i]
+        facedir = os.path.join(path_exp, person_name)
+        image_paths = get_image_paths(facedir)
+        dataset.append(PersonClass(person_name, image_paths))
+
+    return dataset
+
+
+def get_image_paths(facedir: str) -> List[str]:
+    image_paths = cast(List[str], [])
+    if os.path.isdir(facedir):
+        images = os.listdir(facedir)
+        image_paths = [os.path.join(facedir, img)
+                       for img in images if is_image(img)]
+    return image_paths
+
+
+def is_image(image_path: str) -> bool:
+    suffix = pathlib.Path(image_path).suffix
+    return suffix == '.jpg' or suffix == '.png'
+
+
+def split_dataset(dataset, split_ratio, min_nrof_images_per_class, mode):
+    if mode == 'SPLIT_CLASSES':
+        nrof_classes = len(dataset)
+        class_indices = np.arange(nrof_classes)
+        np.random.shuffle(class_indices)
+        split = int(round(nrof_classes * (1 - split_ratio)))
+        train_set = [dataset[i] for i in class_indices[0:split]]
+        test_set = [dataset[i] for i in class_indices[split:-1]]
+    elif mode == 'SPLIT_IMAGES':
+        train_set = []
+        test_set = []
+        for cls in dataset:
+            paths = cls.image_paths
+            np.random.shuffle(paths)
+            nrof_images_in_class = len(paths)
+            split = int(math.floor(nrof_images_in_class * (1 - split_ratio)))
+            if split == nrof_images_in_class:
+                split = nrof_images_in_class - 1
+            if split >= min_nrof_images_per_class and nrof_images_in_class - split >= 1:
+                train_set.append(PersonClass(cls.name, paths[:split]))
+                test_set.append(PersonClass(cls.name, paths[split:]))
+    else:
+        raise ValueError('Invalid train/test split mode "%s"' % mode)
+    return train_set, test_set
 
 
 def crop(image: Image, bb: List[int], margin: float) -> Image:
@@ -150,8 +235,16 @@ def crop(image: Image, bb: List[int], margin: float) -> Image:
     return image[y0:y1, x0:x1, :], (x0, y0, x1, y1)
 
 
-def get_transform_matrix(left_eye: Tuple[int, int], right_eye: Tuple[int, int], desiredLeftEye: Tuple[float, float]=(
-        0.35, 0.35), desiredFaceHeight: int=112, desiredFaceWidth: int=112, margin: float=0.0):
+def get_transform_matrix(left_eye: Tuple[int,
+                                         int],
+                         right_eye: Tuple[int,
+                                          int],
+                         desiredLeftEye: Tuple[float,
+                                               float]=(0.35,
+                                                       0.35),
+                         desiredFaceHeight: int=112,
+                         desiredFaceWidth: int=112,
+                         margin: float=0.0):
     # compute the angle between the eye centers
     dY = right_eye[1] - left_eye[1]
     dX = right_eye[0] - left_eye[0]
@@ -184,29 +277,25 @@ def get_transform_matrix(left_eye: Tuple[int, int], right_eye: Tuple[int, int], 
     return M
 
 
-def preprocess(image: Image, desired_height: int, desired_width: int,
-               margin: float, bbox: List[int]=None, landmark: Landmarks=None):
+def preprocess(
+        image: Image,
+        desired_height: int,
+        desired_width: int,
+        margin: float,
+        bbox: List[int]=None,
+        landmark: Landmarks=None,
+        use_affine: bool=False):
     image_height, image_width = image.shape[:2]
     margin_height = int(desired_height + desired_height * margin)
     margin_width = int(desired_width + desired_width * margin)
     M = None
-    if landmark is not None:
-        # Points chosen to align face in bottom center of image
-        src = np.array([[38.2946, 51.6963],
-                        [73.5318, 51.5014],
-                        [56.0252, 71.7366],
-                        [41.5493, 92.3655],
-                        [70.7299, 92.2041]], dtype=np.float32)
-        dx = (margin_width - 112) / 2
-        dy = (margin_height - 112) / 2
-        src[:, 0] += dx
-        src[:, 1] += dy
-        points = np.asarray([[point[0], point[1]]
-                             for point in landmark.values()])
-        dst = points.astype(np.float32)
-        tform = trans.SimilarityTransform()
-        tform.estimate(dst, src)
-        M = tform.params[0:2, :]
+    if landmark is not None and use_affine:
+        M = get_transform_matrix(landmark['left_eye'],
+                                 landmark['right_eye'],
+                                 (0.35, 0.35),
+                                 desired_height,
+                                 desired_width,
+                                 margin)
 
     if bbox is None:
         # use center crop
@@ -223,3 +312,24 @@ def preprocess(image: Image, desired_height: int, desired_width: int,
         warped = cv2.warpAffine(
             image, M, (margin_height, margin_width), flags=cv2.INTER_CUBIC)
         return warped
+
+
+def get_center_box(img_size: np.ndarray, results: List[AlignResult]):
+    # import pdb; pdb.set_trace()
+    # x1, y1, x2, y2
+    all_bbs = np.asarray([result.bounding_box for result in results])
+    all_landmarks = [result.landmarks for result in results]
+    bounding_box_size = (all_bbs[:, 2] - all_bbs[:, 0]) * \
+        (all_bbs[:, 3] - all_bbs[:, 1])
+    img_center = img_size / 2
+    offsets = np.vstack([(all_bbs[:, 0] + all_bbs[:, 2]) / 2 - img_center[1],
+                         (all_bbs[:, 1] + all_bbs[:, 3]) / 2 - img_center[0]])
+    offset_dist_squared = np.sum(np.power(offsets, 2.0), 0)
+    index = np.argmax(
+        bounding_box_size -
+        offset_dist_squared *
+        2.0)  # some extra weight on the centering
+    out_bb = all_bbs[index, :]
+    out_landmark = all_landmarks[index] if index < len(all_landmarks) else None
+    align_result = AlignResult(bounding_box=out_bb, landmarks=out_landmark)
+    return [align_result]

@@ -41,7 +41,7 @@ class FaceDetector:
             log_device_placement=False)
         self.sess = tf.Session(graph=graph, config=config_proto)
 
-    def __call__(self, image: np.ndarray,
+    def __call__(self, image: np.ndarray, ratio: float=1.0,
                  score_threshold: float=0.5) -> List[List[int]]:
         """Detect faces.
 
@@ -73,6 +73,7 @@ class FaceDetector:
         boxes = boxes * scaler
         box_list = cast(List[List[int]], [])
         for box in boxes:
+            box /= ratio
             box = box.astype(int)
             box_list.append(box.tolist())
         return box_list
@@ -86,7 +87,7 @@ def main(image: Any, threshold: float=0.5,
     new_size = tuple([int(x * ratio) for x in old_size])
     image = image.resize(new_size, Image.ANTIALIAS)
     image = np.array(image)
-    boxes = face_detector(image, score_threshold=threshold)
+    boxes = face_detector(image, ratio=ratio, score_threshold=threshold)
     print(json.dumps({'boxes': boxes}))
 
 

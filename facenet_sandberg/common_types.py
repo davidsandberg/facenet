@@ -28,6 +28,7 @@ class PersonClass:
 class AlignResult:
     def __init__(
             self, bounding_box: List[int], landmarks: Landmarks=None) -> None:
+        # Bounding Box: [x1, y2, x2, y2]
         self.bounding_box = bounding_box
         self.landmarks = landmarks
 
