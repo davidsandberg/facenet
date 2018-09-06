@@ -80,6 +80,8 @@ python align_dataset.py --input_dir PATH_TO_YOUR_BASE_IMAGE_DIRECTORY \
                         --scale_factor DESIRED_SCALE_FACTOR \
                         --steps_threshold DESIRED_STEPS \
                         --detect_multiple_faces \
+                        --use_faceboxes \
+                        --use_affine \
                         --num_processes NUM_PROCESSES_TO_USE
 ```
 * Default values for most arguments are provided [here](https://github.com/armanrahman22/facenet/blob/f6cb32a193925002da41fb491c52bb85384bee55/facenet_sandberg/align_dataset.py#L262) 
