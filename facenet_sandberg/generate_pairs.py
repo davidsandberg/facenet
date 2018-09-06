@@ -2,11 +2,15 @@
 # Section f: http://vis-www.cs.umass.edu/lfw/lfw.pdf
 # More succint, less explicit: http://vis-www.cs.umass.edu/lfw/README.txt
 
+import glob
 import io
 import os
 import random
 from argparse import ArgumentParser, Namespace
-from typing import List, Set, Tuple, cast
+from multiprocessing import Lock, Manager, Pool, Queue, Value
+from multiprocessing.dummy import Pool as ThreadPool
+from pathlib import Path
+from typing import List, Optional, Set, Tuple, cast
 
 import numpy as np
 
@@ -94,7 +98,46 @@ def _clean_images(base: str, folder: str):
     return images
 
 
+def _transform_to_lfw_format(image_directory: str,
+                             num_processes: Optional[int]=os.cpu_count()):
+    """Transforms an image dataset to lfw format image names.
+       Base directory should have a folder per person with the person's name:
+       -/base_folder
+        -/person_1
+          -image_1.jpg
+          -image_2.jpg
+          -image_3.jpg
+        -/person_2
+          -image_1.jpg
+          -image_2.jpg
+        ...
+    """
+    all_folders = os.path.join(image_directory, "*", "")
+    people_folders = glob.iglob(all_folders)
+    process_pool = Pool(num_processes)
+    process_pool.imap(_rename, people_folders)
+    process_pool.close()
+    process_pool.join()
+
+
+def _rename(person_folder: str):
+    """Renames all the images in a folder in lfw format
+    """
+    all_image_paths = glob.glob(os.path.join(person_folder, "*.*"))
+    all_image_paths = [image for image in all_image_paths if image.endswith(
+        ".jpg") or image.endswith(".png")]
+    person_name = os.path.basename(os.path.normpath(person_folder))
+    concat_name = '_'.join(person_name.split())
+    for index, image_path in enumerate(all_image_paths):
+        image_name = concat_name + '_' + '%04d' % (index + 1)
+        file_ext = Path(image_path).suffix
+        new_image_path = os.path.join(person_folder, image_name + file_ext)
+        os.rename(image_path, new_image_path)
+    os.rename(person_folder, person_folder.replace(person_name, concat_name))
+
+
 def _main(args: CommandLineArgs) -> None:
+    _transform_to_lfw_format(args.image_dir)
     people_folds = _split_people_into_folds(args.image_dir, args.num_folds)
     matches = []
     mismatches = []

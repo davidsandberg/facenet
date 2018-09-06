@@ -1,4 +1,4 @@
-tensorflow
+tensorflow==1.7
 tensorlayer==1.7
 scipy
 scikit-learn

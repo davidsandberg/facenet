@@ -299,13 +299,13 @@ def _main(args: Namespace) -> None:
     pair_paths, labels = _get_paths_and_labels(args.image_dir, pairs)
     flat_paths = [join(args.image_dir, path)
                   for pair in pair_paths for path in pair]
-    facenet = identifier.Identifier(
-        model_path='/Users/armanrahman/models/insightface/insightface_ckpt',
-        is_insightface=True,
-        batch_size=128)
     # facenet = identifier.Identifier(
-    #     model_path='/Users/armanrahman/models/facenet_model.pb',
+    #     model_path='/Users/armanrahman/models/insightface/insightface_ckpt',
+    #     is_insightface=True,
     #     batch_size=128)
+    facenet = identifier.Identifier(
+        model_path='/Users/armanrahman/models/facenet_model.pb',
+        batch_size=128)
 
     images = map(utils.get_image_from_path_bgr, flat_paths)
 
