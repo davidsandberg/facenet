@@ -27,6 +27,7 @@ from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
 from six import string_types, iteritems
+from tensorflow.python.framework.graph_util import convert_variables_to_constants
 
 import numpy as np
 import tensorflow as tf
@@ -93,6 +94,14 @@ class Network(object):
                     except ValueError:
                         if not ignore_missing:
                             raise
+
+    def freeze(self, network_name, session, outNames = []):
+        """ Creates a friezed graph an saves it in the top directory """
+
+        minimal_graph = convert_variables_to_constants(session, session.graph_def, outNames)
+        freeze_out_directory = os.path.abspath(os.path.curdir)
+        tf.train.write_graph(minimal_graph, freeze_out_directory, network_name + '_graph.proto', as_text=False)
+        tf.train.write_graph(minimal_graph, freeze_out_directory, network_name + '.txt', as_text=True)
 
     def feed(self, *args):
         """Set the input(s) for the next operation by replacing the terminal nodes.
@@ -289,11 +298,31 @@ def create_mtcnn(sess, model_path):
         data = tf.placeholder(tf.float32, (None,48,48,3), 'input')
         onet = ONet({'data':data})
         onet.load(os.path.join(model_path, 'det3.npy'), sess)
-        
+
     pnet_fun = lambda img : sess.run(('pnet/conv4-2/BiasAdd:0', 'pnet/prob1:0'), feed_dict={'pnet/input:0':img})
     rnet_fun = lambda img : sess.run(('rnet/conv5-2/conv5-2:0', 'rnet/prob1:0'), feed_dict={'rnet/input:0':img})
     onet_fun = lambda img : sess.run(('onet/conv6-2/conv6-2:0', 'onet/conv6-3/conv6-3:0', 'onet/prob1:0'), feed_dict={'onet/input:0':img})
     return pnet_fun, rnet_fun, onet_fun
+
+def freeze_mtcnn(sess, model_path):
+    if not model_path:
+        model_path,_ = os.path.split(os.path.realpath(__file__))
+
+    with tf.variable_scope('pnet'):
+        data = tf.placeholder(tf.float32, (None,None,None,3), 'input')
+        pnet = PNet({'data':data})
+        pnet.load(os.path.join(model_path, 'det1.npy'), sess)
+        pnet.freeze('pnet', sess, ['pnet/conv4-2/BiasAdd', 'pnet/prob1'])
+    with tf.variable_scope('rnet'):
+        data = tf.placeholder(tf.float32, (None,24,24,3), 'input')
+        rnet = RNet({'data':data})
+        rnet.load(os.path.join(model_path, 'det2.npy'), sess)
+        rnet.freeze('rnet', sess, ['rnet/conv5-2/conv5-2', 'rnet/prob1'])
+    with tf.variable_scope('onet'):
+        data = tf.placeholder(tf.float32, (None,48,48,3), 'input')
+        onet = ONet({'data':data})
+        onet.load(os.path.join(model_path, 'det3.npy'), sess)
+        onet.freeze('onet', sess, ['onet/conv6-2/conv6-2', 'onet/conv6-3/conv6-3', 'onet/prob1'])
 
 def detect_face(img, minsize, pnet, rnet, onet, threshold, factor):
     """Detects faces in an image, and returns bounding boxes and points for them.
