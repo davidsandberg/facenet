@@ -56,7 +56,7 @@ def main(args):
 
             nrof_images = len(images)
 
-            matrix = np.sqrt(np.sum(np.square(np.subtract(np.expand_dims(emb, -1), emb.T)), axis=1))
+            matrix = np.linalg.norm(np.subtract(np.expand_dims(emb, -1), emb.T), axis=1)
 
             # DBSCAN is the only algorithm that doesn't require the number of clusters to be defined.
             db = DBSCAN(eps=args.cluster_threshold, min_samples=args.min_cluster_size, metric='precomputed')
