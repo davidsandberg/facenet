@@ -56,24 +56,7 @@ def main(args):
 
             nrof_images = len(images)
 
-            matrix = np.zeros((nrof_images, nrof_images))
-
-            print('')
-            # Print distance matrix
-            print('Distance matrix')
-            print('    ', end='')
-            for i in range(nrof_images):
-                print('    %1d     ' % i, end='')
-            print('')
-            for i in range(nrof_images):
-                print('%1d  ' % i, end='')
-                for j in range(nrof_images):
-                    dist = np.sqrt(np.sum(np.square(np.subtract(emb[i, :], emb[j, :]))))
-                    matrix[i][j] = dist
-                    print('  %1.4f  ' % dist, end='')
-                print('')
-
-            print('')
+            matrix = np.linalg.norm(np.subtract(np.expand_dims(emb, -1), emb.T), axis=1)
 
             # DBSCAN is the only algorithm that doesn't require the number of clusters to be defined.
             db = DBSCAN(eps=args.cluster_threshold, min_samples=args.min_cluster_size, metric='precomputed')
