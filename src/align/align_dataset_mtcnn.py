@@ -71,8 +71,8 @@ def main(args):
             output_class_dir = os.path.join(output_dir, cls.name)
             if not os.path.exists(output_class_dir):
                 os.makedirs(output_class_dir)
-                if args.random_order:
-                    random.shuffle(cls.image_paths)
+            if args.random_order:
+                random.shuffle(cls.image_paths)
             for image_path in cls.image_paths:
                 nrof_images_total += 1
                 filename = os.path.splitext(os.path.split(image_path)[1])[0]
