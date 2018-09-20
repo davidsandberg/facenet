@@ -1,7 +1,7 @@
 import argparse
 import json
 import sys
-from typing import Any, List, cast
+from typing import Any, List, Tuple, cast
 
 import numpy as np
 import tensorflow as tf
@@ -42,7 +42,7 @@ class FaceDetector:
         self.sess = tf.Session(graph=graph, config=config_proto)
 
     def __call__(self, image: np.ndarray, ratio: float=1.0,
-                 score_threshold: float=0.5) -> List[List[int]]:
+                 score_threshold: float=0.5) -> Tuple[List[List[int]], List[float]]:
         """Detect faces.
 
         Arguments:
@@ -76,7 +76,7 @@ class FaceDetector:
             box /= ratio
             box = box.astype(int)
             box_list.append(box.tolist())
-        return box_list
+        return box_list, scores.tolist()
 
 
 def main(image: Any, threshold: float=0.5,
@@ -87,8 +87,9 @@ def main(image: Any, threshold: float=0.5,
     new_size = tuple([int(x * ratio) for x in old_size])
     image = image.resize(new_size, Image.ANTIALIAS)
     image = np.array(image)
-    boxes = face_detector(image, ratio=ratio, score_threshold=threshold)
-    print(json.dumps({'boxes': boxes}))
+    boxes, scores = face_detector(
+        image, ratio=ratio, score_threshold=threshold)
+    print(json.dumps({'boxes': boxes, 'scores': scores}))
 
 
 def parse_arguments(argv):
