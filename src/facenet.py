@@ -299,8 +299,7 @@ def get_learning_rate_from_file(filename, epoch):
                     lr = float(par[1])
                 if e <= epoch:
                     learning_rate = lr
-                else:
-                    return learning_rate
+        return learning_rate
 
 class ImageClass():
     "Stores the paths to images for a given class"
