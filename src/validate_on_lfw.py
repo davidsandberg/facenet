@@ -44,8 +44,10 @@ from scipy import interpolate
 def main(args):
   
     with tf.Graph().as_default():
+        config = tf.ConfigProto(inter_op_parallelism_threads=args.num_inter_threads,
+                                intra_op_parallelism_threads=args.num_intra_threads)
       
-        with tf.Session() as sess:
+        with tf.Session(config = config) as sess:
             
             # Read the file containing the pairs used for testing
             pairs = lfw.read_pairs(os.path.expanduser(args.lfw_pairs))
@@ -158,6 +160,10 @@ def parse_arguments(argv):
         help='Subtract feature mean before calculating distance.', action='store_true')
     parser.add_argument('--use_fixed_image_standardization', 
         help='Performs fixed standardization of images.', action='store_true')
+    parser.add_argument('--num_inter_threads', type=int,
+        help='Number of inter op threads', default=0)
+    parser.add_argument('--num_intra_threads', type=int,
+        help='Number of intra op thread pool', default=0)
     return parser.parse_args(argv)
 
 if __name__ == '__main__':
