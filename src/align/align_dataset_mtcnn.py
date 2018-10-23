@@ -92,8 +92,10 @@ def main(args):
                         if img.ndim == 2:
                             img = facenet.to_rgb(img)
                         img = img[:,:,0:3]
-    
-                        bounding_boxes, _ = align.detect_face.detect_face(img, minsize, pnet, rnet, onet, threshold, factor)
+                        bounding_boxes, landmark_points = align.detect_face.detect_face(img, minsize, pnet, rnet, onet, threshold, factor)
+                         if (extract_image_chips.extract_image_chips(img,np.transpose(landmark_points), args.image_size, 0.37)):
+                            img = (extract_image_chips.extract_image_chips(img,np.transpose(landmark_points), args.image_size, 0.37))[0] 
+                            bounding_boxes, _ = align.detect_face.detect_face(img, minsize, pnet, rnet, onet, threshold, factor)
                         nrof_faces = bounding_boxes.shape[0]
                         if nrof_faces>0:
                             det = bounding_boxes[:,0:4]
