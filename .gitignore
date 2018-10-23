@@ -94,9 +94,9 @@ ENV/
 .idea
 
 # Data files and objects
-.csv
-.pkl
-.pb
-.xlsx
-.npy
+*.csv
+*.pkl
+*.pb
+*.xlsx
+*.npy
 
