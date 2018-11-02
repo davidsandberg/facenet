@@ -27,19 +27,19 @@ debug = False
 class Detector:
     def __init__(
             self,
-            face_crop_height: int=160,
-            face_crop_width: int=160,
-            face_crop_margin: float=.4,
-            detect_multiple_faces: bool=False,
-            min_face_size: int=20,
-            scale_factor: float=0.709,
-            steps_threshold: List[float]=[
+            face_crop_height: int = 160,
+            face_crop_width: int = 160,
+            face_crop_margin: float = .4,
+            detect_multiple_faces: bool = False,
+            min_face_size: int = 20,
+            scale_factor: float = 0.709,
+            steps_threshold: List[float] = [
                 0.6,
                 0.7,
                 0.7],
-            is_rgb: bool=True,
-            use_faceboxes: bool=False,
-            use_affine: bool=False) -> None:
+            is_rgb: bool = True,
+            use_faceboxes: bool = False,
+            use_affine: bool = False) -> None:
         import tensorflow as tf
         self.mtcnn = MTCNN(
             weights_file=None,
@@ -58,8 +58,8 @@ class Detector:
     def bulk_find_face(self,
                        images: ImageGenerator,
                        urls: List[str] = None,
-                       detect_multiple_faces: bool=False,
-                       face_limit: int=5) -> FacesGenerator:
+                       detect_multiple_faces: bool = False,
+                       face_limit: int = 5) -> FacesGenerator:
         for index, image in enumerate(images):
             faces = self.find_faces(image, detect_multiple_faces, face_limit)
             if urls and index < len(urls):
@@ -69,12 +69,10 @@ class Detector:
             else:
                 yield faces
 
-    def find_faces(self, image: Image, detect_multiple_faces: bool=False,
-                   face_limit: int=5) -> List[Face]:
+    def find_faces(self, image: Image, detect_multiple_faces: bool = False,
+                   face_limit: int = 5) -> List[Face]:
         faces = []
         results = cast(List[AlignResult], self._get_align_results(image))
-        # import pdb
-        # pdb.set_trace()
         if len(results) < face_limit:
             if not detect_multiple_faces and len(results) > 1:
                 img_size = np.asarray(image.shape)[0:2]
@@ -96,8 +94,8 @@ class Detector:
                     self.use_affine)
                 resized = cv2.resize(
                     processed, (self.face_crop_height, self.face_crop_width))
-                # BGR to RGB
-                if self.is_rgb:
+                # RGB to BGR
+                if not self.is_rgb:
                     resized = resized[..., ::-1]
                 face.image = resized
                 faces.append(face)
@@ -131,7 +129,7 @@ class Detector:
 
     @staticmethod
     def _get_faceboxes_results(image_array: np.ndarray,
-                               threshold: float=0.8) -> List[List[int]]:
+                               threshold: float = 0.8) -> List[List[int]]:
         image = PIL.Image.fromarray(image_array)
         with tempfile.NamedTemporaryFile(mode="wb", dir=os.getcwd()) as image_file:
             f = io.BytesIO()

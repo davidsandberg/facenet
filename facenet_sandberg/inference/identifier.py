@@ -28,32 +28,24 @@ class Identifier:
             self,
             model_path: str,
             threshold: float = 1.10,
-            is_insightface: bool=False,
-            is_centerface: bool=False,
-            batch_size: int=64):
+            is_insightface: bool = False,
+            is_centerface: bool = False,
+            batch_size: int = 64):
         if is_insightface:
-            self.detector = mtcnn_detector.Detector(
+            self.detector = align.Detector(
                 face_crop_height=112,
                 face_crop_width=112,
-                face_crop_margin=44,
-                steps_threshold=[
-                    0.6,
-                    0.7,
-                    0.9],
+                steps_threshold=[0.6, 0.7, 0.9],
                 scale_factor=0.85,
                 is_rgb=False)
             self.encoder = insightface_encoder.Insightface(
                 model_path=model_path,
                 batch_size=batch_size)
         elif is_centerface:
-            self.detector = mtcnn_detector.Detector(
+            self.detector = align.Detector(
                 face_crop_height=112,
                 face_crop_width=96,
-                face_crop_margin=44,
-                steps_threshold=[
-                    0.6,
-                    0.7,
-                    0.9],
+                steps_threshold=[0.6, 0.7, 0.9],
                 scale_factor=0.85,
                 is_rgb=False)
             self.encoder = insightface_encoder.Insightface(
@@ -62,7 +54,7 @@ class Identifier:
                 image_height=112,
                 image_width=96)
         else:
-            self.detector = mtcnn_detector.Detector()
+            self.detector = align.Detector()
             self.encoder = facenet_encoder.Facenet(
                 model_path=model_path,
                 batch_size=batch_size)
@@ -70,7 +62,7 @@ class Identifier:
 
     def vectorize(self, image: Image,
                   prealigned: bool = False,
-                  detect_multiple_faces: bool=True,
+                  detect_multiple_faces: bool = True,
                   face_limit: int = 5) -> List[Embedding]:
         """Gets face embeddings in a single image
         Keyword Arguments:
@@ -89,7 +81,7 @@ class Identifier:
     def vectorize_all(self,
                       images: ImageGenerator,
                       prealigned: bool = False,
-                      detect_multiple_faces: bool=True,
+                      detect_multiple_faces: bool = True,
                       face_limit: int = 5) -> List[List[Embedding]]:
         """Gets face embeddings from a generator of images
         Keyword Arguments:
@@ -114,8 +106,8 @@ class Identifier:
         return vectors
 
     def detect_encode(self, image: Image,
-                      detect_multiple_faces: bool=True,
-                      face_limit: int=5) -> List[Face]:
+                      detect_multiple_faces: bool = True,
+                      face_limit: int = 5) -> List[Face]:
         """Detects faces in an image and encodes them
         """
 
@@ -127,10 +119,10 @@ class Identifier:
 
     def detect_encode_all(self,
                           images: ImageGenerator,
-                          urls: [str]=None,
-                          save_memory: bool=False,
-                          detect_multiple_faces: bool=True,
-                          face_limit: int=5) -> FacesGenerator:
+                          urls: List[str] = None,
+                          save_memory: bool = False,
+                          detect_multiple_faces: bool = True,
+                          face_limit: int = 5) -> FacesGenerator:
         """For a list of images finds and encodes all faces
 
         Keyword Arguments:
@@ -146,8 +138,7 @@ class Identifier:
     def compare_embedding(self,
                           embedding_1: Embedding,
                           embedding_2: Embedding,
-                          distance_metric: DistanceMetric) -> (bool,
-                                                               float):
+                          distance_metric: DistanceMetric) -> Tuple[bool, float]:
         """Compares the distance between two embeddings
         """
 
@@ -162,8 +153,8 @@ class Identifier:
             self,
             image_1: Image,
             image_2: Image,
-            detect_multiple_faces: bool=True,
-            face_limit: int=5) -> Match:
+            detect_multiple_faces: bool = True,
+            face_limit: int = 5) -> Match:
         match = Match()
         image_1_faces = self.detect_encode(
             image_1, detect_multiple_faces, face_limit)
@@ -173,7 +164,7 @@ class Identifier:
             for face_1 in image_1_faces:
                 for face_2 in image_2_faces:
                     is_match, score = self.compare_embedding(
-                        face_1.embedding, face_2.embedding, distance_metric)
+                        face_1.embedding, face_2.embedding, DistanceMetric.EUCLIDEAN_SQUARED)
                     if score < match.score:
                         match.score = score
                         match.face_1 = face_1
@@ -181,8 +172,11 @@ class Identifier:
                         match.is_match = is_match
         return match
 
-    def find_all_matches(self, image_directory: str, recursive: bool,
-                         distance_metric: DistanceMetric=DistanceMetric.EUCLIDEAN_SQUARED) -> List[Match]:
+    def find_all_matches(
+            self,
+            image_directory: str,
+            recursive: bool,
+            distance_metric: DistanceMetric = DistanceMetric.EUCLIDEAN_SQUARED) -> List[Match]:
         """Finds all matches in a directory of images
         """
 

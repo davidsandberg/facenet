@@ -98,3 +98,4 @@ debug/
 .mypy_cache
 .vscode
 .vscode/settings.json
+notebooks/models/*

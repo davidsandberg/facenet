@@ -19,9 +19,9 @@ tf.logging.set_verbosity(tf.logging.ERROR)
 
 class Insightface:
     def __init__(self, model_path: str,
-                 image_height: int=112,
-                 image_width: int=112,
-                 batch_size: int=64) -> None:
+                 image_height: int = 112,
+                 image_width: int = 112,
+                 batch_size: int = 64) -> None:
         import tensorflow as tf
         import tensorflow.contrib.slim as slim
         from tensorflow.core.protobuf import config_pb2
@@ -61,28 +61,20 @@ class Insightface:
                 reuse=tf.AUTO_REUSE,
                 keep_rate=dropout_rate)
         embedding_tensor = test_net.outputs
-        # 3.10 define sess
+        # define sess
         gpu_config = tf.ConfigProto(allow_soft_placement=True)
         gpu_config.gpu_options.allow_growth = True
 
         sess = tf.Session(config=gpu_config)
-        # 3.13 init all variables
+        # init all variables
         sess.run(tf.global_variables_initializer())
+
         # restore weights
         saver = tf.train.Saver()
         saver.restore(sess, model_path)
-        # lfw validate
+
         feed_dict = {images: None, dropout_rate: 1.0}
         return sess, embedding_tensor, feed_dict, images
-
-    def generate_embedding(self, image: Image) -> Embedding:
-        image = utils.fixed_standardize(image)
-        self.feed_dict.setdefault(self.input_placeholder, None)
-        self.feed_dict[self.input_placeholder] = [image]
-        feat = self.sess.run([self.embedding_tensor], feed_dict=self.feed_dict)
-        feat = np.array(feat)
-        feat = np.squeeze(feat)
-        return feat
 
     def extract_batch(self, batch: np.ndarray) -> List[Embedding]:
         self.feed_dict.setdefault(self.input_placeholder, None)
@@ -92,6 +84,15 @@ class Insightface:
         if feat.ndim > 2:
             feat = np.squeeze(feat, axis=0)
         return [embedding for embedding in feat]
+
+    def generate_embedding(self, image: Image) -> Embedding:
+        image = utils.fixed_standardize(image)
+        self.feed_dict.setdefault(self.input_placeholder, None)
+        self.feed_dict[self.input_placeholder] = [image]
+        feat = self.sess.run([self.embedding_tensor], feed_dict=self.feed_dict)
+        feat = np.array(feat)
+        feat = np.squeeze(feat)
+        return feat
 
     def generate_embeddings(
             self,
@@ -114,7 +115,7 @@ class Insightface:
 
     def get_face_embeddings(self,
                             all_faces: FacesGenerator,
-                            save_memory: bool=False) -> FacesGenerator:
+                            save_memory: bool = False) -> FacesGenerator:
         """Generates embeddings from generator of Faces
         Keyword Arguments:
             save_memory -- save memory by deleting image from Face object  (default: {False})
@@ -122,11 +123,8 @@ class Insightface:
 
         face_list = list(all_faces)
         total_num_faces = sum([1 for faces in face_list for face in faces])
-        clean_images = (
-            utils.fixed_standardize(
-                face.image) for faces in face_list for face in faces)
-        clean_images = cast(ImageGenerator, clean_images)
-        embed_array = self.generate_embeddings(clean_images)
+        images = (face.image for faces in face_list for face in faces)
+        embed_array = self.generate_embeddings(images)
         total_num_embeddings = len(embed_array)
         assert total_num_embeddings == total_num_faces
 

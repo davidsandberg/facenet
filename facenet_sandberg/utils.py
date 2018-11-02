@@ -102,7 +102,7 @@ def embedding_distance_bulk(
         return np.arccos(similarity) / math.pi
 
 
-def download_image(url: str, is_rgb: bool=True) -> Optional[Image]:
+def download_image(url: str, is_rgb: bool = True) -> Optional[Image]:
     try:
         req = urlopen(url)
         arr = np.asarray(bytearray(req.read()), dtype=np.uint8)
@@ -138,7 +138,9 @@ def get_image_from_path_bgr(image_path: str) -> Optional[Image]:
 
 
 def get_images_from_dir(
-        directory: str, recursive: bool, is_rgb: bool=True) -> ImageGenerator:
+        directory: str,
+        recursive: bool,
+        is_rgb: bool = True) -> ImageGenerator:
     if recursive:
         image_paths = iglob(os.path.join(
             directory, '**', '*.*'), recursive=recursive)
@@ -154,7 +156,7 @@ def get_images_from_dir(
 
 def get_dataset(
         path: str,
-        has_class_directories: bool=True) -> List[PersonClass]:
+        has_class_directories: bool = True) -> List[PersonClass]:
     dataset = cast(List[PersonClass], [])
     path_exp = os.path.expanduser(path)
     people = sorted([path for path in os.listdir(path_exp)
@@ -180,7 +182,7 @@ def get_image_paths(facedir: str) -> List[str]:
 
 def is_image(image_path: str) -> bool:
     suffix = pathlib.Path(image_path).suffix
-    return suffix == '.jpg' or suffix == '.png'
+    return suffix == '.jpg' or suffix == '.png' or suffix == '.jpeg'
 
 
 def split_dataset(dataset, split_ratio, min_nrof_images_per_class, mode):
@@ -240,11 +242,11 @@ def get_transform_matrix(left_eye: Tuple[int,
                          right_eye: Tuple[int,
                                           int],
                          desiredLeftEye: Tuple[float,
-                                               float]=(0.35,
-                                                       0.35),
-                         desiredFaceHeight: int=112,
-                         desiredFaceWidth: int=112,
-                         margin: float=0.0):
+                                               float] = (0.35,
+                                                         0.35),
+                         desiredFaceHeight: int = 112,
+                         desiredFaceWidth: int = 112,
+                         margin: float = 0.0):
     # compute the angle between the eye centers
     dY = right_eye[1] - left_eye[1]
     dX = right_eye[0] - left_eye[0]
@@ -282,9 +284,9 @@ def preprocess(
         desired_height: int,
         desired_width: int,
         margin: float,
-        bbox: List[int]=None,
-        landmark: Landmarks=None,
-        use_affine: bool=False):
+        bbox: List[int] = None,
+        landmark: Landmarks = None,
+        use_affine: bool = False):
     image_height, image_width = image.shape[:2]
     margin_height = int(desired_height + desired_height * margin)
     margin_width = int(desired_width + desired_width * margin)
@@ -315,7 +317,6 @@ def preprocess(
 
 
 def get_center_box(img_size: np.ndarray, results: List[AlignResult]):
-    # import pdb; pdb.set_trace()
     # x1, y1, x2, y2
     all_bbs = np.asarray([result.bounding_box for result in results])
     all_landmarks = [result.landmarks for result in results]

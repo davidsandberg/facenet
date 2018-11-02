@@ -26,6 +26,7 @@ from __future__ import absolute_import, division, print_function
 import argparse
 import os
 import sys
+import warnings
 from ctypes import c_int
 from glob import iglob
 from multiprocessing import Lock, Value
@@ -35,14 +36,16 @@ import cv2
 import numpy as np
 import progressbar as pb
 import tensorflow as tf
-from pathos.multiprocessing import ProcessPool
-from scipy import misc
-
 from facenet_sandberg import facenet
 from facenet_sandberg.common_types import *
 from facenet_sandberg.inference import align, facenet_encoder
 from facenet_sandberg.utils import *
+from pathos.multiprocessing import ProcessPool
+from scipy import misc
 
+
+warnings.filterwarnings("ignore", message="numpy.dtype size changed")
+warnings.filterwarnings("ignore", message="numpy.ufunc size changed")
 os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
 tf.logging.set_verbosity(tf.logging.ERROR)
 
@@ -70,16 +73,16 @@ num_images_total_lock = Lock()
 def main(
         input_dir: str,
         output_dir: str,
-        image_height: int=182,
-        image_width: int=182,
-        margin: float=0.4,
-        scale_factor: float=0.0,
-        steps_threshold: List[float]=[0.6, 0.7, 0.7],
-        detect_multiple_faces: bool=False,
-        use_faceboxes: bool=False,
-        use_affine: bool=False,
-        num_processes: int=1,
-        facenet_model_checkpoint: str=''):
+        image_height: int = 182,
+        image_width: int = 182,
+        margin: float = 0.4,
+        scale_factor: float = 0.0,
+        steps_threshold: List[float] = [0.6, 0.7, 0.7],
+        detect_multiple_faces: bool = False,
+        use_faceboxes: bool = False,
+        use_affine: bool = False,
+        num_processes: int = 1,
+        facenet_model_checkpoint: str = ''):
     """Aligns an image dataset
 
     Arguments:
@@ -127,6 +130,8 @@ def main(
     timer.start()
 
     num_processes = cast(int, min(num_processes, os.cpu_count()))
+    if num_processes == -1:
+        num_processes = os.cpu_count()
     if num_processes > 1:
         process_pool = ProcessPool(num_processes)
         process_pool.imap(align_person, dataset)
@@ -145,19 +150,22 @@ def main(
 
 
 def align_person(person: PersonClass) -> None:
+    import pdb
+    pdb.set_trace()
     output_class_dir = os.path.join(global_output_dir, person.name)
     if already_done(person, output_class_dir):
         increment_total(len(person.image_paths))
         timer.update(int(num_images_total.value))
         return None
-    detector = align.Detector(face_crop_height=global_image_height,
-                              face_crop_width=global_image_width,
-                              face_crop_margin=global_margin,
-                              scale_factor=global_scale_factor,
-                              steps_threshold=global_steps_threshold,
-                              detect_multiple_faces=global_detect_multiple_faces,
-                              use_affine=global_use_affine,
-                              use_faceboxes=global_use_faceboxes)
+    detector = align.Detector(
+        face_crop_height=global_image_height,
+        face_crop_width=global_image_width,
+        face_crop_margin=global_margin,
+        scale_factor=global_scale_factor,
+        steps_threshold=global_steps_threshold,
+        detect_multiple_faces=global_detect_multiple_faces,
+        use_affine=global_use_affine,
+        use_faceboxes=global_use_faceboxes)
 
     if not os.path.exists(output_class_dir):
         os.makedirs(output_class_dir)
@@ -192,8 +200,8 @@ def align_person(person: PersonClass) -> None:
     timer.update(int(num_images_total.value))
 
 
-def gen_all_faces(person: PersonClass,
-                  output_class_dir: str, detector: align.Detector) -> FacesGenerator:
+def gen_all_faces(person: PersonClass, output_class_dir: str,
+                  detector: align.Detector) -> FacesGenerator:
     for image_path in person.image_paths:
         increment_total()
         output_filename = get_file_name(image_path, output_class_dir)
@@ -209,8 +217,8 @@ def already_done(person: PersonClass, output_class_dir: str):
     return total == len(person.image_paths)
 
 
-def get_anchor(person: PersonClass,
-               output_class_dir: str, detector: align.Detector) -> Optional[Face]:
+def get_anchor(person: PersonClass, output_class_dir: str,
+               detector: align.Detector) -> Optional[Face]:
     first_face = None
     for image_path in person.image_paths:
         output_filename = get_file_name(image_path, output_class_dir)
@@ -240,17 +248,17 @@ def process_image(detector: align.Detector,
     return []
 
 
-def increment_sucessful(add_amount: int=1):
+def increment_sucessful(add_amount: int = 1):
     with num_sucessful_lock:
         num_sucessful.value += add_amount
 
 
-def increment_unsucessful(add_amount: int=1):
+def increment_unsucessful(add_amount: int = 1):
     with num_unsucessful_lock:
         num_unsucessful.value += add_amount
 
 
-def increment_total(add_amount: int=1):
+def increment_total(add_amount: int = 1):
     with num_images_total_lock:
         num_images_total.value += add_amount
 
@@ -294,7 +302,7 @@ def parse_arguments(argv):
         '--steps_threshold',
         type=List[float],
         help='Thresholds',
-        default=[0.6, 0.7, 0.9])
+        default=[0.6, 0.7, 0.7])
     parser.add_argument(
         '--detect_multiple_faces',
         help='Detect and align multiple faces per image.',

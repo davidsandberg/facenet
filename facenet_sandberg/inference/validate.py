@@ -64,26 +64,36 @@ def _get_paths_and_labels(image_dir: str,
     paths = []
     labels = []
     for pair in pairs:
-        _add_extension = (lambda rel_image_path, image_dir:
-                          '{}.jpg'.format(rel_image_path)
-                          if exists(join(image_dir, '{}.jpg'.format(rel_image_path)))
-                          else '{}.png'.format(rel_image_path))
+        _add_extension = (
+            lambda rel_image_path,
+            image_dir: '{}.jpg'.format(rel_image_path) if exists(
+                join(
+                    image_dir,
+                    '{}.jpg'.format(rel_image_path))) else '{}.png'.format(rel_image_path))
         if len(pair) == 3:
             person, image_num_0, image_num_1 = cast(Match, pair)
-            rel_image_path_no_ext = join(person,
-                                         '{}_{}'.format(person, '%04d' % int(image_num_0)))
+            rel_image_path_no_ext = join(
+                person, '{}_{}'.format(
+                    person, '%04d' %
+                    int(image_num_0)))
             rel_image_path_0 = _add_extension(rel_image_path_no_ext, image_dir)
-            rel_image_path_no_ext = join(person,
-                                         '{}_{}'.format(person, '%04d' % int(image_num_1)))
+            rel_image_path_no_ext = join(
+                person, '{}_{}'.format(
+                    person, '%04d' %
+                    int(image_num_1)))
             rel_image_path_1 = _add_extension(rel_image_path_no_ext, image_dir)
             is_same_person = True
         elif len(pair) == 4:
             person_0, image_num_0, person_1, image_num_1 = cast(Mismatch, pair)
-            rel_image_path_no_ext = join(person_0,
-                                         '{}_{}'.format(person_0, '%04d' % int(image_num_0)))
+            rel_image_path_no_ext = join(
+                person_0, '{}_{}'.format(
+                    person_0, '%04d' %
+                    int(image_num_0)))
             rel_image_path_0 = _add_extension(rel_image_path_no_ext, image_dir)
-            rel_image_path_no_ext = join(person_1,
-                                         '{}_{}'.format(person_1, '%04d' % int(image_num_1)))
+            rel_image_path_no_ext = join(
+                person_1, '{}_{}'.format(
+                    person_1, '%04d' %
+                    int(image_num_1)))
             rel_image_path_1 = _add_extension(rel_image_path_no_ext, image_dir)
             is_same_person = False
         if (exists(join(image_dir, rel_image_path_0))
@@ -137,7 +147,10 @@ def _score_k_fold(thresholds: np.ndarray,
                                            embeddings2[train_set]])
         mean = np.mean(train_embeddings, axis=0) if subtract_mean else 0.0
         stddev = np.std(train_embeddings, axis=0) if divide_stddev else 1.0
-        dist = utils.embedding_distance_bulk((embeddings1 - mean) / stddev, (embeddings2 - mean) / stddev, distance_metric)
+        dist = utils.embedding_distance_bulk(
+            (embeddings1 - mean) / stddev,
+            (embeddings2 - mean) / stddev,
+            distance_metric)
         best_threshold = _calculate_best_threshold(thresholds,
                                                    dist[train_set],
                                                    labels[train_set],
@@ -241,9 +254,11 @@ def _parse_arguments():
                         type=int,
                         required=True,
                         help='Number of cross validation folds')
-    distance_metrics = [str(metric).replace('{}.'.format(DistanceMetric.__qualname__),
-                                            '')
-                        for metric in DistanceMetric]
+    distance_metrics = [
+        str(metric).replace(
+            '{}.'.format(
+                DistanceMetric.__qualname__),
+            '') for metric in DistanceMetric]
     parser.add_argument(
         '--distance_metric',
         type=str,
