@@ -248,12 +248,12 @@ def main(args):
                 save_variables_and_metagraph(sess, saver, summary_writer, model_dir, subdir, epoch)
 
                 # Evaluate on LFW
-                t = time.time()
-                if args.lfw_dir:
-                    evaluate(sess, enqueue_op, image_paths_placeholder, labels_placeholder, phase_train_placeholder, batch_size_placeholder, control_placeholder, 
-                        embeddings, label_batch, lfw_paths, actual_issame, args.lfw_batch_size, args.lfw_nrof_folds, log_dir, step, summary_writer, stat, epoch, 
-                        args.lfw_distance_metric, args.lfw_subtract_mean, args.lfw_use_flipped_images, args.use_fixed_image_standardization)
-                stat['time_evaluate'][epoch-1] = time.time() - t
+                # t = time.time()
+                # if args.lfw_dir:
+                #     evaluate(sess, enqueue_op, image_paths_placeholder, labels_placeholder, phase_train_placeholder, batch_size_placeholder, control_placeholder, 
+                #         embeddings, label_batch, lfw_paths, actual_issame, args.lfw_batch_size, args.lfw_nrof_folds, log_dir, step, summary_writer, stat, epoch, 
+                #         args.lfw_distance_metric, args.lfw_subtract_mean, args.lfw_use_flipped_images, args.use_fixed_image_standardization)
+                # stat['time_evaluate'][epoch-1] = time.time() - t
 
                 print('Saving statistics')
                 with h5py.File(stat_file_name, 'w') as f:
@@ -416,7 +416,7 @@ def evaluate(sess, enqueue_op, image_paths_placeholder, labels_placeholder, phas
     sess.run(enqueue_op, {image_paths_placeholder: image_paths_array, labels_placeholder: labels_array, control_placeholder: control_array})
     
     embedding_size = int(embeddings.get_shape()[1])
-    assert nrof_images % batch_size == 0, 'The number of LFW images must be an integer multiple of the LFW batch size'
+    # assert nrof_images % batch_size == 0, 'The number of LFW images must be an integer multiple of the LFW batch size'
     nrof_batches = nrof_images // batch_size
     emb_array = np.zeros((nrof_images, embedding_size))
     lab_array = np.zeros((nrof_images,))
