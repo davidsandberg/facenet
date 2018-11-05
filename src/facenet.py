@@ -326,7 +326,7 @@ def get_dataset(path, has_class_directories=True):
         facedir = os.path.join(path_exp, class_name)
         image_paths = get_image_paths(facedir)
         dataset.append(ImageClass(class_name, image_paths))
-  
+        
     return dataset
 
 def get_image_paths(facedir):

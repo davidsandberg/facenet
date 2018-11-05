@@ -37,7 +37,6 @@ import pickle
 from sklearn.svm import SVC
 
 def main(args):
-  
     with tf.Graph().as_default():
       
         with tf.Session() as sess:
@@ -69,7 +68,9 @@ def main(args):
             facenet.load_model(args.model)
             
             # Get input and output tensors
-            images_placeholder = tf.get_default_graph().get_tensor_by_name("input:0")
+            images_placeholder = tf.get_default_graph().get_tensor_by_name("batch_join:0")
+            # input:0 does not exist, because of the changing of the name of the tensor. See here https://github.com/davidsandberg/facenet/issues/279
+            # images_placeholder = tf.get_default_graph().get_tensor_by_name("input:0")
             embeddings = tf.get_default_graph().get_tensor_by_name("embeddings:0")
             phase_train_placeholder = tf.get_default_graph().get_tensor_by_name("phase_train:0")
             embedding_size = embeddings.get_shape()[1]
@@ -132,6 +133,7 @@ def split_dataset(dataset, min_nrof_images_per_class, nrof_train_images_per_clas
             np.random.shuffle(paths)
             train_set.append(facenet.ImageClass(cls.name, paths[:nrof_train_images_per_class]))
             test_set.append(facenet.ImageClass(cls.name, paths[nrof_train_images_per_class:]))
+
     return train_set, test_set
 
             

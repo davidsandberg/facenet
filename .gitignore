@@ -92,3 +92,6 @@ ENV/
 
 # PyCharm project setting
 .idea
+
+lfw_train/
+my_lfw_train/

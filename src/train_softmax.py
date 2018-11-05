@@ -257,8 +257,9 @@ def main(args):
 
                 print('Saving statistics')
                 with h5py.File(stat_file_name, 'w') as f:
-                    for key, value in stat.iteritems():
+                    for key, value in stat.items():
                         f.create_dataset(key, data=value)
+                print("h5py file saved in {}.".format(stat_file_name))
     
     return model_dir
   
@@ -436,7 +437,7 @@ def evaluate(sess, enqueue_op, image_paths_placeholder, labels_placeholder, phas
     else:
         embeddings = emb_array
 
-    assert np.array_equal(lab_array, np.arange(nrof_images))==True, 'Wrong labels used for evaluation, possibly caused by training examples left in the input pipeline'
+    assert np.array_equal(list(map(int, lab_array)), np.arange(nrof_images))==True, 'Wrong labels used for evaluation, possibly caused by training examples left in the input pipeline'
     _, _, accuracy, val, val_std, far = lfw.evaluate(embeddings, actual_issame, nrof_folds=nrof_folds, distance_metric=distance_metric, subtract_mean=subtract_mean)
     
     print('Accuracy: %2.5f+-%2.5f' % (np.mean(accuracy), np.std(accuracy)))
