@@ -68,9 +68,9 @@ def main(args):
             facenet.load_model(args.model)
             
             # Get input and output tensors
-            images_placeholder = tf.get_default_graph().get_tensor_by_name("batch_join:0")
+            # images_placeholder = tf.get_default_graph().get_tensor_by_name("batch_join:0")
             # input:0 does not exist, because of the changing of the name of the tensor. See here https://github.com/davidsandberg/facenet/issues/279
-            # images_placeholder = tf.get_default_graph().get_tensor_by_name("input:0")
+            images_placeholder = tf.get_default_graph().get_tensor_by_name("input:0")
             embeddings = tf.get_default_graph().get_tensor_by_name("embeddings:0")
             phase_train_placeholder = tf.get_default_graph().get_tensor_by_name("phase_train:0")
             embedding_size = embeddings.get_shape()[1]
@@ -94,7 +94,7 @@ def main(args):
                 # Train classifier
                 print('Training classifier')
                 model = SVC(kernel='linear', probability=True)
-                model.fit(emb_array, labels)
+                model.fit(emb_array, labels) 
             
                 # Create a list of class names
                 class_names = [ cls.name.replace('_', ' ') for cls in dataset]
@@ -152,19 +152,19 @@ def parse_arguments(argv):
         'For training this is the output and for classification this is an input.')
     parser.add_argument('--use_split_dataset', 
         help='Indicates that the dataset specified by data_dir should be split into a training and test set. ' +  
-        'Otherwise a separate test set can be specified using the test_data_dir option.', action='store_true')
+        'Otherwise a separate test set can be specified using the test_data_dir option.', action='store_true', default=1)
     parser.add_argument('--test_data_dir', type=str,
         help='Path to the test data directory containing aligned images used for testing.')
     parser.add_argument('--batch_size', type=int,
-        help='Number of images to process in a batch.', default=90)
+        help='Number of images to process in a batch.', default=64)
     parser.add_argument('--image_size', type=int,
-        help='Image size (height, width) in pixels.', default=160)
+        help='Image size (height, width) in pixels.', default=250)
     parser.add_argument('--seed', type=int,
         help='Random seed.', default=666)
     parser.add_argument('--min_nrof_images_per_class', type=int,
-        help='Only include classes with at least this number of images in the dataset', default=20)
+        help='Only include classes with at least this number of images in the dataset', default=1)
     parser.add_argument('--nrof_train_images_per_class', type=int,
-        help='Use this number of images from each class for training and the rest for testing', default=10)
+        help='Use this number of images from each class for training and the rest for testing', default=1)
     
     return parser.parse_args(argv)
 

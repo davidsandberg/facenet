@@ -94,4 +94,11 @@ ENV/
 .idea
 
 lfw_train/
+mydata/pairs.txt
+mydata/my_own_datasets/
+mydata/my_own_datasets_output/
 my_lfw_train/
+data/lfw/
+data/lfw_output/
+data/models/
+
