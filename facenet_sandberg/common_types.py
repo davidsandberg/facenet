@@ -1,5 +1,5 @@
 from enum import Enum
-from typing import Dict, Generator, List, Tuple
+from typing import Dict, Generator, List, Tuple, Union
 
 import numpy as np
 
@@ -9,6 +9,40 @@ Landmarks = Dict[str, Tuple[int, int]]
 class DistanceMetric(Enum):
     ANGULAR_DISTANCE = 1
     EUCLIDEAN_SQUARED = 0
+
+    @staticmethod
+    def from_str(label: str):
+        if label == 'ANGULAR_DISTANCE':
+            return DistanceMetric.ANGULAR_DISTANCE
+        elif label == 'EUCLIDEAN_SQUARED':
+            return DistanceMetric.EUCLIDEAN_SQUARED
+        else:
+            raise NotImplementedError(
+                "Distance metric must be either ANGULAR_DISTANCE or EUCLIDEAN_SQUARED")
+
+
+class ThresholdMetric(Enum):
+    ACCURACY = 0
+    PRECISION = 1
+    RECALL = 2
+
+    @staticmethod
+    def from_str(label: str):
+        if label == 'ACCURACY':
+            return ThresholdMetric.ACCURACY
+        elif label == 'PRECISION':
+            return ThresholdMetric.PRECISION
+        elif label == 'RECALL':
+            return ThresholdMetric.RECALL
+        else:
+            raise NotImplementedError(
+                "Threshold metric must be either ACCURACY or PRECISION or RECALL")
+
+
+class ImageExtensions(Enum):
+    PNG = 'png'
+    JPG = 'jpg'
+    JPEG = 'jpeg'
 
 
 class PersonClass:
@@ -79,3 +113,7 @@ EmbeddingsGenerator = Generator[List[np.ndarray], None, None]
 ImageGenerator = Generator[np.ndarray, None, None]
 FaceGenerator = Generator[Face, None, None]
 FacesGenerator = Generator[List[Face], None, None]
+Match = Tuple[str, int, int]
+Mismatch = Tuple[str, int, str, int]
+Pair = Union[Match, Mismatch]
+Label = bool

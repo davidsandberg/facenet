@@ -1,21 +1,17 @@
-import base64
 import io
 import json
 import os
 import tempfile
-import time
 import warnings
-import zlib
-from typing import Dict, Generator, List, Tuple, cast
+from typing import List, cast
 
 import cv2
 import docker
 import numpy as np
 import PIL
 from mtcnn.mtcnn import MTCNN
-from scipy import misc
 
-from facenet_sandberg import facenet, utils
+from facenet_sandberg import utils
 from facenet_sandberg.common_types import *
 
 warnings.filterwarnings("ignore", message="numpy.dtype size changed")
@@ -41,11 +37,7 @@ class Detector:
             use_faceboxes: bool = False,
             use_affine: bool = False) -> None:
         import tensorflow as tf
-        self.mtcnn = MTCNN(
-            weights_file=None,
-            min_face_size=min_face_size,
-            steps_threshold=steps_threshold,
-            scale_factor=scale_factor)
+        self.mtcnn = MTCNN()
         self.face_crop_height = face_crop_height
         self.face_crop_width = face_crop_width
         self.face_crop_margin = face_crop_margin
@@ -102,9 +94,9 @@ class Detector:
         return faces
 
     def _get_align_results(self, image: Image) -> List[AlignResult]:
+        mtcnn_results = self.mtcnn.detect_faces(image)
         img_size = np.asarray(image.shape)[0:2]
         align_results = cast(List[AlignResult], [])
-        mtcnn_results = self.mtcnn.detect_faces(image)
         faceboxes = cast(List[List[int]], [])
         if self.use_faceboxes:
             faceboxes = self._get_faceboxes_results(image)

@@ -5,7 +5,7 @@ from typing import Any, List, Tuple, cast
 
 import numpy as np
 import tensorflow as tf
-from PIL import Image, ImageOps
+from PIL import Image
 
 
 class FaceDetector:
@@ -41,8 +41,11 @@ class FaceDetector:
             log_device_placement=False)
         self.sess = tf.Session(graph=graph, config=config_proto)
 
-    def __call__(self, image: np.ndarray, ratio: float=1.0,
-                 score_threshold: float=0.5) -> Tuple[List[List[int]], List[float]]:
+    def __call__(self,
+                 image: np.ndarray,
+                 ratio: float=1.0,
+                 score_threshold: float=0.5) -> Tuple[List[List[int]],
+                                                      List[float]]:
         """Detect faces.
 
         Arguments:

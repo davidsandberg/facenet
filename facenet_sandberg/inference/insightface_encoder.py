@@ -1,13 +1,13 @@
-import math
 import os
 import warnings
-from typing import Dict, Generator, List, Tuple, cast
+from typing import List, cast
 
 import numpy as np
 import progressbar as pb
 import tensorflow as tf
 import tensorlayer as tl
-from facenet_sandberg import facenet, utils
+
+from facenet_sandberg import utils
 from facenet_sandberg.common_types import *
 from facenet_sandberg.models.L_Resnet_E_IR_fix_issue9 import get_resnet
 

@@ -1,17 +1,21 @@
 import math
 import os
 import pathlib
-from glob import glob, iglob
-from typing import Dict, Generator, List, Optional, Tuple, cast
+from glob import iglob
+from multiprocessing import Pool
+from os.path import exists, join
+from typing import List, Optional, Tuple, cast
 from urllib.request import urlopen
 
 import cv2
 import numpy as np
-from skimage import transform as trans
+import PIL
 from sklearn.metrics.pairwise import paired_distances
 
-from facenet_sandberg import facenet
-from facenet_sandberg.common_types import *
+from facenet_sandberg.common_types import (AlignResult, DistanceMetric,
+                                           Embedding, Image, ImageExtensions,
+                                           ImageGenerator, Label, Landmarks,
+                                           Match, Mismatch, Pair, PersonClass)
 
 
 def normalize_image(image: Image) -> Image:
@@ -35,6 +39,13 @@ def fix_image(image: Image) -> Image:
         image = add_color(image)
     image = image[:, :, 0:3]
     return image
+
+
+def resize(image: Image, height: int, width: int) -> Image:
+    img = PIL.Image.fromarray(image)
+    img.thumbnail((height, width), PIL.Image.ANTIALIAS)
+    resized = np.array(img)
+    return resized
 
 
 def add_color(image: Image) -> Image:
@@ -154,11 +165,20 @@ def get_images_from_dir(
         yield image
 
 
-def get_dataset(
-        path: str,
-        has_class_directories: bool = True) -> List[PersonClass]:
+def get_dataset(path: str, is_flat: bool = False) -> List[PersonClass]:
+    """Gets a dataset from a directory. If is_flat then it assumes that
+       there is only one image per person in a flat directory.
+    """
+
     dataset = cast(List[PersonClass], [])
     path_exp = os.path.expanduser(path)
+    if is_flat:
+        people = [os.path.basename(path) for path in iglob(path_exp)]
+        image_paths = get_image_paths(path_exp)
+        dataset = [PersonClass(name, [image_path])
+                   for name, image_path in zip(people, image_paths)]
+        return dataset
+
     people = sorted([path for path in os.listdir(path_exp)
                      if os.path.isdir(os.path.join(path_exp, path))])
     num_people = len(people)
@@ -183,6 +203,105 @@ def get_image_paths(facedir: str) -> List[str]:
 def is_image(image_path: str) -> bool:
     suffix = pathlib.Path(image_path).suffix
     return suffix == '.jpg' or suffix == '.png' or suffix == '.jpeg'
+
+
+def find_image_with_type(image_base_path: str, image_dir: str):
+    for image_ext in ImageExtensions:
+        image_path = '{}.{}'.format(image_base_path, image_ext.value)
+        possible_path = join(image_dir, image_path)
+        if exists(possible_path):
+            return possible_path
+    err = 'No Image found with name {} in directory {}'.format(
+        image_base_path,
+        image_dir)
+    raise FileNotFoundError(err)
+
+
+def get_pair_image_path(person_name: str, image_number: int, image_dir: str):
+    """This is a utility function for parsing a pairs.txt file in LFW format
+    """
+    # e.g. person_name: Noam_Chomsky, image_number: 2 -> Noam_Chomsky_0002
+    image_number_name = '{}_{}'.format(person_name, '%04d' % int(image_number))
+    # e.g. Noam_Chomsky_0002 -> Noam_Chomsky/Noam_Chomsky_0002
+    # This is the relative path to the image assuming LFW directory format
+    relative_path = join(person_name, image_number_name)
+    # e.g. Noam_Chomsky/Noam_Chomsky_0002 ->
+    # {path_to_image_dir}/Noam_Chomsky/Noam_Chomsky_0002.jpg
+    path_with_type = find_image_with_type(relative_path, image_dir)
+    return path_with_type
+
+
+def read_pairs_file(pairs_filename: str) -> Tuple[List[Pair], int, int]:
+    pairs = []
+    with open(pairs_filename, 'r') as pair_file:
+        num_sets, num_matches_mismatches = [int(i)
+                                            for i in next(pair_file).split()]
+        for line in pair_file:
+            pair = cast(Pair, tuple([int(i) if i.isdigit() else i
+                                     for i in line.strip().split()]))
+            pairs.append(pair)
+    return pairs, num_sets, num_matches_mismatches
+
+
+def get_paths_and_labels(
+        image_dir: str, pairs: List[Pair]) -> Tuple[List[Tuple[str, str]], List[Label]]:
+    paths = []
+    labels = []
+    for pair in pairs:
+        if len(pair) == 3:
+            person, num_0, num_1 = cast(Match, pair)
+            rel_image_path_0 = get_pair_image_path(person, num_0, image_dir)
+            rel_image_path_1 = get_pair_image_path(person, num_1, image_dir)
+            is_same_person = True
+        elif len(pair) == 4:
+            person_0, num_0, person_1, num_1 = cast(Mismatch, pair)
+            rel_image_path_0 = get_pair_image_path(person_0, num_0, image_dir)
+            rel_image_path_1 = get_pair_image_path(person_1, num_1, image_dir)
+            is_same_person = False
+        else:
+            raise SyntaxError(
+                "Bad LFW format in pairs.txt: pair {} doesn't have length 3 or 4".format(pair))
+        paths.append((rel_image_path_0, rel_image_path_1))
+        labels.append(is_same_person)
+    return paths, labels
+
+
+def transform_to_lfw_format(image_directory: str,
+                            num_processes: Optional[int]=os.cpu_count()):
+    """Transforms an image dataset to lfw format image names.
+       Base directory should have a folder per person with the person's name:
+       -/base_folder
+        -/person_1
+          -image_1.jpg
+          -image_2.jpg
+          -image_3.jpg
+        -/person_2
+          -image_1.jpg
+          -image_2.jpg
+        ...
+    """
+    all_folders = os.path.join(image_directory, "*", "")
+    people_folders = iglob(all_folders)
+    process_pool = Pool(num_processes)
+    process_pool.imap(_rename, people_folders)
+    process_pool.close()
+    process_pool.join()
+
+
+def _rename(person_folder: str):
+    """Renames all the images in a folder in lfw format
+    """
+    all_image_paths = iglob(os.path.join(person_folder, "*.*"))
+    all_image_paths = sorted([image for image in all_image_paths if image.endswith(
+        ".jpg") or image.endswith(".png") or image.endswith(".jpeg")])
+    person_name = os.path.basename(os.path.normpath(person_folder))
+    concat_name = '_'.join(person_name.split())
+    for index, image_path in enumerate(all_image_paths):
+        image_name = concat_name + '_' + '%04d' % (index + 1)
+        file_ext = pathlib.Path(image_path).suffix
+        new_image_path = os.path.join(person_folder, image_name + file_ext)
+        os.rename(image_path, new_image_path)
+    os.rename(person_folder, person_folder.replace(person_name, concat_name))
 
 
 def split_dataset(dataset, split_ratio, min_nrof_images_per_class, mode):
@@ -211,10 +330,10 @@ def split_dataset(dataset, split_ratio, min_nrof_images_per_class, mode):
     return train_set, test_set
 
 
-def crop(image: Image, bb: List[int], margin: float) -> Image:
+def crop(image: Image, bounding_box: List[int], margin: float) -> Image:
     """
     img = image from misc.imread, which should be in (H, W, C) format
-    bb = pixel coordinates of bounding box: (x0, y0, x1, y1)
+    bounding_box = pixel coordinates of bounding box: (x0, y0, x1, y1)
     margin = float from 0 to 1 for the amount of margin to add, relative to the
         bounding box dimensions (half margin added to each side)
     """
@@ -227,38 +346,38 @@ def crop(image: Image, bb: List[int], margin: float) -> Image:
 
     img_height = image.shape[0]
     img_width = image.shape[1]
-    x0, y0, x1, y1 = bb[:4]
-    margin_height = (y1 - y0) * margin / 2
-    margin_width = (x1 - x0) * margin / 2
-    x0 = int(np.maximum(x0 - margin_width, 0))
-    y0 = int(np.maximum(y0 - margin_height, 0))
-    x1 = int(np.minimum(x1 + margin_width, img_width))
-    y1 = int(np.minimum(y1 + margin_height, img_height))
-    return image[y0:y1, x0:x1, :], (x0, y0, x1, y1)
+    x_0, y_0, x_1, y_1 = bounding_box[:4]
+    margin_height = (y_1 - y_0) * margin / 2
+    margin_width = (x_1 - x_0) * margin / 2
+    x_0 = int(np.maximum(x_0 - margin_width, 0))
+    y_0 = int(np.maximum(y_0 - margin_height, 0))
+    x_1 = int(np.minimum(x_1 + margin_width, img_width))
+    y_1 = int(np.minimum(y_1 + margin_height, img_height))
+    return image[y_0:y_1, x_0:x_1, :], (x_0, y_0, x_1, y_1)
 
 
 def get_transform_matrix(left_eye: Tuple[int,
                                          int],
                          right_eye: Tuple[int,
                                           int],
-                         desiredLeftEye: Tuple[float,
-                                               float] = (0.35,
+                         desired_left_eye: Tuple[float,
+                                                 float]=(0.35,
                                                          0.35),
-                         desiredFaceHeight: int = 112,
-                         desiredFaceWidth: int = 112,
-                         margin: float = 0.0):
+                         desired_face_height: int=112,
+                         desired_face_width: int=112,
+                         margin: float=0.0):
     # compute the angle between the eye centers
     dY = right_eye[1] - left_eye[1]
     dX = right_eye[0] - left_eye[0]
     angle = np.degrees(np.arctan2(dY, dX))
 
     # compute the desired right eye x-coordinate
-    desiredRightEyeX = 1.0 - desiredLeftEye[0]
+    desiredRightEyeX = 1.0 - desired_left_eye[0]
 
     # determine the scale of the new resulting image by taking
     dist = np.sqrt((dX ** 2) + (dY ** 2))
-    desiredDist = (desiredRightEyeX - desiredLeftEye[0])
-    desiredDist *= desiredFaceWidth
+    desiredDist = (desiredRightEyeX - desired_left_eye[0])
+    desiredDist *= desired_face_width
     scale = (desiredDist / dist)
 
     # median point between the two eyes in the input image
@@ -270,8 +389,8 @@ def get_transform_matrix(left_eye: Tuple[int,
     M = cv2.getRotationMatrix2D(eye_center, angle, scale)
 
     # update the translation component of the matrix
-    tX = (desiredFaceWidth * (margin + 1)) * 0.5
-    tY = (desiredFaceHeight * (margin + 1)) * desiredLeftEye[1]
+    tX = (desired_face_width * (margin + 1)) * 0.5
+    tY = (desired_face_height * (margin + 1)) * desired_left_eye[1]
     x_shift = (tX - eye_center[0])
     y_shift = (tY - eye_center[1])
     M[0, 2] += x_shift
@@ -284,9 +403,9 @@ def preprocess(
         desired_height: int,
         desired_width: int,
         margin: float,
-        bbox: List[int] = None,
-        landmark: Landmarks = None,
-        use_affine: bool = False):
+        bbox: List[int]=None,
+        landmark: Landmarks=None,
+        use_affine: bool=False):
     image_height, image_width = image.shape[:2]
     margin_height = int(desired_height + desired_height * margin)
     margin_width = int(desired_width + desired_width * margin)

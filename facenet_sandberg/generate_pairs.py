@@ -7,23 +7,22 @@ import io
 import os
 import random
 from argparse import ArgumentParser, Namespace
-from multiprocessing import Lock, Manager, Pool, Queue, Value
-from multiprocessing.dummy import Pool as ThreadPool
-from pathlib import Path
 from typing import List, Optional, Set, Tuple, cast
 
 import numpy as np
+
+from facenet_sandberg.utils import transform_to_lfw_format
 
 Mismatch = Tuple[str, int, str, int]
 Match = Tuple[str, int, int]
 CommandLineArgs = Namespace
 
 
-def write_pairs(fname: str,
-                match_folds: List[List[Match]],
-                mismatch_folds: List[List[Mismatch]],
-                num_folds: int,
-                num_matches_mismatches: int) -> None:
+def write_pairs_to_file(fname: str,
+                        match_folds: List[List[Match]],
+                        mismatch_folds: List[List[Mismatch]],
+                        num_folds: int,
+                        num_matches_mismatches: int) -> None:
     metadata = '{}\t{}\n'.format(num_folds, num_matches_mismatches)
     with io.open(fname,
                  'w',
@@ -94,73 +93,47 @@ def _make_mismatches(image_dir: str,
 def _clean_images(base: str, folder: str):
     images = os.listdir(os.path.join(base, folder))
     images = [image for image in images if image.endswith(
-        ".jpg") or image.endswith(".png")]
+        ".jpg") or image.endswith(".png") or image.endswith(".jpeg")]
     return images
 
 
-def _transform_to_lfw_format(image_directory: str,
-                             num_processes: Optional[int]=os.cpu_count()):
-    """Transforms an image dataset to lfw format image names.
-       Base directory should have a folder per person with the person's name:
-       -/base_folder
-        -/person_1
-          -image_1.jpg
-          -image_2.jpg
-          -image_3.jpg
-        -/person_2
-          -image_1.jpg
-          -image_2.jpg
-        ...
-    """
-    all_folders = os.path.join(image_directory, "*", "")
-    people_folders = glob.iglob(all_folders)
-    process_pool = Pool(num_processes)
-    process_pool.imap(_rename, people_folders)
-    process_pool.close()
-    process_pool.join()
-
-
-def _rename(person_folder: str):
-    """Renames all the images in a folder in lfw format
-    """
-    all_image_paths = glob.glob(os.path.join(person_folder, "*.*"))
-    all_image_paths = [image for image in all_image_paths if image.endswith(
-        ".jpg") or image.endswith(".png")]
-    person_name = os.path.basename(os.path.normpath(person_folder))
-    concat_name = '_'.join(person_name.split())
-    for index, image_path in enumerate(all_image_paths):
-        image_name = concat_name + '_' + '%04d' % (index + 1)
-        file_ext = Path(image_path).suffix
-        new_image_path = os.path.join(person_folder, image_name + file_ext)
-        os.rename(image_path, new_image_path)
-    os.rename(person_folder, person_folder.replace(person_name, concat_name))
-
-
-def _main(args: CommandLineArgs) -> None:
-    _transform_to_lfw_format(args.image_dir)
-    people_folds = _split_people_into_folds(args.image_dir, args.num_folds)
+def generate_pairs(
+        image_dir: str,
+        num_folds: int,
+        num_matches_mismatches: int,
+        write_to_file: bool=False,
+        pairs_file_name: str="") -> None:
+    transform_to_lfw_format(image_dir)
+    people_folds = _split_people_into_folds(image_dir, num_folds)
     matches = []
     mismatches = []
     for fold in people_folds:
-        matches.append(_make_matches(args.image_dir,
+        matches.append(_make_matches(image_dir,
                                      fold,
-                                     args.num_matches_mismatches))
-        mismatches.append(_make_mismatches(args.image_dir,
+                                     num_matches_mismatches))
+        mismatches.append(_make_mismatches(image_dir,
                                            fold,
-                                           args.num_matches_mismatches))
-    write_pairs(args.pairs_file_name,
-                matches,
-                mismatches,
-                args.num_folds,
-                args.num_matches_mismatches)
+                                           num_matches_mismatches))
+    if write_to_file:
+        write_pairs_to_file(pairs_file_name,
+                            matches,
+                            mismatches,
+                            num_folds,
+                            num_matches_mismatches)
+    return matches, mismatches
 
 
 def _cli() -> None:
     args = _parse_arguments()
-    _main(args)
+    generate_pairs(
+        args.image_dir,
+        args.num_folds,
+        args.num_matches_mismatches,
+        True,
+        args.pairs_file_name)
 
 
-def _parse_arguments() -> CommandLineArgs:
+def _parse_arguments() -> Namespace:
     parser = ArgumentParser()
     parser.add_argument('--image_dir',
                         type=str,

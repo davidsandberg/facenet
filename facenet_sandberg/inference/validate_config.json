@@ -1,0 +1,15 @@
+{
+    "IMAGE_DIR": "/Users/armanrahman/datasets/new_data_tests/facenet_eame",
+    "PAIRS_FILE_NAME": "/Users/armanrahman/datasets/new_data_tests/pairs.txt",
+    "NUM_FOLDS": 4,
+    "DISTANCE_METRIC": "EUCLIDEAN_SQUARED",
+    "THRESHOLD_START": 0,
+    "THRESHOLD_END": 1,
+    "THRESHOLD_STEP": 0.1,
+    "THRESHOLD_METRIC": "ACCURACY",
+    "EMBEDDING_SIZE": 512,
+    "REMOVE_EMPTY_EMBEDDINGS": false,
+    "SUBTRACT_MEAN": false,
+    "DIVIDE_STDDEV": false,
+    "PREALIGNED": true
+}

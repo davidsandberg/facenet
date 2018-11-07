@@ -3,11 +3,14 @@
 import itertools
 import os
 import warnings
-from typing import Dict, Generator, List, Tuple
+from typing import List, Tuple
 
 import tensorflow as tf
-from facenet_sandberg import facenet, utils
-from facenet_sandberg.common_types import *
+
+from facenet_sandberg import utils
+from facenet_sandberg.common_types import (DistanceMetric, Embedding, Face,
+                                           FacesGenerator, Image,
+                                           ImageGenerator, Match)
 from facenet_sandberg.inference import (align, facenet_encoder,
                                         insightface_encoder)
 
@@ -138,7 +141,8 @@ class Identifier:
     def compare_embedding(self,
                           embedding_1: Embedding,
                           embedding_2: Embedding,
-                          distance_metric: DistanceMetric) -> Tuple[bool, float]:
+                          distance_metric: DistanceMetric) -> Tuple[bool,
+                                                                    float]:
         """Compares the distance between two embeddings
         """
 

@@ -1,13 +1,16 @@
 import os
 import warnings
-from typing import Dict, Generator, List, Optional, Tuple, cast
+from typing import List, Optional, cast
 
 import numpy as np
 import progressbar as pb
 import tensorflow as tf
-from facenet_sandberg import facenet, utils
-from facenet_sandberg.common_types import *
 from scipy import misc
+
+from facenet_sandberg import facenet, utils
+from facenet_sandberg.common_types import (DistanceMetric, Embedding, Face,
+                                           FacesGenerator, Image,
+                                           ImageGenerator)
 
 warnings.filterwarnings("ignore", message="numpy.dtype size changed")
 warnings.filterwarnings("ignore", message="numpy.ufunc size changed")
@@ -95,15 +98,20 @@ class Facenet:
                 index += 1
             yield faces
 
-    def get_best_match(self, anchor: Face,
-                       faces: List[Face], save_memory: bool = False) -> Optional[Face]:
+    def get_best_match(
+            self,
+            anchor: Face,
+            faces: List[Face]) -> Optional[Face]:
         anchor_image = misc.imresize(
-            anchor.image, (self.image_height, self.image_width), interp='bilinear')
+            anchor.image,
+            (self.image_height,
+             self.image_width),
+            interp='bilinear')
         anchor.embedding = self.generate_embedding(anchor_image)
         min_dist = float('inf')
         min_face = faces[0] if faces else None
         for face in faces:
-            face_image = resized = misc.imresize(
+            face_image = misc.imresize(
                 face.image, (self.image_height, self.image_width), interp='bilinear')
             face.embedding = self.generate_embedding(face_image)
             dist = utils.embedding_distance(

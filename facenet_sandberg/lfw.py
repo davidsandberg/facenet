@@ -34,6 +34,7 @@ from multiprocessing.dummy import Pool as ThreadPool
 from pathlib import Path
 
 import numpy as np
+
 from facenet_sandberg import facenet
 
 
@@ -92,7 +93,7 @@ def get_paths(lfw_dir, pairs):
     return path_list, labels
 
 
-def transform_to_lfw_format(image_directory, num_processes=os.cpu_count()):
+def transform_to_lfw_format(image_directory, num_processes=1):
     """Transforms an image dataset to lfw format image names.
        Base directory should have a folder per person with the person's name.
 
@@ -101,10 +102,14 @@ def transform_to_lfw_format(image_directory, num_processes=os.cpu_count()):
     """
     all_folders = os.path.join(image_directory, "*", "")
     people_folders = glob.iglob(all_folders)
-    process_pool = Pool(num_processes)
-    process_pool.imap(rename, people_folders)
-    process_pool.close()
-    process_pool.join()
+    if num_processes != 1:
+        process_pool = Pool(num_processes)
+        process_pool.imap(rename, people_folders)
+        process_pool.close()
+        process_pool.join()
+    else:
+        for person_folder in people_folders:
+            rename(person_folder)
 
 
 def rename(person_folder):
@@ -113,10 +118,9 @@ def rename(person_folder):
     Arguments:
         person_folder {str} -- path to folder named after person
     """
-
     all_image_paths = glob.glob(os.path.join(person_folder, "*.*"))
-    all_image_paths = [image for image in all_image_paths if image.endswith(
-        ".jpg") or image.endswith(".png")]
+    all_image_paths = sorted([image for image in all_image_paths if image.endswith(
+        ".jpg") or image.endswith(".png")])
     person_name = os.path.basename(os.path.normpath(person_folder))
     concat_name = '_'.join(person_name.split())
     for index, image_path in enumerate(all_image_paths):

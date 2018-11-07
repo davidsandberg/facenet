@@ -1,0 +1,26 @@
+version: '3'
+services:
+  validation:
+    build: .
+    command: "--image_dir ${IMAGE_DIR} \
+--container_name algorithm \
+--distance_metric ${DISTANCE_METRIC} \
+--pairs_fname ${PAIRS_FNAME} \
+--threshold_start ${THRESHOLD_START} \
+--threshold_end ${THRESHOLD_END} \
+--threshold_step ${THRESHOLD_STEP} \
+--embedding_size ${EMBEDDING_SIZE} \
+--threshold_metric ${THRESHOLD_METRIC} \
+${PREALIGNED_FLAG} \
+${REMOVE_EMPTY_EMBEDDINGS_FLAG}"
+    volumes:
+      - "/var/run/docker.sock:/var/run/docker.sock"
+      - "${IMAGE_DIR}:${IMAGE_DIR}"
+      - "${PAIRS_FNAME}:${PAIRS_FNAME}"
+    depends_on:
+      - algorithm
+  algorithm:
+    build: ${ALGORITHM_CONTAINER_DIR}
+    image: algorithm
+    entrypoint: ["/bin/sh", "-c"]
+    command: "\"echo built algorithm container\""
