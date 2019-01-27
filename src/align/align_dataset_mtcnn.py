@@ -26,7 +26,6 @@ from __future__ import division
 from __future__ import print_function
 
 import imageio
-#from scipy import misc
 from PIL import Image
 import sys
 import os
