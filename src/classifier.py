@@ -83,7 +83,13 @@ def main(args):
                 start_index = i*args.batch_size
                 end_index = min((i+1)*args.batch_size, nrof_images)
                 paths_batch = paths[start_index:end_index]
-                images = facenet.load_data(paths_batch, False, False, args.image_size)
+                if args.use_fixed_image_standardization:
+                    images = facenet.load_data(paths_batch, False, False, args.image_size, do_prewhiten=False)
+                    # Do fixed image standardization
+                    images = (images-127.5)/128.0
+                else:
+                    images = facenet.load_data(paths_batch, False, False, args.image_size)
+                
                 feed_dict = { images_placeholder:images, phase_train_placeholder:False }
                 emb_array[start_index:end_index,:] = sess.run(embeddings, feed_dict=feed_dict)
             
@@ -163,7 +169,8 @@ def parse_arguments(argv):
         help='Only include classes with at least this number of images in the dataset', default=20)
     parser.add_argument('--nrof_train_images_per_class', type=int,
         help='Use this number of images from each class for training and the rest for testing', default=10)
-    
+    parser.add_argument('--use_fixed_image_standardization', 
+            help='Performs fixed standardization of images.', action='store_true')
     return parser.parse_args(argv)
 
 if __name__ == '__main__':
