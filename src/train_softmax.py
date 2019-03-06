@@ -119,21 +119,14 @@ def main(args):
         labels_placeholder = tf.placeholder(tf.int32, shape=(None,1), name='labels')
         control_placeholder = tf.placeholder(tf.int32, shape=(None,1), name='control')
         
-        images_and_labels = []
         nrof_preprocess_threads = 4
-        
         input_queue = data_flow_ops.FIFOQueue(capacity=2000000,
                                     dtypes=[tf.string, tf.int32, tf.int32],
                                     shapes=[(1,), (1,), (1,)],
                                     shared_name=None, name=None)
         enqueue_op = input_queue.enqueue_many([image_paths_placeholder, labels_placeholder, control_placeholder], name='enqueue_op')
-        images_and_labels = facenet.create_input_pipeline(images_and_labels, input_queue, image_size, nrof_preprocess_threads)
+        image_batch, label_batch = facenet.create_input_pipeline(input_queue, image_size, nrof_preprocess_threads, batch_size_placeholder)
 
-        image_batch, label_batch = tf.train.batch_join(
-            images_and_labels, batch_size=batch_size_placeholder, 
-            shapes=[image_size + (3,), ()], enqueue_many=True,
-            capacity=4 * nrof_preprocess_threads * args.batch_size,
-            allow_smaller_final_batch=True)
         image_batch = tf.identity(image_batch, 'image_batch')
         image_batch = tf.identity(image_batch, 'input')
         label_batch = tf.identity(label_batch, 'label_batch')
@@ -437,7 +430,7 @@ def evaluate(sess, enqueue_op, image_paths_placeholder, labels_placeholder, phas
     print('')
     embeddings = np.zeros((nrof_embeddings, embedding_size*nrof_flips))
     if use_flipped_images:
-        # Concatenate embeddings for flipped and non flipped iversion of the images
+        # Concatenate embeddings for flipped and non flipped version of the images
         embeddings[:,:embedding_size] = emb_array[0::2,:]
         embeddings[:,embedding_size:] = emb_array[1::2,:]
     else:

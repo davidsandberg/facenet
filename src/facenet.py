@@ -90,54 +90,9 @@ def shuffle_examples(image_paths, labels):
     image_paths_shuff, labels_shuff = zip(*shuffle_list)
     return image_paths_shuff, labels_shuff
 
-def read_images_from_disk(input_queue):
-    """Consumes a single filename and label as a ' '-delimited string.
-    Args:
-      filename_and_label_tensor: A scalar string tensor.
-    Returns:
-      Two tensors: the decoded image, and the string label.
-    """
-    label = input_queue[1]
-    file_contents = tf.read_file(input_queue[0])
-    example = tf.image.decode_image(file_contents, channels=3)
-    return example, label
-  
 def random_rotate_image(image):
     angle = np.random.uniform(low=-10.0, high=10.0)
     return misc.imrotate(image, angle, 'bicubic')
-  
-# def read_and_augment_data(image_list, label_list, image_size, batch_size, max_nrof_epochs, 
-#         random_crop, random_flip, random_rotate, nrof_preprocess_threads, shuffle=True):
-#     
-#     images = ops.convert_to_tensor(image_list, dtype=tf.string)
-#     labels = ops.convert_to_tensor(label_list, dtype=tf.int32)
-#     
-#     # Makes an input queue
-#     input_queue = tf.train.slice_input_producer([images, labels],
-#         num_epochs=max_nrof_epochs, shuffle=shuffle)
-# 
-#     images_and_labels = []
-#     for _ in range(nrof_preprocess_threads):
-#         image, label = read_images_from_disk(input_queue)
-#         if random_rotate:
-#             image = tf.py_func(random_rotate_image, [image], tf.uint8)
-#         if random_crop:
-#             image = tf.random_crop(image, [image_size, image_size, 3])
-#         else:
-#             image = tf.image.resize_image_with_crop_or_pad(image, image_size, image_size)
-#         if random_flip:
-#             image = tf.image.random_flip_left_right(image)
-#         #pylint: disable=no-member
-#         image.set_shape((image_size, image_size, 3))
-#         image = tf.image.per_image_standardization(image)
-#         images_and_labels.append([image, label])
-# 
-#     image_batch, label_batch = tf.train.batch_join(
-#         images_and_labels, batch_size=batch_size,
-#         capacity=4 * nrof_preprocess_threads * batch_size,
-#         allow_smaller_final_batch=True)
-#   
-#     return image_batch, label_batch
   
 # 1: Random rotate 2: Random crop  4: Random flip  8:  Fixed image standardization  16: Flip
 RANDOM_ROTATE = 1
@@ -145,7 +100,8 @@ RANDOM_CROP = 2
 RANDOM_FLIP = 4
 FIXED_STANDARDIZATION = 8
 FLIP = 16
-def create_input_pipeline(images_and_labels_list, input_queue, image_size, nrof_preprocess_threads):
+def create_input_pipeline(input_queue, image_size, nrof_preprocess_threads, batch_size_placeholder):
+    images_and_labels_list = []
     for _ in range(nrof_preprocess_threads):
         filenames, label, control = input_queue.dequeue()
         images = []
@@ -171,7 +127,14 @@ def create_input_pipeline(images_and_labels_list, input_queue, image_size, nrof_
             image.set_shape(image_size + (3,))
             images.append(image)
         images_and_labels_list.append([images, label])
-    return images_and_labels_list
+
+    image_batch, label_batch = tf.train.batch_join(
+        images_and_labels_list, batch_size=batch_size_placeholder, 
+        shapes=[image_size + (3,), ()], enqueue_many=True,
+        capacity=4 * nrof_preprocess_threads * 100,
+        allow_smaller_final_batch=True)
+    
+    return image_batch, label_batch
 
 def get_control_flag(control, field):
     return tf.equal(tf.mod(tf.floor_div(control, field), 2), 1)
@@ -398,7 +361,7 @@ def split_dataset(dataset, split_ratio, min_nrof_images_per_class, mode):
         raise ValueError('Invalid train/test split mode "%s"' % mode)
     return train_set, test_set
 
-def load_model(model):
+def load_model(model, input_map=None):
     # Check if the model is a model directory (containing a metagraph and a checkpoint file)
     #  or if it is a protobuf file with a frozen graph
     model_exp = os.path.expanduser(model)
@@ -407,7 +370,7 @@ def load_model(model):
         with gfile.FastGFile(model_exp,'rb') as f:
             graph_def = tf.GraphDef()
             graph_def.ParseFromString(f.read())
-            tf.import_graph_def(graph_def, name='')
+            tf.import_graph_def(graph_def, input_map=input_map, name='')
     else:
         print('Model directory: %s' % model_exp)
         meta_file, ckpt_file = get_model_filenames(model_exp)
@@ -415,7 +378,7 @@ def load_model(model):
         print('Metagraph file: %s' % meta_file)
         print('Checkpoint file: %s' % ckpt_file)
       
-        saver = tf.train.import_meta_graph(os.path.join(model_exp, meta_file))
+        saver = tf.train.import_meta_graph(os.path.join(model_exp, meta_file), input_map=input_map)
         saver.restore(tf.get_default_session(), os.path.join(model_exp, ckpt_file))
     
 def get_model_filenames(model_dir):

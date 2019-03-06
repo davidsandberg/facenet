@@ -33,7 +33,7 @@ import argparse
 import os
 import sys
 import facenet
-from six.moves import xrange
+from six.moves import xrange  # @UnresolvedImport
 
 def main(args):
     with tf.Graph().as_default():
@@ -55,7 +55,7 @@ def main(args):
             input_graph_def = sess.graph.as_graph_def()
             
             # Freeze the graph def
-            output_graph_def = freeze_graph_def(sess, input_graph_def, 'embeddings')
+            output_graph_def = freeze_graph_def(sess, input_graph_def, 'embeddings,label_batch')
 
         # Serialize and dump the output graph to the filesystem
         with tf.gfile.GFile(args.output_file, 'wb') as f:
@@ -79,8 +79,9 @@ def freeze_graph_def(sess, input_graph_def, output_node_names):
     # Get the list of important nodes
     whitelist_names = []
     for node in input_graph_def.node:
-        if (node.name.startswith('InceptionResnetV1') or node.name.startswith('embeddings') or 
-                node.name.startswith('phase_train') or node.name.startswith('Bottleneck') or node.name.startswith('Logits')):
+        if (node.name.startswith('InceptionResnet') or node.name.startswith('embeddings') or 
+                node.name.startswith('image_batch') or node.name.startswith('label_batch') or
+                node.name.startswith('phase_train') or node.name.startswith('Logits')):
             whitelist_names.append(node.name)
 
     # Replace all the variables in the graph with constants of the same values

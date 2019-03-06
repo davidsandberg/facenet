@@ -6,7 +6,8 @@ model_dict = {
     'lfw-subset':      '1B5BQUZuJO-paxdN8UclxeHAR1WnR_Tzi', 
     '20170131-234652': '0B5MzpY9kBtDVSGM0RmVET2EwVEk',
     '20170216-091149': '0B5MzpY9kBtDVTGZjcWkzT3pldDA',
-    '20170512-110547': '0B5MzpY9kBtDVZ2RpVDYwWmxoSUk'
+    '20170512-110547': '0B5MzpY9kBtDVZ2RpVDYwWmxoSUk',
+    '20180402-114759': '1EXPBSXwTaqrSC0OhUdXNmKSh9qJUQ55-'
     }
 
 def download_and_extract_file(model_name, data_dir):
