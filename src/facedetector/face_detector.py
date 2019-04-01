@@ -2,6 +2,7 @@ import tensorflow as tf
 from src.align import detect_face
 from src import facenet
 from src.facedetector import model_downloader
+
 import os
 from os.path import expanduser
 import copy
@@ -83,8 +84,9 @@ class FaceDetector(object):
 
     def embedding(self, images):
         # check is model exists
-        home = expanduser('~')
         model_path = self.find_model_in_folder()
+        if model_path is None:
+            model_path = './.facenet_model/'
         if not os.path.exists(model_path):
             print("Model was not found - downloading default model from https://github.com/davidsandberg/facenet")
             model_downloader.download()
@@ -117,6 +119,7 @@ class FaceDetector(object):
     def compare(self, images, threshold=0.7):
         emb = self.embedding(images)
 
+
         sims = np.zeros((len(images), len(images)))
         for i in range(len(images)):
             for j in range(len(images)):
@@ -125,5 +128,13 @@ class FaceDetector(object):
 
         return sims
 
+
 detector = FaceDetector()
-detector.embedding([])
+
+images = ['/home/dandy/PycharmProjects/facerecognition/images/valid_faces/test2.jpg', '/home/dandy/PycharmProjects/facerecognition/images/valid_faces/test.jpg']
+
+aligned = detector.align_face(images)
+
+comparisons = detector.compare(aligned)
+
+print("Is image 1 and 2 similar? ", bool(comparisons[0][1]))
