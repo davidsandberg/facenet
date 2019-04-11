@@ -136,8 +136,8 @@ class Detection:
         faces = []
 
         bounding_boxes, _ = align.detect_face.detect_face(image, self.minsize,
-																	self.pnet, self.rnet, self.onet,
-																	self.threshold, self.factor)
+                                                                    self.pnet, self.rnet, self.onet,
+                                                                    self.threshold, self.factor)
         for bb in bounding_boxes:
             face = Face()
             face.container_image = image

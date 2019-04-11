@@ -1,7 +1,7 @@
 import tensorflow as tf
-from facenet.src.align import detect_face
-from facenet.src import facenet
-from facenet.src.facedetector import model_downloader
+from src.align import detect_face
+from src import facenet
+from src.facedetector import model_downloader
 
 import copy
 import os
