@@ -1,4 +1,4 @@
-tensorflow==1.7
+tensorflow
 scipy
 scikit-learn
 opencv-python
