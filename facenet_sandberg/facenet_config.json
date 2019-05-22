@@ -1,0 +1,15 @@
+{
+    "IS_RGB": true,
+    "FACE_CROP_HEIGHT": 160,
+    "FACE_CROP_WIDTH": 160,
+    "FACE_CROP_MARGIN": 0.25,
+    "SCALE_FACTOR": 0.85,
+    "STEPS_THRESHOLD": [0.6, 0.7, 0.9],
+    "DETECT_MULTIPLE_FACES": true,
+    "USE_AFFINE": false,
+    "USE_FACEBOXES": false,
+    "NUM_PROCESSES": -1,
+    "FACENET_MODEL_CHECKPOINT": "/Users/armanrahman/models/facenet_model.pb",
+    "INPUT_DIR": "/Users/armanrahman/datasets/eame/eame_test",
+    "OUTPUT_DIR": "/Users/armanrahman/datasets/new_data_tests/facenet_eame"
+}

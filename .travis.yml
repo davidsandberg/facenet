@@ -1,17 +1,13 @@
 language: python
 sudo: required
 python:
-  - "2.7"
-  - "3.5"
-# command to install dependencies
+  - '3.6'
 install:
-# numpy not using wheel to avoid problem described in 
-#  https://github.com/tensorflow/tensorflow/issues/6968
   - pip install --no-binary numpy --upgrade numpy
   - pip install -r requirements.txt
-# command to run tests
 script:
-  - export PYTHONPATH=./src:./src/models:./src/align
+  - >-
+    export
+    PYTHONPATH=./facenet_sandberg:./facenet_sandberg/models:./facenet_sandberg/align
   - python -m unittest discover -s test --pattern=*.py 1>&2
 dist: trusty
-

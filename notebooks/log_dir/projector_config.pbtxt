@@ -1,0 +1,15 @@
+embeddings {
+tensor_name: "default:00000"
+tensor_path: "00000/default/tensors.tsv"
+metadata_path: "00000/default/metadata.tsv"
+}
+embeddings {
+tensor_name: "default:00000"
+tensor_path: "00000/default/tensors.tsv"
+metadata_path: "00000/default/metadata.tsv"
+sprite {
+image_path: "00000/default/sprite.png"
+single_image_dim: 64
+single_image_dim: 64
+}
+}

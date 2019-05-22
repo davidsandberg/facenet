@@ -1,55 +1,101 @@
-# Face Recognition using Tensorflow [![Build Status][travis-image]][travis]
+# Facial Recognition and Alignment
+## What's this?
 
-[travis-image]: http://travis-ci.org/davidsandberg/facenet.svg?branch=master
-[travis]: http://travis-ci.org/davidsandberg/facenet
+This repository contains a refactored implementation of David Sandberg's [FaceNet](https://github.com/davidsandberg/facenet) and [InsightFace](https://github.com/deepinsight/insightface) for facial recognition. It also contains an implementation of [MTCNN](https://github.com/ipazc/mtcnn) and [Faceboxes](https://github.com/TropComplique/FaceBoxes-tensorflow) for face cropping and alignment. What is in the refactor:
 
-This is a TensorFlow implementation of the face recognizer described in the paper
-["FaceNet: A Unified Embedding for Face Recognition and Clustering"](http://arxiv.org/abs/1503.03832). The project also uses ideas from the paper ["Deep Face Recognition"](http://www.robots.ox.ac.uk/~vgg/publications/2015/Parkhi15/parkhi15.pdf) from the [Visual Geometry Group](http://www.robots.ox.ac.uk/~vgg/) at Oxford.
+- Made algorithms easily and efficiently usable with [convenience classes](https://github.com/armanrahman22/facenet/tree/master/facenet_sandberg/inference). 
+- Added much more efficient methods of batch processing face recognition and alignment
+- Added true face alignment (with affine transformation) to align face to bottom-center of image: [code](https://github.com/armanrahman22/facenet/blob/f6cb32a193925002da41fb491c52bb85384bee55/facenet_sandberg/utils.py#L187)
+- Added proportional margin to alignment as per this [issue](https://github.com/davidsandberg/facenet/issues/283)
+- Ability to easily switch between [insightface](https://github.com/armanrahman22/facenet/blob/master/facenet_sandberg/inference/insightface_encoder.py) and [facenet](https://github.com/armanrahman22/facenet/blob/master/facenet_sandberg/inference/facenet_encoder.py) at [inference time](https://github.com/armanrahman22/facenet/blob/master/facenet_sandberg/inference/identifier.py)
 
-## Compatibility
-The code is tested using Tensorflow r1.7 under Ubuntu 14.04 with Python 2.7 and Python 3.5. The test cases can be found [here](https://github.com/davidsandberg/facenet/tree/master/test) and the results can be found [here](http://travis-ci.org/davidsandberg/facenet).
+More information on customizing and implementing new face detection algorithms can be found [here](./algorithms/README.md).
 
-## News
-| Date     | Update |
-|----------|--------|
-| 2018-04-10 | Added new models trained on Casia-WebFace and VGGFace2 (see below). Note that the models uses fixed image standardization (see [wiki](https://github.com/davidsandberg/facenet/wiki/Training-using-the-VGGFace2-dataset)). |
-| 2018-03-31 | Added a new, more flexible input pipeline as well as a bunch of minor updates. |
-| 2017-05-13 | Removed a bunch of older non-slim models. Moved the last bottleneck layer into the respective models. Corrected normalization of Center Loss. |
-| 2017-05-06 | Added code to [train a classifier on your own images](https://github.com/davidsandberg/facenet/wiki/Train-a-classifier-on-own-images). Renamed facenet_train.py to train_tripletloss.py and facenet_train_classifier.py to train_softmax.py. |
-| 2017-03-02 | Added pretrained models that generate 128-dimensional embeddings.|
-| 2017-02-22 | Updated to Tensorflow r1.0. Added Continuous Integration using Travis-CI.|
-| 2017-02-03 | Added models where only trainable variables has been stored in the checkpoint. These are therefore significantly smaller. |
-| 2017-01-27 | Added a model trained on a subset of the MS-Celeb-1M dataset. The LFW accuracy of this model is around 0.994. |
-| 2017&#8209;01&#8209;02 | Updated to run with Tensorflow r0.12. Not sure if it runs with older versions of Tensorflow though.   |
+## Installation
+To use in other projects, this implementation can be pip installed as follows:
+```
+pip install facenet_sandberg
+```
 
-## Pre-trained models
-| Model name      | LFW accuracy | Training dataset | Architecture |
-|-----------------|--------------|------------------|-------------|
-| [20180408-102900](https://drive.google.com/open?id=1R77HmFADxe87GmoLwzfgMu_HY0IhcyBz) | 0.9905        | CASIA-WebFace    | [Inception ResNet v1](https://github.com/davidsandberg/facenet/blob/master/src/models/inception_resnet_v1.py) |
-| [20180402-114759](https://drive.google.com/open?id=1EXPBSXwTaqrSC0OhUdXNmKSh9qJUQ55-) | 0.9965        | VGGFace2      | [Inception ResNet v1](https://github.com/davidsandberg/facenet/blob/master/src/models/inception_resnet_v1.py) |
+To use locally:
+1. Clone repo
+2. cd to base directory with setup.py 
+3. run:
+```
+pip install -e .
+```
+^(installs package in [development mode](https://setuptools.readthedocs.io/en/latest/setuptools.html#development-mode))
 
-NOTE: If you use any of the models, please do not forget to give proper credit to those providing the training dataset as well.
+## Important Requirements
+1. Python 3.5 
+2. Tensorflow==1.7
+3. Tensorlayer==1.7
+The rest is specified in [requirements.txt](https://github.com/armanrahman22/facenet/blob/master/requirements.txt)
 
-## Inspiration
-The code is heavily inspired by the [OpenFace](https://github.com/cmusatyalab/openface) implementation.
+## Models
+Links to pretrained models: 
 
-## Training data
-The [CASIA-WebFace](http://www.cbsr.ia.ac.cn/english/CASIA-WebFace-Database.html) dataset has been used for training. This training set consists of total of 453 453 images over 10 575 identities after face detection. Some performance improvement has been seen if the dataset has been filtered before training. Some more information about how this was done will come later.
-The best performing model has been trained on the [VGGFace2](https://www.robots.ox.ac.uk/~vgg/data/vgg_face2/) dataset consisting of ~3.3M faces and ~9000 classes.
+- [Facenet](https://redcrossstorage.blob.core.windows.net/images/facenet_model.pb)
+  - Uses RGB images of size 160x160
+- [Insightface.zip](https://redcrossstorage.blob.core.windows.net/images/insightface_ckpt.zip)
+  - Uses BGR images of size 112x112
 
-## Pre-processing
+## Datasets
+Links to download training datasets (!big files!):
 
-### Face alignment using MTCNN
-One problem with the above approach seems to be that the Dlib face detector misses some of the hard examples (partial occlusion, silhouettes, etc). This makes the training set too "easy" which causes the model to perform worse on other benchmarks.
-To solve this, other face landmark detectors has been tested. One face landmark detector that has proven to work very well in this setting is the
-[Multi-task CNN](https://kpzhang93.github.io/MTCNN_face_detection_alignment/index.html). A Matlab/Caffe implementation can be found [here](https://github.com/kpzhang93/MTCNN_face_detection_alignment) and this has been used for face alignment with very good results. A Python/Tensorflow implementation of MTCNN can be found [here](https://github.com/davidsandberg/facenet/tree/master/src/align). This implementation does not give identical results to the Matlab/Caffe implementation but the performance is very similar.
+- [Emore](https://redcrossstorage.blob.core.windows.net/datasets/faces_emore.zip) 
+- [MSM_refined_112x112](https://redcrossstorage.blob.core.windows.net/datasets/faces_ms1m-refine-v2_112x112.zip)
+- [VGG2_112x112](https://redcrossstorage.blob.core.windows.net/datasets/faces_vgg2_112x112.zip)
 
-## Running training
-Currently, the best results are achieved by training the model using softmax loss. Details on how to train a model using softmax loss on the CASIA-WebFace dataset can be found on the page [Classifier training of Inception-ResNet-v1](https://github.com/davidsandberg/facenet/wiki/Classifier-training-of-inception-resnet-v1) and .
+## Image directory structure
+This repo assumes images are in [LFW format](http://vis-www.cs.umass.edu/lfw/README.txt):
+```
+-/base_images_folder
+  -/person_1
+    -person_1_0001.jpg
+    -person_1_0002.jpg
+    -person_1_0003.jpg
+  -/person_2
+    -person_2_0001.jpg
+    -person_2_0002.jpg
+  ...
+```
 
-## Pre-trained models
-### Inception-ResNet-v1 model
-A couple of pretrained models are provided. They are trained using softmax loss with the Inception-Resnet-v1 model. The datasets has been aligned using [MTCNN](https://github.com/davidsandberg/facenet/tree/master/src/align).
+If your dataset is not like this you can use [lfw.py](https://github.com/armanrahman22/facenet/blob/master/facenet_sandberg/lfw.py) to put your images into the right format like so (from facenet_sandberg/facenet_sandberg):
+```
+python lfw.py --image_directory PATH_TO_YOUR_BASE_IMAGE_DIRECTORY
+```
 
-## Performance
-The accuracy on LFW for the model [20180402-114759](https://drive.google.com/open?id=1EXPBSXwTaqrSC0OhUdXNmKSh9qJUQ55-) is 0.99650+-0.00252. A description of how to run the test can be found on the page [Validate on LFW](https://github.com/davidsandberg/facenet/wiki/Validate-on-lfw). Note that the input images to the model need to be standardized using fixed image standardization (use the option `--use_fixed_image_standardization` when running e.g. `validate_on_lfw.py`).
+## Alignment
+Alignment is done with a combination of Faceboxes and MTCNN. While Faceboxes is more accurate and works with more images than MTCNN, it does not return [facial landmarks](https://raw.githubusercontent.com/ipazc/mtcnn/master/result.jpg). Whichever algorithm returns more results is used.
+
+Use the [align_dataset.py](https://github.com/armanrahman22/facenet/blob/master/facenet_sandberg/align_dataset.py) script to align an entire image directory:
+```
+python align_dataset.py --input_dir PATH_TO_YOUR_BASE_IMAGE_DIRECTORY \
+                        --output_dir PATH_TO_OUTPUT_ALIGNED_IMAGES \
+                        --facenet_model_checkpoint PATH_TO_PRETRAINED_FACENET_MODEL \
+                        --image_height DESIRED_IMAGE_HEIGHT \
+                        --image_width DESIRED_IMAGE_WIDTH \
+                        --margin DESIRED_PROPORTIONAL_MARGIN \
+                        --scale_factor DESIRED_SCALE_FACTOR \
+                        --steps_threshold DESIRED_STEPS \
+                        --detect_multiple_faces \
+                        --use_faceboxes \
+                        --use_affine \
+                        --num_processes NUM_PROCESSES_TO_USE
+```
+* Default values for most arguments are provided [here](https://github.com/armanrahman22/facenet/blob/f6cb32a193925002da41fb491c52bb85384bee55/facenet_sandberg/align_dataset.py#L262) 
+
+## Generate Pairs.txt
+A pairs.txt file is used in training and testing. It follows this [format](http://vis-www.cs.umass.edu/lfw/README.txt). In order to generate your own pairs.txt run:
+```
+python align_dataset.py --image_dir PATH_TO_YOUR_BASE_IMAGE_DIRECTORY \
+                        --pairs_file_name OUTPUT_NAME_OF_PAIRS_FILE \
+                        --num_folds NUMBER_OF_FOLDS_FOR_CROSS_VALIDATION \
+                        --num_matches_mismatches NUMBER_OF_MATCHES_AND_MISMATCHES
+```
+
+## Copyright
+MIT License from original repo https://github.com/davidsandberg/facenet/blob/master/LICENSE.md
+
+

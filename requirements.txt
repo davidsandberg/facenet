@@ -1,4 +1,5 @@
 tensorflow==1.7
+tensorlayer==1.7
 scipy
 scikit-learn
 opencv-python
@@ -7,3 +8,12 @@ matplotlib
 Pillow
 requests
 psutil
+progressbar2
+mtcnn
+pathos
+dask
+tinytag
+docker
+torch
+torchvision
+tensorboardX

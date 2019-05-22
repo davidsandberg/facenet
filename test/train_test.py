@@ -1,17 +1,17 @@
 # MIT License
-# 
+#
 # Copyright (c) 2016 David Sandberg
-# 
+#
 # Permission is hereby granted, free of charge, to any person obtaining a copy
 # of this software and associated documentation files (the "Software"), to deal
 # in the Software without restriction, including without limitation the rights
 # to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
 # copies of the Software, and to permit persons to whom the Software is
 # furnished to do so, subject to the following conditions:
-# 
+#
 # The above copyright notice and this permission notice shall be included in all
 # copies or substantial portions of the Software.
-# 
+#
 # THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
 # IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
 # FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
@@ -26,8 +26,9 @@ import numpy as np
 import cv2
 import os
 import shutil
-import download_and_extract  # @UnresolvedImport
+from facenet_sandberg import download_and_extract  # @UnresolvedImport
 import subprocess
+
 
 def memory_usage_psutil():
     # return the memory usage in MB
@@ -36,6 +37,7 @@ def memory_usage_psutil():
     mem = process.memory_info()[0] / float(2 ** 20)
     return mem
 
+
 def align_dataset_if_needed(self):
     if not os.path.exists('data/lfw_aligned'):
         argv = ['python',
@@ -43,12 +45,12 @@ def align_dataset_if_needed(self):
                 'data/lfw',
                 'data/lfw_aligned',
                 '--image_size', '160',
-                '--margin', '32' ]
+                '--margin', '32']
         subprocess.call(argv)
-        
-        
+
+
 class TrainTest(unittest.TestCase):
-  
+
     @classmethod
     def setUpClass(self):
         self.tmp_dir = tempfile.mkdtemp()
@@ -57,12 +59,21 @@ class TrainTest(unittest.TestCase):
         self.lfw_pairs_file = create_mock_lfw_pairs(self.tmp_dir)
         print(self.lfw_pairs_file)
         self.pretrained_model_name = '20180402-114759'
-        download_and_extract.download_and_extract_file(self.pretrained_model_name, 'data/')
+        download_and_extract.download_and_extract_file(
+            self.pretrained_model_name, 'data/')
         download_and_extract.download_and_extract_file('lfw-subset', 'data/')
-        self.model_file = os.path.join('data', self.pretrained_model_name, 'model-%s.ckpt-275' % self.pretrained_model_name)
-        self.pretrained_model = os.path.join('data', self.pretrained_model_name)
-        self.frozen_graph_filename = os.path.join('data', self.pretrained_model_name+'.pb')
-        print('Memory utilization (SetUpClass): %.3f MB' % memory_usage_psutil())
+        self.model_file = os.path.join(
+            'data',
+            self.pretrained_model_name,
+            'model-%s.ckpt-275' %
+            self.pretrained_model_name)
+        self.pretrained_model = os.path.join(
+            'data', self.pretrained_model_name)
+        self.frozen_graph_filename = os.path.join(
+            'data', self.pretrained_model_name + '.pb')
+        print(
+            'Memory utilization (SetUpClass): %.3f MB' %
+            memory_usage_psutil())
 
     @classmethod
     def tearDownClass(self):
@@ -87,7 +98,7 @@ class TrainTest(unittest.TestCase):
                 '--lfw_dir', self.dataset_dir,
                 '--lfw_nrof_folds', '2',
                 '--lfw_batch_size', '1',
-                '--nrof_preprocess_threads', '1' ]
+                '--nrof_preprocess_threads', '1']
         subprocess.call(argv)
 
     def test_training_classifier_inception_resnet_v2(self):
@@ -104,9 +115,9 @@ class TrainTest(unittest.TestCase):
                 '--lfw_pairs', self.lfw_pairs_file,
                 '--lfw_dir', self.dataset_dir,
                 '--lfw_nrof_folds', '2',
-                '--lfw_batch_size', '1' ]
+                '--lfw_batch_size', '1']
         subprocess.call(argv)
-  
+
     def test_training_classifier_squeezenet(self):
         print('test_training_classifier_squeezenet')
         argv = ['python',
@@ -122,9 +133,9 @@ class TrainTest(unittest.TestCase):
                 '--lfw_dir', self.dataset_dir,
                 '--lfw_nrof_folds', '2',
                 '--lfw_batch_size', '1',
-                '--nrof_preprocess_threads', '1' ]
+                '--nrof_preprocess_threads', '1']
         subprocess.call(argv)
- 
+
     def test_train_tripletloss_inception_resnet_v1(self):
         print('test_train_tripletloss_inception_resnet_v1')
         argv = ['python',
@@ -140,9 +151,9 @@ class TrainTest(unittest.TestCase):
                 '--images_per_person', '3',
                 '--lfw_pairs', self.lfw_pairs_file,
                 '--lfw_dir', self.dataset_dir,
-                '--lfw_nrof_folds', '2' ]
+                '--lfw_nrof_folds', '2']
         subprocess.call(argv)
-  
+
     def test_finetune_tripletloss_inception_resnet_v1(self):
         print('test_finetune_tripletloss_inception_resnet_v1')
         argv = ['python',
@@ -160,34 +171,37 @@ class TrainTest(unittest.TestCase):
                 '--images_per_person', '3',
                 '--lfw_pairs', self.lfw_pairs_file,
                 '--lfw_dir', self.dataset_dir,
-                '--lfw_nrof_folds', '2' ]
+                '--lfw_nrof_folds', '2']
         subprocess.call(argv)
-  
+
     def test_compare(self):
         print('test_compare')
         argv = ['python',
                 'src/compare.py',
                 os.path.join('data/', self.pretrained_model_name),
                 'data/images/Anthony_Hopkins_0001.jpg',
-                'data/images/Anthony_Hopkins_0002.jpg' ]
+                'data/images/Anthony_Hopkins_0002.jpg']
         subprocess.call(argv)
-         
+
     def test_validate_on_lfw(self):
         print('test_validate_on_lfw')
         align_dataset_if_needed(self)
         argv = ['python',
-                'src/validate_on_lfw.py', 
+                'src/validate_on_lfw.py',
                 'data/lfw_aligned',
                 self.pretrained_model,
                 '--lfw_pairs', 'data/lfw/pairs_small.txt',
                 '--lfw_nrof_folds', '2',
                 '--lfw_batch_size', '6']
         subprocess.call(argv)
- 
+
     def test_validate_on_lfw_frozen_graph(self):
         print('test_validate_on_lfw_frozen_graph')
-        self.pretrained_model = os.path.join('data', self.pretrained_model_name)
-        frozen_model = os.path.join(self.pretrained_model, self.pretrained_model_name+'.pb')
+        self.pretrained_model = os.path.join(
+            'data', self.pretrained_model_name)
+        frozen_model = os.path.join(
+            self.pretrained_model,
+            self.pretrained_model_name + '.pb')
         argv = ['python',
                 'src/validate_on_lfw.py',
                 self.dataset_dir,
@@ -196,33 +210,40 @@ class TrainTest(unittest.TestCase):
                 '--lfw_nrof_folds', '2',
                 '--lfw_batch_size', '6']
         subprocess.call(argv)
- 
+
     def test_freeze_graph(self):
         print('test_freeze_graph')
         argv = ['python',
                 'src/freeze_graph.py',
                 self.pretrained_model,
-                self.frozen_graph_filename ]
+                self.frozen_graph_filename]
         subprocess.call(argv)
 
 # Create a mock dataset with random pixel images
+
+
 def create_mock_dataset(dataset_dir, image_size):
-   
+
     nrof_persons = 3
     nrof_images_per_person = 2
     np.random.seed(seed=666)
     os.mkdir(dataset_dir)
     for i in range(nrof_persons):
-        class_name = '%04d' % (i+1)
+        class_name = '%04d' % (i + 1)
         class_dir = os.path.join(dataset_dir, class_name)
         os.mkdir(class_dir)
         for j in range(nrof_images_per_person):
-            img_name = '%04d' % (j+1)
-            img_path = os.path.join(class_dir, class_name+'_'+img_name + '.png')
-            img = np.random.uniform(low=0.0, high=255.0, size=(image_size,image_size,3))
-            cv2.imwrite(img_path, img) #@UndefinedVariable
+            img_name = '%04d' % (j + 1)
+            img_path = os.path.join(
+                class_dir, class_name + '_' + img_name + '.png')
+            img = np.random.uniform(
+                low=0.0, high=255.0, size=(
+                    image_size, image_size, 3))
+            cv2.imwrite(img_path, img)  # @UndefinedVariable
 
 # Create a mock LFW pairs file
+
+
 def create_mock_lfw_pairs(tmp_dir):
     pairs_filename = os.path.join(tmp_dir, 'pairs_mock.txt')
     with open(pairs_filename, 'w') as f:
@@ -241,6 +262,6 @@ def create_mock_lfw_pairs(tmp_dir):
         f.write('0001 1 0003 2\n')
     return pairs_filename
 
+
 if __name__ == "__main__":
     unittest.main()
-    
