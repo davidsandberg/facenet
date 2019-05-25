@@ -28,6 +28,8 @@ The code is tested using Tensorflow r1.7 under Ubuntu 14.04 with Python 2.7 and 
 | [20180408-102900](https://drive.google.com/open?id=1R77HmFADxe87GmoLwzfgMu_HY0IhcyBz) | 0.9905        | CASIA-WebFace    | [Inception ResNet v1](https://github.com/davidsandberg/facenet/blob/master/src/models/inception_resnet_v1.py) |
 | [20180402-114759](https://drive.google.com/open?id=1EXPBSXwTaqrSC0OhUdXNmKSh9qJUQ55-) | 0.9965        | VGGFace2      | [Inception ResNet v1](https://github.com/davidsandberg/facenet/blob/master/src/models/inception_resnet_v1.py) |
 
+Pytorch implementations of these two models, including converted pretrained model parameters, can be found at [timesler/facenet-pytorch](https://github.com/timesler/facenet-pytorch).
+
 NOTE: If you use any of the models, please do not forget to give proper credit to those providing the training dataset as well.
 
 ## Inspiration
