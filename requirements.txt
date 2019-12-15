@@ -1,5 +1,5 @@
 tensorflow==1.7
-scipy
+scipy==1.2.1
 scikit-learn
 opencv-python
 h5py
@@ -7,3 +7,4 @@ matplotlib
 Pillow
 requests
 psutil
+numpy==1.16.2
