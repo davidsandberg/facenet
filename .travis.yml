@@ -1,5 +1,4 @@
 language: python
-sudo: required
 python:
   - "2.7"
   - "3.5"
@@ -8,9 +7,10 @@ install:
 # numpy not using wheel to avoid problem described in 
 #  https://github.com/tensorflow/tensorflow/issues/6968
   - pip install --no-binary numpy --upgrade numpy
-  - pip install -r requirements.txt
+  - pip install flake8 -r requirements.txt
 # command to run tests
 script:
+  - flake8 . --count --select=E9,F63,F7,F82 --show-source --statistics
   - export PYTHONPATH=./src:./src/models:./src/align
   - python -m unittest discover -s test --pattern=*.py 1>&2
 dist: trusty
