@@ -377,6 +377,7 @@ def split_dataset(dataset, split_ratio, mode):
 def load_model(model):
     # Check if the model is a model directory (containing a metagraph and a checkpoint file)
     #  or if it is a protobuf file with a frozen graph
+    tf.disable_v2_behavior()
     model_exp = os.path.expanduser(model)
     if (os.path.isfile(model_exp)):
         print('Model filename: %s' % model_exp)
@@ -391,7 +392,7 @@ def load_model(model):
         print('Metagraph file: %s' % meta_file)
         print('Checkpoint file: %s' % ckpt_file)
       
-        saver = tf.compat.v1.train.import_meta_graph(os.path.join(model_exp, meta_file))
+        saver = tf.train.import_meta_graph(os.path.join(model_exp, meta_file))
         saver.restore(tf.get_default_session(), os.path.join(model_exp, ckpt_file))
     
 def get_model_filenames(model_dir):
