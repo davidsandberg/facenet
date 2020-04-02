@@ -30,7 +30,7 @@ def faces_to_vectors(inpath, modelpath, outpath, imgsize, batchsize=100):
     results = dict()
 
     with tf.Graph().as_default():
-        with tf.Session() as sess:
+        with tf.compat.v1.Session() as sess:
 
             load_model(modelpath)
             mdl = None
