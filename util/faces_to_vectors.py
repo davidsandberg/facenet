@@ -4,7 +4,7 @@ from sys import exit
 
 import json
 
-import tensorflow as tf
+import tensorflow.compat.v1 as tf
 from facenet.src.facenet import load_model, load_data
 
 
@@ -29,6 +29,7 @@ def faces_to_vectors(inpath, modelpath, outpath, imgsize, batchsize=100):
     '''
     results = dict()
 
+    tf.disable_v2_behavior()
     with tf.Graph().as_default():
         with tf.compat.v1.Session() as sess:
 
