@@ -29,7 +29,8 @@ from __future__ import print_function
 
 import os
 from subprocess import Popen, PIPE
-import tensorflow as tf
+import tensorflow.compat.v1 as tf
+
 from tensorflow.python.framework import ops
 import numpy as np
 from scipy import misc
