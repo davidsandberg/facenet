@@ -62,7 +62,7 @@ def get_paths(lfw_dir, pairs):
         else:
             nrof_skipped_pairs += 1
     if nrof_skipped_pairs>0:
-        print('Skipped %d image pairs' % nrof_skipped_pairs)
+        print('Skipped %d image pairs hahahaha' % nrof_skipped_pairs)
     
     return path_list, issame_list
   
