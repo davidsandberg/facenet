@@ -500,7 +500,8 @@ def parse_arguments(argv):
     parser.add_argument('--image_size', type=int,
         help='Image size (height, width) in pixels.', default=160)
     parser.add_argument('--epoch_size', type=int,
-        help='Number of batches per epoch.', default=1000)
+        # help='Number of batches per epoch.', default=1000)
+        help='Number of batches per epoch.', default=10)
     parser.add_argument('--embedding_size', type=int,
         help='Dimensionality of the embedding.', default=128)
     parser.add_argument('--random_crop', 
@@ -560,7 +561,8 @@ def parse_arguments(argv):
  
     # Parameters for validation on LFW
     parser.add_argument('--lfw_pairs', type=str,
-        help='The file containing the pairs to use for validation.', default='data/pairs.txt')
+        # help='The file containing the pairs to use for validation.', default='data/pairs.txt')
+        help='The file containing the pairs to use for validation.', default='D:/BDBA/SEMESTER_2/Case_Study_1/Datasets/dataset_pairs/pairs.txt')
     parser.add_argument('--lfw_dir', type=str,
         help='Path to the data directory containing aligned face patches.', default='')
     parser.add_argument('--lfw_batch_size', type=int,
