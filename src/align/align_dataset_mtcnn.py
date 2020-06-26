@@ -31,8 +31,8 @@ import os
 import argparse
 import tensorflow as tf
 import numpy as np
-import facenet
-import align.detect_face
+import facenet.src.facenet as facenet
+import detect_face
 import random
 from time import sleep
 
@@ -45,15 +45,15 @@ def main(args):
     src_path,_ = os.path.split(os.path.realpath(__file__))
     facenet.store_revision_info(src_path, output_dir, ' '.join(sys.argv))
     dataset = facenet.get_dataset(args.input_dir)
-    
+
     print('Creating networks and loading parameters')
-    
+
     with tf.Graph().as_default():
         gpu_options = tf.GPUOptions(per_process_gpu_memory_fraction=args.gpu_memory_fraction)
         sess = tf.Session(config=tf.ConfigProto(gpu_options=gpu_options, log_device_placement=False))
         with sess.as_default():
-            pnet, rnet, onet = align.detect_face.create_mtcnn(sess, None)
-    
+            pnet, rnet, onet = detect_face.create_mtcnn(sess, None)
+
     minsize = 20 # minimum size of face
     threshold = [ 0.6, 0.7, 0.7 ]  # three steps's threshold
     factor = 0.709 # scale factor
@@ -61,7 +61,7 @@ def main(args):
     # Add a random key to the filename to allow alignment using multiple processes
     random_key = np.random.randint(0, high=99999)
     bounding_boxes_filename = os.path.join(output_dir, 'bounding_boxes_%05d.txt' % random_key)
-    
+
     with open(bounding_boxes_filename, "w") as text_file:
         nrof_images_total = 0
         nrof_successfully_aligned = 0
@@ -92,8 +92,8 @@ def main(args):
                         if img.ndim == 2:
                             img = facenet.to_rgb(img)
                         img = img[:,:,0:3]
-    
-                        bounding_boxes, _ = align.detect_face.detect_face(img, minsize, pnet, rnet, onet, threshold, factor)
+
+                        bounding_boxes, _ = detect_face.detect_face(img, minsize, pnet, rnet, onet, threshold, factor)
                         nrof_faces = bounding_boxes.shape[0]
                         if nrof_faces>0:
                             det = bounding_boxes[:,0:4]
@@ -157,3 +157,11 @@ def parse_arguments(argv):
 
 if __name__ == '__main__':
     main(parse_arguments(sys.argv[1:]))
+
+# python align_dataset_mtcnn.py
+# D:\BDBA\SEMESTER_2\Case_Study_1\Datasets\lfw\raw
+# D:\BDBA\SEMESTER_2\Case_Study_1\Datasets\lfw\lfw_mtcnnpy_160
+# --image_size 160
+# --margin 32
+# --random_order
+# --gpu_memory_fraction 0.25

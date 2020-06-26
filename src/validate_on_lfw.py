@@ -142,12 +142,14 @@ def parse_arguments(argv):
         help='Path to the data directory containing aligned LFW face patches.')
     parser.add_argument('--lfw_batch_size', type=int,
         help='Number of images to process in a batch in the LFW test set.', default=100)
+        # help='Number of images to process in a batch in the LFW test set.', default=5)
     parser.add_argument('model', type=str, 
         help='Could be either a directory containing the meta_file and ckpt_file or a model protobuf (.pb) file')
     parser.add_argument('--image_size', type=int,
         help='Image size (height, width) in pixels.', default=160)
     parser.add_argument('--lfw_pairs', type=str,
-        help='The file containing the pairs to use for validation.', default='data/pairs.txt')
+        # help='The file containing the pairs to use for validation.', default='D:/BDBA/SEMESTER_2/Case_Study_1/Datasets/dataset_pairs/pairs.txt')
+        help='The file containing the pairs to use for validation.', default='C:/Users/Dell/PycharmProjects/facenet/src/pairs.txt')
     parser.add_argument('--lfw_nrof_folds', type=int,
         help='Number of folds to use for cross validation. Mainly used for testing.', default=10)
     parser.add_argument('--distance_metric', type=int,
