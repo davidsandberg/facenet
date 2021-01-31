@@ -35,6 +35,7 @@ import facenet
 import align.detect_face
 import random
 from time import sleep
+from PIL import Image
 
 def main(args):
     sleep(random.random())
@@ -49,8 +50,8 @@ def main(args):
     print('Creating networks and loading parameters')
     
     with tf.Graph().as_default():
-        gpu_options = tf.GPUOptions(per_process_gpu_memory_fraction=args.gpu_memory_fraction)
-        sess = tf.Session(config=tf.ConfigProto(gpu_options=gpu_options, log_device_placement=False))
+        gpu_options = tf.compat.v1.GPUOptions(per_process_gpu_memory_fraction=args.gpu_memory_fraction)
+        sess = tf.compat.v1.Session(config=tf.compat.v1.ConfigProto(gpu_options=gpu_options, log_device_placement=False))
         with sess.as_default():
             pnet, rnet, onet = align.detect_face.create_mtcnn(sess, None)
     
@@ -80,7 +81,7 @@ def main(args):
                 print(image_path)
                 if not os.path.exists(output_filename):
                     try:
-                        img = misc.imread(image_path)
+                        img = np.array(Image.open(image_path))
                     except (IOError, ValueError, IndexError) as e:
                         errorMessage = '{}: {}'.format(image_path, e)
                         print(errorMessage)
@@ -121,14 +122,15 @@ def main(args):
                                 bb[2] = np.minimum(det[2]+args.margin/2, img_size[1])
                                 bb[3] = np.minimum(det[3]+args.margin/2, img_size[0])
                                 cropped = img[bb[1]:bb[3],bb[0]:bb[2],:]
-                                scaled = misc.imresize(cropped, (args.image_size, args.image_size), interp='bilinear')
+                                cropped = Image.fromarray(np.uint8(cropped))
+                                scaled = cropped.resize((args.image_size, args.image_size), Image.ANTIALIAS)
                                 nrof_successfully_aligned += 1
                                 filename_base, file_extension = os.path.splitext(output_filename)
                                 if args.detect_multiple_faces:
                                     output_filename_n = "{}_{}{}".format(filename_base, i, file_extension)
                                 else:
                                     output_filename_n = "{}{}".format(filename_base, file_extension)
-                                misc.imsave(output_filename_n, scaled)
+                                scaled.save(output_filename_n)
                                 text_file.write('%s %d %d %d %d\n' % (output_filename_n, bb[0], bb[1], bb[2], bb[3]))
                         else:
                             print('Unable to align "%s"' % image_path)
