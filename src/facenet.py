@@ -40,6 +40,7 @@ import re
 from tensorflow.python.platform import gfile
 import math
 from six import iteritems
+from PIL import Image
 
 def triplet_loss(anchor, positive, negative, alpha):
     """Calculate the triplet loss according to the FaceNet paper
@@ -244,7 +245,7 @@ def load_data(image_paths, do_random_crop, do_random_flip, image_size, do_prewhi
     nrof_samples = len(image_paths)
     images = np.zeros((nrof_samples, image_size, image_size, 3))
     for i in range(nrof_samples):
-        img = misc.imread(image_paths[i])
+        img = np.array(Image.open(image_paths[i]))
         if img.ndim == 2:
             img = to_rgb(img)
         if do_prewhiten:
@@ -368,7 +369,7 @@ def load_model(model, input_map=None):
     if (os.path.isfile(model_exp)):
         print('Model filename: %s' % model_exp)
         with gfile.FastGFile(model_exp,'rb') as f:
-            graph_def = tf.GraphDef()
+            graph_def = tf.compat.v1.GraphDef()
             graph_def.ParseFromString(f.read())
             tf.import_graph_def(graph_def, input_map=input_map, name='')
     else:
