@@ -3,7 +3,7 @@ from setuptools import setup, find_packages
 setup(
     name='facenet',
     version='0.1.0',
-    packages=find_packages(include=['facenet', 'facenet.*']),
+    packages=find_packages(),
     install_requires=[
         "absl-py==0.11.0",
         "astunparse==1.6.3",
