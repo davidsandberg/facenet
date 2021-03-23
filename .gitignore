@@ -97,7 +97,4 @@ datasets
 datasets/*
 logs
 logs/*
-models
-models/*
-
 .vscode
