@@ -37,7 +37,7 @@ from six.moves import xrange  # @UnresolvedImport
 
 def main(args):
     with tf.Graph().as_default():
-        with tf.Session() as sess:
+        with tf.compat.v1.Session() as sess:
             # Load the model metagraph and checkpoint
             print('Model directory: %s' % args.model_dir)
             meta_file, ckpt_file = facenet.get_model_filenames(os.path.expanduser(args.model_dir))
@@ -46,10 +46,10 @@ def main(args):
             print('Checkpoint file: %s' % ckpt_file)
 
             model_dir_exp = os.path.expanduser(args.model_dir)
-            saver = tf.train.import_meta_graph(os.path.join(model_dir_exp, meta_file), clear_devices=True)
-            tf.get_default_session().run(tf.global_variables_initializer())
-            tf.get_default_session().run(tf.local_variables_initializer())
-            saver.restore(tf.get_default_session(), os.path.join(model_dir_exp, ckpt_file))
+            saver = tf.compat.v1.train.import_meta_graph(os.path.join(model_dir_exp, meta_file), clear_devices=True)
+            tf.compat.v1.get_default_session().run(tf.compat.v1.global_variables_initializer())
+            tf.compat.v1.get_default_session().run(tf.compat.v1.local_variables_initializer())
+            saver.restore(tf.compat.v1.get_default_session(), os.path.join(model_dir_exp, ckpt_file))
             
             # Retrieve the protobuf graph definition and fix the batch norm nodes
             input_graph_def = sess.graph.as_graph_def()
@@ -58,7 +58,7 @@ def main(args):
             output_graph_def = freeze_graph_def(sess, input_graph_def, 'embeddings,label_batch')
 
         # Serialize and dump the output graph to the filesystem
-        with tf.gfile.GFile(args.output_file, 'wb') as f:
+        with tf.io.gfile.GFile(args.output_file, 'wb') as f:
             f.write(output_graph_def.SerializeToString())
         print("%d ops in the final graph: %s" % (len(output_graph_def.node), args.output_file))
         

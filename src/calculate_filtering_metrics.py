@@ -54,15 +54,15 @@ def main(args):
         
         model_exp = os.path.expanduser(args.model_file)
         with gfile.FastGFile(model_exp,'rb') as f:
-            graph_def = tf.GraphDef()
+            graph_def = tf.compat.v1.GraphDef()
             graph_def.ParseFromString(f.read())
             input_map={'input':image_batch, 'phase_train':False}
             tf.import_graph_def(graph_def, input_map=input_map, name='net')
         
-        embeddings = tf.get_default_graph().get_tensor_by_name("net/embeddings:0")
+        embeddings = tf.compat.v1.get_default_graph().get_tensor_by_name("net/embeddings:0")
 
-        with tf.Session() as sess:
-            tf.train.start_queue_runners(sess=sess)
+        with tf.compat.v1.Session() as sess:
+            tf.compat.v1.train.start_queue_runners(sess=sess)
                 
             embedding_size = int(embeddings.get_shape()[1])
             nrof_batches = int(math.ceil(nrof_images / args.batch_size))

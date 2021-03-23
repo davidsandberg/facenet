@@ -39,7 +39,7 @@ import facenet
 import lfw
 import h5py
 import math
-import tensorflow.contrib.slim as slim
+# import tensorflow.contrib.slim as slim
 from tensorflow.python.ops import data_flow_ops
 from tensorflow.python.framework import ops
 from tensorflow.python.ops import array_ops
@@ -95,7 +95,7 @@ def main(args):
         lfw_paths, actual_issame = lfw.get_paths(os.path.expanduser(args.lfw_dir), pairs)
     
     with tf.Graph().as_default():
-        tf.set_random_seed(args.seed)
+        tf.compat.v1.set_random_seed(args.seed)
         global_step = tf.Variable(0, trainable=False)
         
         # Get a list of image paths and their labels
@@ -107,17 +107,17 @@ def main(args):
         # Create a queue that produces indices into the image_list and label_list 
         labels = ops.convert_to_tensor(label_list, dtype=tf.int32)
         range_size = array_ops.shape(labels)[0]
-        index_queue = tf.train.range_input_producer(range_size, num_epochs=None,
+        index_queue = tf.compat.v1.train.range_input_producer(range_size, num_epochs=None,
                              shuffle=True, seed=None, capacity=32)
         
         index_dequeue_op = index_queue.dequeue_many(args.batch_size*args.epoch_size, 'index_dequeue')
         
-        learning_rate_placeholder = tf.placeholder(tf.float32, name='learning_rate')
-        batch_size_placeholder = tf.placeholder(tf.int32, name='batch_size')
-        phase_train_placeholder = tf.placeholder(tf.bool, name='phase_train')
-        image_paths_placeholder = tf.placeholder(tf.string, shape=(None,1), name='image_paths')
-        labels_placeholder = tf.placeholder(tf.int32, shape=(None,1), name='labels')
-        control_placeholder = tf.placeholder(tf.int32, shape=(None,1), name='control')
+        learning_rate_placeholder = tf.compat.v1.placeholder(tf.float32, name='learning_rate')
+        batch_size_placeholder = tf.compat.v1.placeholder(tf.int32, name='batch_size')
+        phase_train_placeholder = tf.compat.v1.placeholder(tf.bool, name='phase_train')
+        image_paths_placeholder = tf.compat.v1.placeholder(tf.string, shape=(None,1), name='image_paths')
+        labels_placeholder = tf.compat.v1.placeholder(tf.int32, shape=(None,1), name='labels')
+        control_placeholder = tf.compat.v1.placeholder(tf.int32, shape=(None,1), name='control')
         
         nrof_preprocess_threads = 4
         input_queue = data_flow_ops.FIFOQueue(capacity=2000000,
@@ -143,57 +143,57 @@ def main(args):
         prelogits, _ = network.inference(image_batch, args.keep_probability, 
             phase_train=phase_train_placeholder, bottleneck_layer_size=args.embedding_size, 
             weight_decay=args.weight_decay)
-        logits = slim.fully_connected(prelogits, len(train_set), activation_fn=None, 
-                weights_initializer=slim.initializers.xavier_initializer(), 
-                weights_regularizer=slim.l2_regularizer(args.weight_decay),
+        logits = tf.keras.layers.Dense(prelogits, len(train_set), activation_fn=None, 
+                weights_initializer=tf.initializers.glorot_uniform(), 
+                weights_regularizer=tf.keras.regularizers.l2(0.5 * (args.weight_decay)),
                 scope='Logits', reuse=False)
 
         embeddings = tf.nn.l2_normalize(prelogits, 1, 1e-10, name='embeddings')
 
         # Norm for the prelogits
         eps = 1e-4
-        prelogits_norm = tf.reduce_mean(tf.norm(tf.abs(prelogits)+eps, ord=args.prelogits_norm_p, axis=1))
-        tf.add_to_collection(tf.GraphKeys.REGULARIZATION_LOSSES, prelogits_norm * args.prelogits_norm_loss_factor)
+        prelogits_norm = tf.reduce_mean(input_tensor=tf.norm(tensor=tf.abs(prelogits)+eps, ord=args.prelogits_norm_p, axis=1))
+        tf.compat.v1.add_to_collection(tf.compat.v1.GraphKeys.REGULARIZATION_LOSSES, prelogits_norm * args.prelogits_norm_loss_factor)
 
         # Add center loss
         prelogits_center_loss, _ = facenet.center_loss(prelogits, label_batch, args.center_loss_alfa, nrof_classes)
-        tf.add_to_collection(tf.GraphKeys.REGULARIZATION_LOSSES, prelogits_center_loss * args.center_loss_factor)
+        tf.compat.v1.add_to_collection(tf.compat.v1.GraphKeys.REGULARIZATION_LOSSES, prelogits_center_loss * args.center_loss_factor)
 
-        learning_rate = tf.train.exponential_decay(learning_rate_placeholder, global_step,
+        learning_rate = tf.compat.v1.train.exponential_decay(learning_rate_placeholder, global_step,
             args.learning_rate_decay_epochs*args.epoch_size, args.learning_rate_decay_factor, staircase=True)
-        tf.summary.scalar('learning_rate', learning_rate)
+        tf.compat.v1.summary.scalar('learning_rate', learning_rate)
 
         # Calculate the average cross entropy loss across the batch
         cross_entropy = tf.nn.sparse_softmax_cross_entropy_with_logits(
             labels=label_batch, logits=logits, name='cross_entropy_per_example')
-        cross_entropy_mean = tf.reduce_mean(cross_entropy, name='cross_entropy')
-        tf.add_to_collection('losses', cross_entropy_mean)
+        cross_entropy_mean = tf.reduce_mean(input_tensor=cross_entropy, name='cross_entropy')
+        tf.compat.v1.add_to_collection('losses', cross_entropy_mean)
         
-        correct_prediction = tf.cast(tf.equal(tf.argmax(logits, 1), tf.cast(label_batch, tf.int64)), tf.float32)
-        accuracy = tf.reduce_mean(correct_prediction)
+        correct_prediction = tf.cast(tf.equal(tf.argmax(input=logits, axis=1), tf.cast(label_batch, tf.int64)), tf.float32)
+        accuracy = tf.reduce_mean(input_tensor=correct_prediction)
         
         # Calculate the total losses
-        regularization_losses = tf.get_collection(tf.GraphKeys.REGULARIZATION_LOSSES)
+        regularization_losses = tf.compat.v1.get_collection(tf.compat.v1.GraphKeys.REGULARIZATION_LOSSES)
         total_loss = tf.add_n([cross_entropy_mean] + regularization_losses, name='total_loss')
 
         # Build a Graph that trains the model with one batch of examples and updates the model parameters
         train_op = facenet.train(total_loss, global_step, args.optimizer, 
-            learning_rate, args.moving_average_decay, tf.global_variables(), args.log_histograms)
+            learning_rate, args.moving_average_decay, tf.compat.v1.global_variables(), args.log_histograms)
         
         # Create a saver
-        saver = tf.train.Saver(tf.trainable_variables(), max_to_keep=3)
+        saver = tf.compat.v1.train.Saver(tf.compat.v1.trainable_variables(), max_to_keep=3)
 
         # Build the summary operation based on the TF collection of Summaries.
-        summary_op = tf.summary.merge_all()
+        summary_op = tf.compat.v1.summary.merge_all()
 
         # Start running operations on the Graph.
-        gpu_options = tf.GPUOptions(per_process_gpu_memory_fraction=args.gpu_memory_fraction)
-        sess = tf.Session(config=tf.ConfigProto(gpu_options=gpu_options, log_device_placement=False))
-        sess.run(tf.global_variables_initializer())
-        sess.run(tf.local_variables_initializer())
-        summary_writer = tf.summary.FileWriter(log_dir, sess.graph)
+        gpu_options = tf.compat.v1.GPUOptions(per_process_gpu_memory_fraction=args.gpu_memory_fraction)
+        sess = tf.compat.v1.Session(config=tf.compat.ConfigProto(gpu_options=gpu_options, log_device_placement=False))
+        sess.run(tf.compat.v1.global_variables_initializer())
+        sess.run(tf.compat.v1.local_variables_initializer())
+        summary_writer = tf.compat.v1.summary.FileWriter(log_dir, sess.graph)
         coord = tf.train.Coordinator()
-        tf.train.start_queue_runners(coord=coord, sess=sess)
+        tf.compat.v1.train.start_queue_runners(coord=coord, sess=sess)
 
         with sess.as_default():
 
@@ -347,7 +347,7 @@ def train(args, sess, epoch, image_list, label_list, index_dequeue_op, enqueue_o
         batch_number += 1
         train_time += duration
     # Add validation loss and accuracy to summary
-    summary = tf.Summary()
+    summary = tf.compat.v1.Summary()
     #pylint: disable=maybe-no-member
     summary.value.add(tag='time/total', simple_value=train_time)
     summary_writer.add_summary(summary, global_step=step_)
@@ -443,7 +443,7 @@ def evaluate(sess, enqueue_op, image_paths_placeholder, labels_placeholder, phas
     print('Validation rate: %2.5f+-%2.5f @ FAR=%2.5f' % (val, val_std, far))
     lfw_time = time.time() - start_time
     # Add validation loss and accuracy to summary
-    summary = tf.Summary()
+    summary = tf.compat.v1.Summary()
     #pylint: disable=maybe-no-member
     summary.value.add(tag='lfw/accuracy', simple_value=np.mean(accuracy))
     summary.value.add(tag='lfw/val_rate', simple_value=val)
@@ -470,7 +470,7 @@ def save_variables_and_metagraph(sess, saver, summary_writer, model_dir, model_n
         saver.export_meta_graph(metagraph_filename)
         save_time_metagraph = time.time() - start_time
         print('Metagraph saved in %.2f seconds' % save_time_metagraph)
-    summary = tf.Summary()
+    summary = tf.compat.v1.Summary()
     #pylint: disable=maybe-no-member
     summary.value.add(tag='time/save_variables', simple_value=save_time_variables)
     summary.value.add(tag='time/save_metagraph', simple_value=save_time_metagraph)
