@@ -24,3 +24,40 @@ from __future__ import division
 from __future__ import print_function
 
 import tensorflow as tf
+
+class Block35(tf.keras.Model):
+    def __init__(self):
+        super(Block35, self).__init__(name='')        
+        # Branch_0
+        self.conv1 = tf.keras.layers.Conv2D(32, (1, 1),padding='same')        
+        # Branch_1
+        self.conv2a = tf.keras.layers.Conv2D(32, (1, 1),padding='same')
+        self.conv2b = tf.keras.layers.Conv2D(32, (3, 3),padding='same')
+        # Branch_2
+        self.conv3a = tf.keras.layers.Conv2D(32, (1, 1),padding='same')
+        self.conv3b = tf.keras.layers.Conv2D(32, (3, 3),padding='same')
+        self.conv3c = tf.keras.layers.Conv2D(32, (3, 3),padding='same')
+        # Up
+        self.convup = tf.keras.layers.Conv2D(32, (1, 1),padding='same')
+        
+
+    def call(self, input_tensor, scale = 1.0, activation_fn=tf.nn.relu,):
+        # Branch_0
+        x = self.conv1(input_tensor)
+        # Branch_1
+        y_1 = self.conv2a(input_tensor)
+        y_2 = self.conv2b(y_1)
+        # Branch_2
+        z_1 = self.conv3a(input_tensor)
+        z_2 = self.conv3b(z_1)
+        z_3 = self.conv3c(z_2)
+
+        mixed = tf.concat([x, y_2, z_3], 3)
+        up = tf.keras.layers.Conv2D(input_tensor.get_shape()[3], (1,1))(mixed)
+
+        input_tensor += scale * up       
+        if activation_fn:
+            input_tensor = activation_fn(input_tensor)
+
+        
+        return input_tensor
