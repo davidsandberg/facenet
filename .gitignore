@@ -92,3 +92,12 @@ ENV/
 
 # PyCharm project setting
 .idea
+
+datasets
+datasets/*
+logs
+logs/*
+models
+models/*
+
+.vscode
