@@ -39,7 +39,7 @@ import facenet
 import lfw
 import h5py
 import math
-# import tensorflow.contrib.slim as slim
+import tf_slim as slim
 from tensorflow.python.ops import data_flow_ops
 from tensorflow.python.framework import ops
 from tensorflow.python.ops import array_ops
@@ -143,9 +143,9 @@ def main(args):
         prelogits, _ = network.inference(image_batch, args.keep_probability, 
             phase_train=phase_train_placeholder, bottleneck_layer_size=args.embedding_size, 
             weight_decay=args.weight_decay)
-        logits = tf.keras.layers.Dense(prelogits, len(train_set), activation_fn=None, 
-                weights_initializer=tf.initializers.glorot_uniform(), 
-                weights_regularizer=tf.keras.regularizers.l2(0.5 * (args.weight_decay)),
+        logits = slim.fully_connected(prelogits, len(train_set), activation_fn=None, 
+                weights_initializer=slim.initializers.xavier_initializer(), 
+                weights_regularizer=slim.l2_regularizer(args.weight_decay),
                 scope='Logits', reuse=False)
 
         embeddings = tf.nn.l2_normalize(prelogits, 1, 1e-10, name='embeddings')
@@ -188,7 +188,7 @@ def main(args):
 
         # Start running operations on the Graph.
         gpu_options = tf.compat.v1.GPUOptions(per_process_gpu_memory_fraction=args.gpu_memory_fraction)
-        sess = tf.compat.v1.Session(config=tf.compat.ConfigProto(gpu_options=gpu_options, log_device_placement=False))
+        sess = tf.compat.v1.Session(config=tf.compat.v1.ConfigProto(gpu_options=gpu_options, log_device_placement=False))
         sess.run(tf.compat.v1.global_variables_initializer())
         sess.run(tf.compat.v1.local_variables_initializer())
         summary_writer = tf.compat.v1.summary.FileWriter(log_dir, sess.graph)
@@ -257,7 +257,7 @@ def main(args):
 
                 print('Saving statistics')
                 with h5py.File(stat_file_name, 'w') as f:
-                    for key, value in stat.iteritems():
+                    for key, value in stat.items():
                         f.create_dataset(key, data=value)
     
     return model_dir

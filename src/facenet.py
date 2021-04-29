@@ -40,6 +40,7 @@ import re
 from tensorflow.python.platform import gfile
 import math
 from six import iteritems
+from PIL import Image
 
 def triplet_loss(anchor, positive, negative, alpha):
     """Calculate the triplet loss according to the FaceNet paper
@@ -53,11 +54,11 @@ def triplet_loss(anchor, positive, negative, alpha):
       the triplet loss according to the FaceNet paper as a float tensor.
     """
     with tf.compat.v1.variable_scope('triplet_loss'):
-        ppos_dist = tf.reduce_sum(input_tensor=tf.square(tf.subtract(anchor, positive)), axis=1)
-        pos_dist = tf.reduce_sum(input_tensor=tf.square(tf.subtract(anchor, positive)), axis=1)
+        pos_dist = tf.compat.v1.reduce_sum(tf.square(tf.subtract(anchor, positive)), 1)
+        neg_dist = tf.compat.v1.reduce_sum(tf.square(tf.subtract(anchor, negative)), 1)
         
         basic_loss = tf.add(tf.subtract(pos_dist,neg_dist), alpha)
-        loss = tf.reduce_mean(input_tensor=tf.maximum(basic_loss, 0.0), axis=0)
+        loss = tf.reduce_mean(tf.maximum(basic_loss, 0.0), 0)
       
     return loss
   
@@ -66,14 +67,14 @@ def center_loss(features, label, alfa, nrof_classes):
        (http://ydwen.github.io/papers/WenECCV16.pdf)
     """
     nrof_features = features.get_shape()[1]
-    centers = tf.compat.v1.get_variable('centers', [nrof_classes, nrof_features], dtype=tf.float32, use_resource=False,
-        initializer=tf.compat.v1.constant_initializer(0), trainable=False)
+    centers = tf.compat.v1.get_variable('centers', [nrof_classes, nrof_features], dtype=tf.float32,
+        initializer=tf.constant_initializer(0), trainable=False)
     label = tf.reshape(label, [-1])
     centers_batch = tf.gather(centers, label)
     diff = (1 - alfa) * (centers_batch - features)
     centers = tf.compat.v1.scatter_sub(centers, label, diff)
     with tf.control_dependencies([centers]):
-        loss = tf.reduce_mean(input_tensor=tf.square(features - centers_batch))
+        loss = tf.reduce_mean(tf.square(features - centers_batch))
     return loss, centers
 
 def get_image_paths_and_labels(dataset):
@@ -108,22 +109,21 @@ def create_input_pipeline(input_queue, image_size, nrof_preprocess_threads, batc
         for filename in tf.unstack(filenames):
             file_contents = tf.io.read_file(filename)
             image = tf.image.decode_image(file_contents, 3)
-            image = tf.cond(pred=get_control_flag(control[0], RANDOM_ROTATE),
-                            true_fn=lambda:tf.compat.v1.py_func(random_rotate_image, [image], tf.uint8), 
-                            false_fn=lambda:tf.identity(image))
-            image = tf.cond(pred=get_control_flag(control[0], RANDOM_CROP), 
-                            true_fn=lambda:tf.image.random_crop(image, image_size + (3,)), 
-                            false_fn=lambda:tf.image.resize_with_crop_or_pad(image, image_size[0], image_size[1]))
-            image = tf.cond(pred=get_control_flag(control[0], RANDOM_FLIP),
-                            true_fn=lambda:tf.image.random_flip_left_right(image),
-                            false_fn=lambda:tf.identity(image))
-            image = tf.cast(image, tf.float32)
-            image = tf.cond(pred=get_control_flag(control[0], FIXED_STANDARDIZATION),
-                            true_fn=lambda:(tf.cast(image, tf.float32) - 127.5)/128.0,
-                            false_fn=lambda:tf.image.per_image_standardization(image))
-            image = tf.cond(pred=get_control_flag(control[0], FLIP),
-                            true_fn=lambda:tf.image.flip_left_right(image),
-                            false_fn=lambda:tf.identity(image))
+            image = tf.cond(get_control_flag(control[0], RANDOM_ROTATE),
+                            lambda:tf.py_function(random_rotate_image, [image], tf.uint8), 
+                            lambda:tf.identity(image))
+            image = tf.cond(get_control_flag(control[0], RANDOM_CROP), 
+                            lambda:tf.image.random_crop(image, image_size + (3,)), 
+                            lambda:tf.image.resize_with_crop_or_pad(image, image_size[0], image_size[1]))
+            image = tf.cond(get_control_flag(control[0], RANDOM_FLIP),
+                            lambda:tf.image.random_flip_left_right(image),
+                            lambda:tf.identity(image))
+            image = tf.cond(get_control_flag(control[0], FIXED_STANDARDIZATION),
+                            lambda:(tf.cast(image, tf.float32) - 127.5)/128.0,
+                            lambda:tf.cast(tf.image.per_image_standardization(image), tf.float32))
+            image = tf.cond(get_control_flag(control[0], FLIP),
+                            lambda:tf.image.flip_left_right(image),
+                            lambda:tf.identity(image))
             #pylint: disable=no-member
             image.set_shape(image_size + (3,))
             images.append(image)
@@ -138,7 +138,7 @@ def create_input_pipeline(input_queue, image_size, nrof_preprocess_threads, batc
     return image_batch, label_batch
 
 def get_control_flag(control, field):
-    return tf.equal(tf.math.mod(tf.math.floordiv(control, field), 2), 1)
+    return tf.equal(tf.math.floormod(tf.math.floordiv(control, field), 2), 1)
   
 def _add_loss_summaries(total_loss):
     """Add summaries for losses.
@@ -161,8 +161,8 @@ def _add_loss_summaries(total_loss):
     for l in losses + [total_loss]:
         # Name each loss as '(raw)' and name the moving average version of the loss
         # as the original loss name.
-        tf.compat.v1.summary.scalar(l.op.name +' (raw)', l)
-        tf.compat.v1.summary.scalar(l.op.name, loss_averages.average(l))
+        tf.summary.scalar(l.op.name +' (raw)', l)
+        tf.summary.scalar(l.op.name, loss_averages.average(l))
   
     return loss_averages_op
 
@@ -193,13 +193,13 @@ def train(total_loss, global_step, optimizer, learning_rate, moving_average_deca
     # Add histograms for trainable variables.
     if log_histograms:
         for var in tf.compat.v1.trainable_variables():
-            tf.compat.v1.summary.histogram(var.op.name, var)
+            tf.summary.histogram(var.op.name, var)
    
     # Add histograms for gradients.
     if log_histograms:
         for grad, var in grads:
             if grad is not None:
-                tf.compat.v1.summary.histogram(var.op.name + '/gradients', grad)
+                tf.summary.histogram(var.op.name + '/gradients', grad)
   
     # Track the moving averages of all trainable variables.
     variable_averages = tf.train.ExponentialMovingAverage(
@@ -245,7 +245,7 @@ def load_data(image_paths, do_random_crop, do_random_flip, image_size, do_prewhi
     nrof_samples = len(image_paths)
     images = np.zeros((nrof_samples, image_size, image_size, 3))
     for i in range(nrof_samples):
-        img = misc.imread(image_paths[i])
+        img = np.array(Image.open(image_paths[i]))
         if img.ndim == 2:
             img = to_rgb(img)
         if do_prewhiten:
@@ -379,7 +379,7 @@ def load_model(model, input_map=None):
         print('Metagraph file: %s' % meta_file)
         print('Checkpoint file: %s' % ckpt_file)
       
-        saver = tf.compat.v1.train.import_meta_graph(os.path.join(model_exp, meta_file), input_map=input_map)
+        saver = tf.train.import_meta_graph(os.path.join(model_exp, meta_file), input_map=input_map)
         saver.restore(tf.compat.v1.get_default_session(), os.path.join(model_exp, ckpt_file))
     
 def get_model_filenames(model_dir):
