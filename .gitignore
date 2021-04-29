@@ -92,3 +92,12 @@ ENV/
 
 # PyCharm project setting
 .idea
+
+# log
+logs/
+
+# model
+models/
+
+# vscode
+.vscode
