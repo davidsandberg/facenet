@@ -28,7 +28,8 @@ import sys
 import time
 
 from six.moves import urllib  # @UnresolvedImport
-import tensorflow as tf
+import tensorflow.compat.v1 as tf
+tf.disable_v2_behavior()
 import numpy as np
 from six.moves import xrange
 
@@ -133,13 +134,13 @@ def main(argv=None):  # pylint: disable=unused-argument
         train_labels_filename = maybe_download('train-labels-idx1-ubyte.gz')
         test_data_filename = maybe_download('t10k-images-idx3-ubyte.gz')
         test_labels_filename = maybe_download('t10k-labels-idx1-ubyte.gz')
-    
+
         # Extract it into numpy arrays.
         train_data = extract_data(train_data_filename, 60000)
         train_labels = extract_labels(train_labels_filename, 60000)
         test_data = extract_data(test_data_filename, 10000)
         test_labels = extract_labels(test_labels_filename, 10000)
-    
+
         # Generate a validation set.
         validation_data = train_data[:VALIDATION_SIZE, ...]
         validation_labels = train_labels[:VALIDATION_SIZE]
@@ -236,7 +237,7 @@ def main(argv=None):  # pylint: disable=unused-argument
 
     # Training computation: logits + cross-entropy loss.
     logits = model(train_data_node, True)
-    
+
     # t: observed noisy labels
     # q: estimated class probabilities (output from softmax)
     # z: argmax of q
@@ -247,18 +248,18 @@ def main(argv=None):  # pylint: disable=unused-argument
     z = tf.one_hot(qqq, NUM_LABELS)
     #cross_entropy = -tf.reduce_sum(t*tf.log(q),reduction_indices=1)
     cross_entropy = -tf.reduce_sum((BETA*t+(1-BETA)*z)*tf.log(q),reduction_indices=1)
-    
+
     loss = tf.reduce_mean(cross_entropy)
-    
+
 #     loss = tf.reduce_mean(tf.nn.sparse_softmax_cross_entropy_with_logits(
 #         logits, train_labels_node))
-  
+
     # L2 regularization for the fully connected parameters.
     regularizers = (tf.nn.l2_loss(fc1_weights) + tf.nn.l2_loss(fc1_biases) +
                     tf.nn.l2_loss(fc2_weights) + tf.nn.l2_loss(fc2_biases))
     # Add the regularization term to the loss.
     loss += 5e-4 * regularizers
-  
+
     # Optimizer: set up a variable that's incremented once per batch and
     # controls the learning rate decay.
     batch = tf.Variable(0, dtype=data_type())
@@ -273,13 +274,13 @@ def main(argv=None):  # pylint: disable=unused-argument
     optimizer = tf.train.MomentumOptimizer(learning_rate,
                                            0.9).minimize(loss,
                                                          global_step=batch)
-  
+
     # Predictions for the current training minibatch.
     train_prediction = tf.nn.softmax(logits)
-  
+
     # Predictions for the test and validation, which we'll compute less often.
     eval_prediction = tf.nn.softmax(model(eval_data))
-    
+
     # Small utility function to evaluate a dataset by feeding batches of data to
     # {eval_data} and pulling the results from {eval_predictions}.
     # Saves memory and enables this to run on smaller GPUs.
@@ -301,7 +302,7 @@ def main(argv=None):  # pylint: disable=unused-argument
                     feed_dict={eval_data: data[-EVAL_BATCH_SIZE:, ...]})
                 predictions[begin:, :] = batch_predictions[begin - size:, :]
         return predictions
-  
+
     # Create a local session to run the training.
     start_time = time.time()
     with tf.Session() as sess:

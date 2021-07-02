@@ -1,7 +1,6 @@
-tensorflow==1.5
 scipy
 scikit-learn
-opencv-python
+opencv-python-headless==3.4.2.16
 h5py
 matplotlib
 Pillow

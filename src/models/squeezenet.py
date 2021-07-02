@@ -2,7 +2,8 @@ from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
 
-import tensorflow as tf
+import tensorflow.compat.v1 as tf
+tf.disable_v2_behavior()
 import tensorflow.contrib.slim as slim
 
 def fire_module(inputs,
@@ -62,6 +63,6 @@ def inference(images, keep_probability, phase_train=True, bottleneck_layer_size=
                 net = slim.conv2d(net, 1000, [1, 1], activation_fn=None, normalizer_fn=None, scope='conv10')
                 net = slim.avg_pool2d(net, net.get_shape()[1:3], scope='avgpool10')
                 net = tf.squeeze(net, [1, 2], name='logits')
-                net = slim.fully_connected(net, bottleneck_layer_size, activation_fn=None, 
+                net = slim.fully_connected(net, bottleneck_layer_size, activation_fn=None,
                         scope='Bottleneck', reuse=False)
     return net, None
