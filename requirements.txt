@@ -1,6 +1,6 @@
 scipy
 scikit-learn
-opencv-python-headless==3.4.2.16
+opencv-python-headless
 h5py
 matplotlib
 Pillow
