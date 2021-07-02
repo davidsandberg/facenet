@@ -1,3 +1,4 @@
+tensorflow-gpu == 2.2.3
 scipy
 scikit-learn
 opencv-python-headless == 3.4.2.16
