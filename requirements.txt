@@ -1,5 +1,5 @@
 tensorflow-gpu == 2.2.3
-scipy
+scipy == 1.2.0
 scikit-learn
 opencv-python-headless == 3.4.14.53
 h5py
