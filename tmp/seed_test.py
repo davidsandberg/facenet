@@ -1,4 +1,5 @@
-import tensorflow as tf
+import tensorflow.compat.v1 as tf
+tf.disable_v2_behavior()
 import numpy as np
 import sys
 import time
@@ -23,19 +24,19 @@ tf.app.flags.DEFINE_float('moving_average_decay', 0.9999,
 FLAGS = tf.app.flags.FLAGS
 
 def run_train():
-  
+
   with tf.Graph().as_default():
-  
+
     # Set the seed for the graph
     tf.set_random_seed(666)
 
     # Placeholder for input images
     images_placeholder = tf.placeholder(tf.float32, shape=(FLAGS.batch_size, FLAGS.image_size, FLAGS.image_size, 3), name='input')
-    
+
     # Build the inference graph
     embeddings = inference_conv_test(images_placeholder)
     #embeddings = inference_affine_test(images_placeholder)
-    
+
     # Split example embeddings into anchor, positive and negative
     anchor, positive, negative = tf.split(0, 3, embeddings)
 
@@ -45,7 +46,7 @@ def run_train():
     #anchor = resh1[0,:,:]
     #positive = resh1[1,:,:]
     #negative = resh1[2,:,:]
-    
+
     # Calculate triplet loss
     pos_dist = tf.reduce_sum(tf.square(tf.sub(anchor, positive)), 1)
     neg_dist = tf.reduce_sum(tf.square(tf.sub(anchor, negative)), 1)
@@ -57,17 +58,17 @@ def run_train():
     #opt = tf.train.AdagradOptimizer(FLAGS.learning_rate)  # Optimizer does not seem to matter
     grads = opt.compute_gradients(loss)
     train_op = opt.apply_gradients(grads)
-    
+
     # Initialize the variables
     init = tf.global_variables_initializer()
-    
+
     # Launch the graph.
     sess = tf.Session()
     sess.run(init)
 
     # Set the numpy seed
     np.random.seed(666)
-    
+
     with sess.as_default():
       grads_eval = []
       all_vars = []
@@ -83,7 +84,7 @@ def run_train():
         grads_eval  += sess.run(grad_tensors, feed_dict=feed_dict)
         # Run training
         sess.run(train_op, feed_dict=feed_dict)
-    
+
     sess.close()
   return (var_names, all_vars, grad_vars, grads_eval)
 
@@ -92,7 +93,7 @@ def _conv(inpOp, nIn, nOut, kH, kW, dH, dW, padType):
                                            dtype=tf.float32,
                                            stddev=1e-1), name='weights')
   conv = tf.nn.conv2d(inpOp, kernel, [1, dH, dW, 1], padding=padType)
-  
+
   biases = tf.Variable(tf.constant(0.0, shape=[nOut], dtype=tf.float32),
                        trainable=True, name='biases')
   bias = tf.reshape(tf.nn.bias_add(conv, biases), conv.get_shape())
@@ -107,7 +108,7 @@ def _affine(inpOp, nIn, nOut):
                        trainable=True, name='biases')
   affine1 = tf.nn.relu_layer(inpOp, kernel, biases)
   return affine1
-  
+
 def inference_conv_test(images):
   conv1 = _conv(images, 3, 64, 7, 7, 2, 2, 'SAME')
   resh1 = tf.reshape(conv1, [-1, 147456])
@@ -130,7 +131,7 @@ all_vars_close = [None] * len(all_vars1)
 for i in range(len(all_vars1)):
   all_vars_close[i] = np.allclose(all_vars1[i], all_vars2[i], rtol=1.e-16)
   print('%d var %s: %s' % (i, var_names1[i].op.name, all_vars_close[i]))
-  
+
 all_grads_close = [None] * len(all_grads1)
 for i in range(len(all_grads1)):
   all_grads_close[i] = np.allclose(all_grads1[i], all_grads2[i], rtol=1.e-16)

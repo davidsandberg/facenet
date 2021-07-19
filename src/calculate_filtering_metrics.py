@@ -1,19 +1,19 @@
 """Calculate filtering metrics for a dataset and store in a .hdf file.
 """
 # MIT License
-# 
+#
 # Copyright (c) 2016 David Sandberg
-# 
+#
 # Permission is hereby granted, free of charge, to any person obtaining a copy
 # of this software and associated documentation files (the "Software"), to deal
 # in the Software without restriction, including without limitation the rights
 # to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
 # copies of the Software, and to permit persons to whom the Software is
 # furnished to do so, subject to the following conditions:
-# 
+#
 # The above copyright notice and this permission notice shall be included in all
 # copies or substantial portions of the Software.
-# 
+#
 # THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
 # IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
 # FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
@@ -26,7 +26,8 @@ from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
 
-import tensorflow as tf
+import tensorflow.compat.v1 as tf
+tf.disable_v2_behavior()
 import numpy as np
 import argparse
 import facenet
@@ -40,30 +41,30 @@ from six import iteritems
 
 def main(args):
     dataset = facenet.get_dataset(args.dataset_dir)
-  
+
     with tf.Graph().as_default():
-      
+
         # Get a list of image paths and their labels
         image_list, label_list = facenet.get_image_paths_and_labels(dataset)
         nrof_images = len(image_list)
         image_indices = range(nrof_images)
 
         image_batch, label_batch = facenet.read_and_augment_data(image_list,
-            image_indices, args.image_size, args.batch_size, None, 
+            image_indices, args.image_size, args.batch_size, None,
             False, False, False, nrof_preprocess_threads=4, shuffle=False)
-        
+
         model_exp = os.path.expanduser(args.model_file)
         with gfile.FastGFile(model_exp,'rb') as f:
             graph_def = tf.GraphDef()
             graph_def.ParseFromString(f.read())
             input_map={'input':image_batch, 'phase_train':False}
             tf.import_graph_def(graph_def, input_map=input_map, name='net')
-        
+
         embeddings = tf.get_default_graph().get_tensor_by_name("net/embeddings:0")
 
         with tf.Session() as sess:
             tf.train.start_queue_runners(sess=sess)
-                
+
             embedding_size = int(embeddings.get_shape()[1])
             nrof_batches = int(math.ceil(nrof_images / args.batch_size))
             nrof_classes = len(dataset)
@@ -100,18 +101,18 @@ def main(args):
                         idx_array = np.delete(idx_array, cls_idx, axis=0)
                         lab_array = np.delete(lab_array, cls_idx, axis=0)
 
-                        
+
                 print('Batch %d in %.3f seconds' % (i, time.time()-t))
-                
+
             print('Writing filtering data to %s' % args.data_file_name)
             mdict = {'class_names':class_names, 'image_list':image_list, 'label_list':label_list, 'distance_to_center':distance_to_center }
             with h5py.File(args.data_file_name, 'w') as f:
                 for key, value in iteritems(mdict):
                     f.create_dataset(key, data=value)
-                        
+
 def parse_arguments(argv):
     parser = argparse.ArgumentParser()
-    
+
     parser.add_argument('dataset_dir', type=str,
         help='Path to the directory containing aligned dataset.')
     parser.add_argument('model_file', type=str,

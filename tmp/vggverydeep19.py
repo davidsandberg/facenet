@@ -4,23 +4,24 @@ and point to the file 'imagenet-vgg-verydeep-19.mat'
 """
 import numpy as np
 from scipy import io
-import tensorflow as tf
+import tensorflow.compat.v1 as tf
+tf.disable_v2_behavior()
 
 def load(filename, images):
     vgg19 = io.loadmat(filename)
     vgg19Layers = vgg19['layers']
-    
+
     # A function to get the weights of the VGG layers
     def vbbWeights(layerNumber):
         W = vgg19Layers[0][layerNumber][0][0][2][0][0]
         W = tf.constant(W)
         return W
-      
+
     def vbbConstants(layerNumber):
         b = vgg19Layers[0][layerNumber][0][0][2][0][1].T
         b = tf.constant(np.reshape(b, (b.size)))
         return b
-    
+
     modelGraph = {}
     modelGraph['input'] = images
     modelGraph['conv1_1'] = tf.nn.relu(tf.nn.conv2d(modelGraph['input'], filter = vbbWeights(0), strides = [1, 1, 1, 1], padding = 'SAME') + vbbConstants(0))
@@ -44,6 +45,6 @@ def load(filename, images):
     modelGraph['conv5_3'] = tf.nn.relu(tf.nn.conv2d(modelGraph['conv5_2'], filter = vbbWeights(32), strides = [1, 1, 1, 1], padding = 'SAME') + vbbConstants(32))
     modelGraph['conv5_4'] = tf.nn.relu(tf.nn.conv2d(modelGraph['conv5_3'], filter = vbbWeights(34), strides = [1, 1, 1, 1], padding = 'SAME') + vbbConstants(34))
     modelGraph['avgpool5'] = tf.nn.avg_pool(modelGraph['conv5_4'], ksize = [1, 2, 2, 1], strides = [1, 2, 2, 1], padding = 'SAME')
-    
+
     return modelGraph
 

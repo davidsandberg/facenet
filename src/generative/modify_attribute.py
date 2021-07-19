@@ -1,17 +1,17 @@
 # MIT License
-# 
+#
 # Copyright (c) 2017 David Sandberg
-# 
+#
 # Permission is hereby granted, free of charge, to any person obtaining a copy
 # of this software and associated documentation files (the "Software"), to deal
 # in the Software without restriction, including without limitation the rights
 # to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
 # copies of the Software, and to permit persons to whom the Software is
 # furnished to do so, subject to the following conditions:
-# 
+#
 # The above copyright notice and this permission notice shall be included in all
 # copies or substantial portions of the Software.
-# 
+#
 # THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
 # IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
 # FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
@@ -28,7 +28,8 @@ from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
 
-import tensorflow as tf
+import tensorflow.compat.v1 as tf
+tf.disable_v2_behavior()
 import sys
 import argparse
 import importlib
@@ -40,41 +41,41 @@ import math
 from scipy import misc
 
 def main(args):
-  
+
     img_mean = np.array([134.10714722, 102.52040863, 87.15436554])
     img_stddev = np.sqrt(np.array([3941.30175781, 2856.94287109, 2519.35791016]))
-    
+
     vae_def = importlib.import_module(args.vae_def)
     vae = vae_def.Vae(args.latent_var_size)
     gen_image_size = vae.get_image_size()
 
     with tf.Graph().as_default():
         tf.set_random_seed(args.seed)
-        
+
         images = tf.placeholder(tf.float32, shape=(None,gen_image_size,gen_image_size,3), name='input')
-        
+
         # Normalize
         images_norm = (images-img_mean) / img_stddev
 
-        # Resize to appropriate size for the encoder 
+        # Resize to appropriate size for the encoder
         images_norm_resize = tf.image.resize_images(images_norm, (gen_image_size,gen_image_size))
-        
+
         # Create encoder network
         mean, log_variance = vae.encoder(images_norm_resize, True)
-        
+
         epsilon = tf.random_normal((tf.shape(mean)[0], args.latent_var_size))
         std = tf.exp(log_variance/2)
         latent_var = mean + epsilon * std
-        
+
         # Create decoder
         reconstructed_norm = vae.decoder(latent_var, False)
-        
+
         # Un-normalize
         reconstructed = (reconstructed_norm*img_stddev) + img_mean
 
         # Create a saver
         saver = tf.train.Saver(tf.trainable_variables(), max_to_keep=3)
-        
+
         # Start running operations on the Graph
         gpu_memory_fraction = 1.0
         gpu_options = tf.GPUOptions(per_process_gpu_memory_fraction=gpu_memory_fraction)
@@ -83,14 +84,14 @@ def main(args):
         sess.run(tf.local_variables_initializer())
         coord = tf.train.Coordinator()
         tf.train.start_queue_runners(coord=coord, sess=sess)
-        
+
 
         with sess.as_default():
-          
+
             vae_checkpoint = os.path.expanduser(args.vae_checkpoint)
             print('Restoring VAE checkpoint: %s' % vae_checkpoint)
             saver.restore(sess, vae_checkpoint)
-           
+
             filename = os.path.expanduser(args.attributes_filename)
             with h5py.File(filename,'r') as f:
                 latent_vars = np.array(f.get('latent_vars'))
@@ -109,19 +110,19 @@ def main(args):
                 idx = np.argwhere(attributes[:,attribute_index]==-1)[image_index,0]
                 for i in range(nrof_interp_steps):
                     sweep_latent_var[i+nrof_interp_steps*j,:] = latent_vars[idx,:] + 5.0*i/nrof_interp_steps*attribute_vectors[attribute_index,:]
-                
+
             recon = sess.run(reconstructed, feed_dict={latent_var:sweep_latent_var})
-            
+
             img = facenet.put_images_on_grid(recon, shape=(nrof_interp_steps*2,int(math.ceil(nrof_images/2))))
-            
+
             image_filename = os.path.expanduser(args.output_image_filename)
             print('Writing generated image to %s' % image_filename)
             misc.imsave(image_filename, img)
 
-                    
+
 def parse_arguments(argv):
     parser = argparse.ArgumentParser()
-    
+
     parser.add_argument('vae_def', type=str,
         help='Model definition for the variational autoencoder. Points to a module containing the definition.')
     parser.add_argument('vae_checkpoint', type=str,
@@ -136,7 +137,7 @@ def parse_arguments(argv):
         help='Random seed.', default=666)
 
     return parser.parse_args(argv)
-  
-    
+
+
 if __name__ == '__main__':
     main(parse_arguments(sys.argv[1:]))

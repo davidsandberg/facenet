@@ -1,4 +1,5 @@
-import tensorflow as tf
+import tensorflow.compat.v1 as tf
+tf.disable_v2_behavior()
 import numpy as np
 from six.moves import xrange
 
@@ -9,21 +10,21 @@ with tf.Graph().as_default():
 
   # Placeholder for input images
   input_placeholder = tf.placeholder(tf.float32, shape=(9, 7), name='input')
-  
+
   # Split example embeddings into anchor, positive and negative
   #anchor, positive, negative = tf.split(0, 3, input)
   resh1 = tf.reshape(input_placeholder, [3,3,7])
   anchor = resh1[0,:,:]
   positive = resh1[1,:,:]
   negative = resh1[2,:,:]
-  
+
   # Build an initialization operation to run below.
   init = tf.global_variables_initializer()
 
   # Start running operations on the Graph.
   sess = tf.Session(config=tf.ConfigProto(log_device_placement=False))
   sess.run(init)
-  
+
   with sess.as_default():
     batch = np.zeros((9,7))
     batch[0,:] = 1.1
@@ -49,7 +50,7 @@ with tf.Graph().as_default():
 #for gt, gv in zip(grads_eval, grad_vars):
   #print('%40s: %.20f' % (gv.op.name, np.sum(gt)))
 
-  
+
 
 #import h5py
 #myFile = h5py.File('/home/david/repo/TensorFace/network.h5', 'r')
@@ -69,7 +70,8 @@ with tf.Graph().as_default():
   #print item
 
 
-#import tensorflow as tf
+#import tensorflow.compat.v1 as tf
+tf.disable_v2_behavior()
 #import numpy as np
 #import matplotlib.pyplot as plt
 #import math

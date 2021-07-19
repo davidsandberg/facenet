@@ -1,5 +1,6 @@
 """ Face Cluster """
-import tensorflow as tf
+import tensorflow.compat.v1 as tf
+tf.disable_v2_behavior()
 import numpy as np
 import importlib
 import argparse
@@ -190,8 +191,8 @@ def get_onedir(paths):
         for x in image_paths:
             if os.path.getsize(x)>0:
                 dataset.append(x)
-        
-    return dataset 
+
+    return dataset
 
 
 def main(args):
@@ -216,22 +217,22 @@ def main(args):
             #image_list, label_list = facenet.get_image_paths_and_labels(train_set)
 
             meta_file, ckpt_file = facenet.get_model_filenames(os.path.expanduser(args.model_dir))
-            
+
             print('Metagraph file: %s' % meta_file)
             print('Checkpoint file: %s' % ckpt_file)
             load_model(args.model_dir, meta_file, ckpt_file)
-            
+
             # Get input and output tensors
             images_placeholder = tf.get_default_graph().get_tensor_by_name("input:0")
             embeddings = tf.get_default_graph().get_tensor_by_name("embeddings:0")
             phase_train_placeholder = tf.get_default_graph().get_tensor_by_name("phase_train:0")
-            
+
             image_size = images_placeholder.get_shape()[1]
             print("image_size:",image_size)
             embedding_size = embeddings.get_shape()[1]
-        
+
             # Run forward pass to calculate embeddings
-            print('Runnning forward pass on images') 
+            print('Runnning forward pass on images')
 
             nrof_images = len(image_paths)
             nrof_batches = int(math.ceil(1.0*nrof_images / args.batch_size))
@@ -240,7 +241,7 @@ def main(args):
                 embedding_size,nrof_images,nrof_batches,emb_array,args.batch_size,image_paths)
             sorted_clusters = cluster_facial_encodings(facial_encodings)
             num_cluster = len(sorted_clusters)
-                
+
             # Copy image files to cluster folders
             for idx, cluster in enumerate(sorted_clusters):
                 #save all the cluster

@@ -1,6 +1,7 @@
 import numpy as np
 from scipy import misc
-import tensorflow as tf
+import tensorflow.compat.v1 as tf
+tf.disable_v2_behavior()
 from matplotlib import pyplot, image
 import vggverydeep19
 
@@ -13,7 +14,7 @@ pyplot.imshow(inputImage)
 outputWidth = 800
 outputHeight = 600
 
-# Beta constant 
+# Beta constant
 beta = 5
 # Alpha constant
 alpha = 100
@@ -34,7 +35,7 @@ def sqErrorLossContent(sess, modelGraph, layer):
     N = p.shape[3]
     M = p.shape[1] * p.shape[2]
     return (1 / (4 * N * M)) * tf.reduce_sum(tf.pow(modelGraph[layer] - sess.run(modelGraph[layer]), 2))
- 
+
 # Squared-error loss of style between the two feature representations
 styleLayers = [
     ('conv1_1', 0.2),
@@ -55,7 +56,7 @@ def sqErrorLossStyle(sess, modelGraph):
     return sum([W[layerNumber] * E[layerNumber] for layerNumber in range(len(styleLayers))])
 
 session = tf.InteractiveSession()
- 
+
 # Addition of extra dimension to image
 inputImage = np.reshape(inputImage, ((1,) + inputImage.shape))
 inputImage = inputImage - meanImage19
@@ -89,17 +90,17 @@ session.run(nodes['input'].assign(inputImage))
 iterations = 2000
 session.run(tf.global_variables_initializer())
 session.run(nodes['input'].assign(inputImage))
- 
+
 for iters in range(iterations):
     session.run(trainStep)
     if iters%50 == 0:
-        # Output every 50 iterations for animation       
+        # Output every 50 iterations for animation
         filename = 'output%d.png' % (iters)
         im = mixedImage + meanImage19
         im = im[0]
         im = np.clip(im, 0, 255).astype('uint8')
         misc.imsave(filename, im)
- 
+
 im = mixedImage + meanImage19
 im = im[0]
 im = np.clip(im, 0, 255).astype('uint8')
