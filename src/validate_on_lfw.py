@@ -29,6 +29,7 @@ in the same directory, and the metagraph should have the extension '.meta'.
 import argparse
 import os
 import sys
+from pathlib import Path
 
 import lfw
 import numpy as np
@@ -40,12 +41,16 @@ from tensorflow.python.ops import data_flow_ops
 
 import facenet
 
+BASE_DIR = Path(__file__).resolve().parent.parent
+
 
 def main(args):
-    with tf.Graph().as_default():
-        with tf.Session() as sess:
+    with tf.compat.v1.Graph().as_default():
+        with tf.compat.v1.Session() as sess:
             # Read the file containing the pairs used for testing
-            pairs = lfw.read_pairs(os.path.expanduser(args.lfw_pairs))
+            # pairs = lfw.read_pairs(os.path.expanduser(args.lfw_pairs))
+
+            pairs = lfw.read_pairs(str(BASE_DIR / "data" / "pairs.txt"))
 
             # Get the paths for the corresponding images
             paths, actual_issame = lfw.get_paths(
