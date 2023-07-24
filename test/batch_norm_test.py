@@ -22,10 +22,11 @@
 
 import unittest
 
-import models
 import numpy as np
 import numpy.testing as testing
 import tensorflow as tf
+
+import models
 
 
 class BatchNormTest(unittest.TestCase):

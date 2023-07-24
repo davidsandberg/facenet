@@ -26,9 +26,10 @@
 """
 
 
-import generative.models.vae_base  # @UnresolvedImport
 import tensorflow as tf
 import tensorflow.contrib.slim as slim
+
+import generative.models.vae_base  # @UnresolvedImport
 
 
 class Vae(generative.models.vae_base.Vae):

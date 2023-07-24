@@ -32,12 +32,12 @@
 import os
 import pickle
 
-import align.detect_face
 import cv2
 import numpy as np
 import tensorflow as tf
 from scipy import misc
 
+import align.detect_face
 import facenet
 
 gpu_memory_fraction = 0.3

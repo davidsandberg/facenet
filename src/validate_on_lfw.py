@@ -31,7 +31,6 @@ import os
 import sys
 from pathlib import Path
 
-import lfw
 import numpy as np
 import tensorflow as tf
 from scipy import interpolate
@@ -40,6 +39,7 @@ from sklearn import metrics
 from tensorflow.python.ops import data_flow_ops
 
 import facenet
+import lfw
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 
