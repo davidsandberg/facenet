@@ -22,8 +22,9 @@
 
 # pylint: disable=missing-docstring
 
-import models.network as network
 import tensorflow as tf
+
+import models.network as network
 
 
 def inference(images, keep_probability, phase_train=True, weight_decay=0.0):

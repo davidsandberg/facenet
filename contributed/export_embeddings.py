@@ -53,12 +53,12 @@ import os
 import sys
 import time
 
-import align.detect_face
 import numpy as np
 import tensorflow as tf
 from scipy import misc
 from six.moves import xrange
 
+import align.detect_face
 import facenet
 
 

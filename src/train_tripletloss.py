@@ -32,13 +32,13 @@ import sys
 import time
 from datetime import datetime
 
-import lfw
 import numpy as np
 import tensorflow as tf
 from six.moves import xrange  # @UnresolvedImport
 from tensorflow.python.ops import data_flow_ops
 
 import facenet
+import lfw
 
 
 def main(args):

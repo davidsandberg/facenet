@@ -32,7 +32,6 @@ import time
 from datetime import datetime
 
 import h5py
-import lfw
 import numpy as np
 import tensorflow as tf
 import tensorflow.contrib.slim as slim
@@ -40,6 +39,7 @@ from tensorflow.python.framework import ops
 from tensorflow.python.ops import array_ops, data_flow_ops
 
 import facenet
+import lfw
 
 
 def main(args):

@@ -31,7 +31,6 @@ import os
 import sys
 from pathlib import Path
 
-import lfw
 import numpy as np
 import tensorflow as tf
 from scipy import interpolate
@@ -40,6 +39,7 @@ from sklearn import metrics
 from tensorflow.python.ops import data_flow_ops
 
 import facenet
+import lfw
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 
@@ -57,17 +57,21 @@ def main(args):
                 os.path.expanduser(args.lfw_dir), pairs
             )
 
-            image_paths_placeholder = tf.placeholder(
+            image_paths_placeholder = tf.compat.v1.placeholder(
                 tf.string, shape=(None, 1), name="image_paths"
             )
-            labels_placeholder = tf.placeholder(
+            labels_placeholder = tf.compat.v1.placeholder(
                 tf.int32, shape=(None, 1), name="labels"
             )
-            batch_size_placeholder = tf.placeholder(tf.int32, name="batch_size")
-            control_placeholder = tf.placeholder(
+            batch_size_placeholder = tf.compat.v1.placeholder(
+                tf.int32, name="batch_size"
+            )
+            control_placeholder = tf.compat.v1.placeholder(
                 tf.int32, shape=(None, 1), name="control"
             )
-            phase_train_placeholder = tf.placeholder(tf.bool, name="phase_train")
+            phase_train_placeholder = tf.compat.v1.placeholder(
+                tf.bool, name="phase_train"
+            )
 
             nrof_preprocess_threads = 4
             image_size = (args.image_size, args.image_size)
@@ -98,10 +102,12 @@ def main(args):
             facenet.load_model(args.model, input_map=input_map)
 
             # Get output tensor
-            embeddings = tf.get_default_graph().get_tensor_by_name("embeddings:0")
+            embeddings = tf.compat.v1.get_default_graph().get_tensor_by_name(
+                "embeddings:0"
+            )
             #
             coord = tf.train.Coordinator()
-            tf.train.start_queue_runners(coord=coord, sess=sess)
+            tf.compat.v1.train.start_queue_runners(coord=coord, sess=sess)
 
             evaluate(
                 sess,

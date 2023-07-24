@@ -119,31 +119,31 @@ def create_input_pipeline(
         filenames, label, control = input_queue.dequeue()
         images = []
         for filename in tf.unstack(filenames):
-            file_contents = tf.read_file(filename)
+            file_contents = tf.compat.v1.read_file(filename)
             image = tf.image.decode_image(file_contents, 3)
-            image = tf.cond(
+            image = tf.compat.v1.cond(
                 get_control_flag(control[0], RANDOM_ROTATE),
-                lambda: tf.py_func(random_rotate_image, [image], tf.uint8),
+                lambda: tf.numpy_function(random_rotate_image, [image], tf.uint8),
                 lambda: tf.identity(image),
             )
-            image = tf.cond(
+            image = tf.compat.v1.cond(
                 get_control_flag(control[0], RANDOM_CROP),
-                lambda: tf.random_crop(image, image_size + (3,)),
-                lambda: tf.image.resize_image_with_crop_or_pad(
+                lambda: tf.compat.v1.random_crop(image, image_size + (3,)),
+                lambda: tf.image.resize_with_crop_or_pad(
                     image, image_size[0], image_size[1]
                 ),
             )
-            image = tf.cond(
+            image = tf.compat.v1.cond(
                 get_control_flag(control[0], RANDOM_FLIP),
                 lambda: tf.image.random_flip_left_right(image),
                 lambda: tf.identity(image),
             )
-            image = tf.cond(
+            image = tf.compat.v1.cond(
                 get_control_flag(control[0], FIXED_STANDARDIZATION),
                 lambda: (tf.cast(image, tf.float32) - 127.5) / 128.0,
                 lambda: tf.image.per_image_standardization(image),
             )
-            image = tf.cond(
+            image = tf.compat.v1.cond(
                 get_control_flag(control[0], FLIP),
                 lambda: tf.image.flip_left_right(image),
                 lambda: tf.identity(image),
@@ -153,7 +153,7 @@ def create_input_pipeline(
             images.append(image)
         images_and_labels_list.append([images, label])
 
-    image_batch, label_batch = tf.train.batch_join(
+    image_batch, label_batch = tf.compat.v1.train.batch_join(
         images_and_labels_list,
         batch_size=batch_size_placeholder,
         shapes=[image_size + (3,), ()],
@@ -166,7 +166,7 @@ def create_input_pipeline(
 
 
 def get_control_flag(control, field):
-    return tf.equal(tf.mod(tf.floor_div(control, field), 2), 1)
+    return tf.equal(tf.compat.v1.mod(tf.compat.v1.floor_div(control, field), 2), 1)
 
 
 def _add_loss_summaries(total_loss):
