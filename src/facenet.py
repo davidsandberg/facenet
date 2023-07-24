@@ -30,6 +30,7 @@ import random
 import re
 from subprocess import PIPE, Popen
 
+import imageio
 import numpy as np
 import tensorflow as tf
 from scipy import interpolate, misc
@@ -299,7 +300,7 @@ def load_data(
     nrof_samples = len(image_paths)
     images = np.zeros((nrof_samples, image_size, image_size, 3))
     for i in range(nrof_samples):
-        img = misc.imread(image_paths[i])
+        img = imageio.imread(image_paths[i])
         if img.ndim == 2:
             img = to_rgb(img)
         if do_prewhiten:

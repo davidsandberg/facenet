@@ -28,11 +28,11 @@ import copy
 import os
 import sys
 
+import align.detect_face
 import numpy as np
 import tensorflow as tf
 from scipy import misc
 
-import align.detect_face
 import facenet
 
 

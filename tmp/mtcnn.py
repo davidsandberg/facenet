@@ -21,10 +21,9 @@
 # SOFTWARE.
 
 
+import align.detect_face
 import tensorflow as tf
 from scipy import misc
-
-import align.detect_face
 
 with tf.Graph().as_default():
     sess = tf.Session()

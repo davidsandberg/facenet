@@ -20,10 +20,9 @@
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 # SOFTWARE.
 
+import align.detect_face
 import numpy as np
 import tensorflow as tf
-
-import align.detect_face
 
 g1 = tf.Graph()
 with g1.as_default():

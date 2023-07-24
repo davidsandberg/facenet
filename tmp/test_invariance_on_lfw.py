@@ -29,13 +29,13 @@ import math
 import os
 import sys
 
+import lfw
 import matplotlib.pyplot as plt
 import numpy as np
 import tensorflow as tf
 from scipy import misc
 
 import facenet
-import lfw
 
 
 def main(args):

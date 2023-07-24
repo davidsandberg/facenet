@@ -27,9 +27,8 @@ import tempfile
 import unittest
 
 import cv2
-import numpy as np
-
 import download_and_extract  # @UnresolvedImport
+import numpy as np
 
 
 def memory_usage_psutil():

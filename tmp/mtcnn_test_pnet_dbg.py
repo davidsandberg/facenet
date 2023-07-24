@@ -1,8 +1,7 @@
+import align.detect_face
 import numpy as np
 import scipy.io as io
 import tensorflow as tf
-
-import align.detect_face
 
 # ref = io.loadmat('pnet_dbg.mat')
 with tf.Graph().as_default():

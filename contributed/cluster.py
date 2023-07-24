@@ -27,12 +27,12 @@ import argparse
 import os
 import sys
 
+import align.detect_face
 import numpy as np
 import tensorflow as tf
 from scipy import misc
 from sklearn.cluster import DBSCAN
 
-import align.detect_face
 import facenet
 
 

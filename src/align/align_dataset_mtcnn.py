@@ -27,13 +27,13 @@ import random
 import sys
 from time import sleep
 
+import align.detect_face
 import imageio
 import numpy as np
 import scipy.misc
 import tensorflow as tf
 from PIL import Image
 
-import align.detect_face
 import facenet
 
 

@@ -6,13 +6,13 @@ import os
 import pickle
 import sys
 
+import align.detect_face
 import numpy as np
 import tensorflow as tf
 from scipy import misc
 from six.moves import xrange
 from sklearn.svm import SVC
 
-import align.detect_face
 import facenet
 
 # ----------------------------------------------------
