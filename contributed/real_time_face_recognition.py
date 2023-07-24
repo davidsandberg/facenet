@@ -29,7 +29,6 @@ import sys
 import time
 
 import cv2
-
 import face
 
 
@@ -37,17 +36,35 @@ def add_overlays(frame, faces, frame_rate):
     if faces is not None:
         for face in faces:
             face_bb = face.bounding_box.astype(int)
-            cv2.rectangle(frame,
-                          (face_bb[0], face_bb[1]), (face_bb[2], face_bb[3]),
-                          (0, 255, 0), 2)
+            cv2.rectangle(
+                frame,
+                (face_bb[0], face_bb[1]),
+                (face_bb[2], face_bb[3]),
+                (0, 255, 0),
+                2,
+            )
             if face.name is not None:
-                cv2.putText(frame, face.name, (face_bb[0], face_bb[3]),
-                            cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 255, 0),
-                            thickness=2, lineType=2)
+                cv2.putText(
+                    frame,
+                    face.name,
+                    (face_bb[0], face_bb[3]),
+                    cv2.FONT_HERSHEY_SIMPLEX,
+                    1,
+                    (0, 255, 0),
+                    thickness=2,
+                    lineType=2,
+                )
 
-    cv2.putText(frame, str(frame_rate) + " fps", (10, 30),
-                cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 255, 0),
-                thickness=2, lineType=2)
+    cv2.putText(
+        frame,
+        str(frame_rate) + " fps",
+        (10, 30),
+        cv2.FONT_HERSHEY_SIMPLEX,
+        1,
+        (0, 255, 0),
+        thickness=2,
+        lineType=2,
+    )
 
 
 def main(args):
@@ -81,9 +98,9 @@ def main(args):
         add_overlays(frame, faces, frame_rate)
 
         frame_count += 1
-        cv2.imshow('Video', frame)
+        cv2.imshow("Video", frame)
 
-        if cv2.waitKey(1) & 0xFF == ord('q'):
+        if cv2.waitKey(1) & 0xFF == ord("q"):
             break
 
     # When everything is done, release the capture
@@ -94,10 +111,11 @@ def main(args):
 def parse_arguments(argv):
     parser = argparse.ArgumentParser()
 
-    parser.add_argument('--debug', action='store_true',
-                        help='Enable some debug outputs.')
+    parser.add_argument(
+        "--debug", action="store_true", help="Enable some debug outputs."
+    )
     return parser.parse_args(argv)
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     main(parse_arguments(sys.argv[1:]))
