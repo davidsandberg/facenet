@@ -50,7 +50,7 @@ def main(args):
             # Read the file containing the pairs used for testing
             # pairs = lfw.read_pairs(os.path.expanduser(args.lfw_pairs))
 
-            pairs = lfw.read_pairs(str(BASE_DIR / "data" / "pairs.txt"))
+            pairs = lfw.read_pairs(BASE_DIR / "data" / "pairs.txt")
 
             # Get the paths for the corresponding images
             paths, actual_issame = lfw.get_paths(
